@@ -69,15 +69,21 @@ Estas tareas describen capacidades locales verificadas, no certifican un servici
 
 ## Siguiente entrega concreta: corrección de regiones
 
-- [ ] E1 — Definir revisión de sección y snapshot histórico; conservar su identidad al corregirla.
-- [ ] E2 — Migrar regiones existentes sin perder rutas ni capturas.
-- [ ] E3 — API administrativa con validación de geometría, versión esperada y auditoría atómica.
-- [ ] E4 — Cargar una región guardada en el editor, modificar nombre/tipo/volumen/vértices, previsualizar y guardar o cancelar.
-- [ ] E5 — Consultar historial y establecer cómo revisar correcciones sobre rutas existentes; no sobrescribir snapshots de ascensos.
-- [ ] E6 — Probar conflictos concurrentes, permisos, aislamiento, cancelación y persistencia en navegador.
+- [x] E1 — Definir revisión de sección y snapshot histórico; conservar su identidad al corregirla.
+- [x] E2 — Migrar regiones existentes sin perder rutas ni capturas.
+- [x] E3 — API administrativa con validación de geometría, versión esperada y auditoría atómica.
+- [x] E4 — Cargar una región guardada en el editor, modificar nombre/tipo/volumen/vértices, previsualizar y guardar o cancelar.
+- [x] E5 — Consultar historial y establecer cómo revisar correcciones sobre rutas existentes; no sobrescribir snapshots de ascensos.
+- [x] E6 — Probar conflictos concurrentes, permisos, aislamiento, cancelación y persistencia en navegador.
 
-La corrección geométrica no equivale a un cambio de armado: no retira rutas por sí sola. Cuando cambie el armado, se mantiene el flujo de publicación de captura completa por secciones. Se definirá el comportamiento histórico de referencias antes de habilitar edición de regiones guardadas.
+La corrección geométrica no equivale a un cambio de armado: no retira rutas por sí sola. Cuando cambie el armado, se mantiene el flujo de publicación de captura completa por secciones. Las rutas guardadas conservan la revisión de sección anterior; al guardar explícitamente una edición de ruta, el staff adopta la revisión vigente. El historial anterior a la migración no puede reconstruirse: la geometría existente se registra como revisión inicial.
 
 ## Después del piloto visual
 
 Gestión de socios y QR de visitas → planes, vigencias y cobros manuales → pagos en línea y conciliación → catálogo de ventas e inventario. Los gastos y el alcance de contabilidad se definirán como un módulo propio. Estas etapas siguen contempladas y no se adelantan mientras se valida el clon digital.
+
+## Cierre de corrección de regiones — 12 de octubre de 2026
+
+La edición administrativa mantiene ID, registra snapshots y auditoría, detecta revisión obsoleta y permite cancelar sin escribir. Historial y preparación de restauración disponibles en Capturas. Las restauraciones requieren confirmación y crean una revisión nueva. Los vértices admiten corrección numérica además de selección aproximada.
+
+Verificación: 27 pruebas backend, 9 de dominio/geometría y 10 de navegador; tipos y build. Las pruebas de navegador usan auth/API simulados; las pruebas del Worker ejercitan D1 local y transacciones. Migración 0005 aplicada en bases A/B locales. Sigue pendiente la siguiente entrega: gizmos y plano de orientación libre.

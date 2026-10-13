@@ -51,6 +51,12 @@ beforeAll(async () => {
       new URL('../migrations/0004_section_geometry.sql', import.meta.url),
       'utf8',
     ));
+  migration +=
+    '\n' +
+    (await readFile(
+      new URL('../migrations/0005_section_revisions.sql', import.meta.url),
+      'utf8',
+    ));
   const envs = [];
   for (const id of ['gym-a', 'gym-b']) {
     const db = await mf.getD1Database('DB', id);
@@ -318,6 +324,7 @@ it('only local staff can create routes and snapshot the camera', async () => {
   const created = await response.json();
   expect(created.revision).toBe(1);
   expect(created.snapshot.camera.distance).toBe(4);
+  expect(created.snapshot.sectionRevision).toBe(1);
   expect((await handle(req(`/api/routes/${created.id}`), b)).status).toBe(404);
 });
 it('revision changes preserve ascent identity and reject stale edits', async () => {

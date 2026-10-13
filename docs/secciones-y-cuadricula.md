@@ -32,7 +32,7 @@
 
 Los vértices son posiciones aproximadas de centros gaussianos proyectadas al plano elegido; no son vértices de una malla. La región guardada es un polígono con espesor, además de su caja envolvente para enfoque y compatibilidad. Las paredes muy curvas o con cambios de orientación necesitan varios contornos. No se detectan obstáculos, agarres ni superficies caminables. No se implementa navegación automática ni control de acceso físico.
 
-El paso está en unidades del clon y solo equivale a metros tras calibrar escala. Las áreas accesibles son anotaciones manuales; no certifican seguridad. Las regiones guardadas siguen siendo estables; su modificación con historial queda para otra iteración.
+El paso está en unidades del clon y solo equivale a metros tras calibrar escala. Las áreas accesibles son anotaciones manuales; no certifican seguridad. Las regiones guardadas pueden corregirse manteniendo identidad y creando revisiones históricas. Una corrección no retira rutas por sí sola.
 
 ## Logros verificados — 12 de octubre de 2026
 
@@ -42,7 +42,17 @@ El paso está en unidades del clon y solo equivale a metros tras calibrar escala
 
 ## Próximas tareas
 
-- [ ] Editar regiones guardadas con historial y control de versión.
+- [x] Editar regiones guardadas con historial y control de versión.
 - [ ] Gizmos para desplazar vértices y orientación libre del plano en paredes inclinadas.
 - [ ] Revisar tamaño y densidad de cuadrícula con usuarios del piloto.
 - [ ] Validar gestos y rendimiento en teléfonos físicos.
+
+## Corrección de regiones existentes
+
+Selecciona la sección en **Mostrar sección en la vista** y pulsa **Editar sección seleccionada**. Corrige nombre, tipo, caja o contorno y revisa el volumen. Los vértices también admiten ajustes numéricos sobre el plano. **Guardar cambios de sección** crea una revisión nueva; **Cancelar edición de sección** descarta el borrador.
+
+**Ver historial de sección** muestra las últimas 100 revisiones. **Preparar esta revisión para restaurar** carga una versión anterior en el editor; guardar crea otra revisión, sin borrar ninguna. No hay restauración inmediata ni eliminación de regiones.
+
+Las rutas nuevas/editadas guardan `sectionRevision`; el catálogo puede recuperar esa geometría histórica. Publicar una captura conserva ese vínculo. Los snapshots y ascensos anteriores no se reescriben. Las rutas antiguas sin versión se interpretan como revisión 1, registrada con la geometría disponible al migrar. Al guardar una edición de ruta, el staff adopta la revisión vigente de su sección. La corrección de sección no cambia por sí sola la cámara, el armado ni el estado de las rutas.
+
+Si otro administrador modificó la sección, el servidor devuelve un conflicto. Recarga, abre de nuevo la región y revisa el cambio antes de guardar. La versión esperada se fija al iniciar la edición; no se actualiza silenciosamente.

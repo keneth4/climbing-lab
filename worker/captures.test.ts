@@ -43,6 +43,7 @@ beforeAll(async () => {
       '0002_digital_twin.sql',
       '0003_capture_camera.sql',
       '0004_section_geometry.sql',
+      '0005_section_revisions.sql',
     ]) {
       const sql = await readFile(
         new URL('../migrations/' + file, import.meta.url),
@@ -406,4 +407,81 @@ it('stores polygon sections and accessible areas with validation and admin isola
   expect(region.kind).toBe('accessible-area');
   expect(region.bounds).toEqual({ min: [0, -0.1, 0], max: [2, 0.1, 2] });
   expect((await (await get('/api/sections', b)).json()).sections).toEqual([]);
+});
+it('revises a section atomically, preserves route snapshots and restores through a new revision', async () => {
+  const value = {
+    name: 'Revision wall',
+    min: [0, 0, 0],
+    max: [2, 2, 1],
+    kind: 'wall',
+  };
+  const created = await (await post('/api/sections', value)).json();
+  const id = created.id;
+  const edit = (body: unknown, user = 'owner') =>
+    handle(
+      new Request(`https://local.test/api/sections/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+      a,
+      identity(user),
+    );
+  await a.DB.prepare(
+    "INSERT INTO routes(id,name,grade,sector,section_id) VALUES('pinned','Pinned','V1','Wall',?)",
+  )
+    .bind(id)
+    .run();
+  const original = JSON.stringify({
+    name: 'Pinned',
+    sectionId: id,
+    sectionRevision: 1,
+    holds: [],
+  });
+  await a.DB.prepare(
+    "INSERT INTO route_revisions(route_id,revision,snapshot) VALUES('pinned',1,?)",
+  )
+    .bind(original)
+    .run();
+  expect(
+    (await edit({ ...value, name: 'Forbidden', expectedRevision: 1 }, 'editor'))
+      .status,
+  ).toBe(403);
+  expect((await get(`/api/sections/${id}/revisions`, a, 'editor')).status).toBe(
+    403,
+  );
+  expect(
+    (await edit({ ...value, min: [3, 3, 3], expectedRevision: 1 })).status,
+  ).toBe(400);
+  const results = await Promise.all([
+    edit({ ...value, name: 'Changed A', expectedRevision: 1 }),
+    edit({ ...value, name: 'Changed B', expectedRevision: 1 }),
+  ]);
+  expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+  expect((await edit({ ...value, expectedRevision: 1 })).status).toBe(409);
+  const history = await (await get(`/api/sections/${id}/revisions`)).json();
+  expect(
+    history.revisions.map((r: { revision: number }) => r.revision),
+  ).toEqual([2, 1]);
+  expect(
+    (await (await get(`/api/sections/${id}/revisions/1`, a, 'visitor')).json())
+      .section.name,
+  ).toBe(value.name);
+  expect(
+    await a.DB.prepare(
+      "SELECT snapshot FROM route_revisions WHERE route_id='pinned' AND revision=1",
+    ).first('snapshot'),
+  ).toBe(original);
+  expect((await edit({ ...value, expectedRevision: 2 })).status).toBe(200);
+  expect(
+    (await (await get(`/api/sections/${id}/revisions`)).json()).revisions,
+  ).toHaveLength(3);
+  expect(
+    await a.DB.prepare(
+      "SELECT COUNT(*) FROM audit_events WHERE object_id=? AND action='section.update'",
+    )
+      .bind(id)
+      .first('COUNT(*)'),
+  ).toBe(2);
+  expect((await get(`/api/sections/${id}/revisions/99`)).status).toBe(404);
 });

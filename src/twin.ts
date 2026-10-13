@@ -17,6 +17,7 @@ export type Capture = {
   fileUrl: string;
 };
 export type Section = {
+  revision?: number;
   id: string;
   name: string;
   bounds: { min: Point; max: Point };

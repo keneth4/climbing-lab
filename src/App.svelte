@@ -15,6 +15,25 @@
   db.reports = [];
   let userEmail = $state('');
   let adminRole = $state(false);
+  let historicalSection = $state<Section | undefined>();
+  let sectionTicket = 0;
+  $effect(() => {
+    const route = selected;
+    const list = sections;
+    const ticket = ++sectionTicket;
+    historicalSection = undefined;
+    const current = list.find((s) => s.id === route?.sectionId);
+    const rev = route?.sectionRevision || 1;
+    if (!route?.sectionId || !current || (current.revision || 1) === rev)
+      return;
+    api(`/sections/${route.sectionId}/revisions/${rev}`)
+      .then((d) => {
+        if (ticket === sectionTicket) historicalSection = d.section;
+      })
+      .catch((e) => {
+        if (ticket === sectionTicket) message = e.message;
+      });
+  });
   let currentCapture = $state<Capture | undefined>();
   let selectedCapture = $state<Capture | undefined>();
   let sections = $state<Section[]>([]);
@@ -351,7 +370,12 @@
           </p>
           <SplatViewer
             capture={selectedCapture}
-            section={sections.find((s) => s.id === selected.sectionId)}
+            section={historicalSection ||
+              sections.find(
+                (s) =>
+                  s.id === selected.sectionId &&
+                  (s.revision || 1) === (selected.sectionRevision || 1),
+              )}
             routeId={selected.id}
             saved={selected.camera}
             {staff}

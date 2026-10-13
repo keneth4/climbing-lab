@@ -33,6 +33,7 @@ test('admin uploads one complete scene, previews and publishes it', async ({
   let parts = 0;
   let sections: any[] = [];
   let fiducials: any[] = [];
+  const sectionHistories: Record<string, any[]> = {};
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('**/api/**', async (route) => {
@@ -56,12 +57,37 @@ test('admin uploads one complete scene, previews and publishes it', async ({
       sections.push({
         geometry: b.geometry || null,
         kind: b.kind || 'wall',
-        id: 'section-test',
+        id: 'section-' + (sections.length + 1),
+        revision: 1,
         name: b.name,
         bounds: { min: b.min, max: b.max },
       });
-      json = { id: 'section-test' };
-    } else if (path === '/api/sections') json = { sections };
+      const r = sections.at(-1);
+      sectionHistories[r.id] = [
+        { revision: 1, section: structuredClone(r), createdAt: '2026-10-12' },
+      ];
+      json = { id: r.id, revision: 1 };
+    } else if (/^\/api\/sections\/[^/]+$/.test(path) && method === 'PUT') {
+      const b = route.request().postDataJSON(),
+        id = path.split('/')[3],
+        r = sections.find((r) => r.id === id);
+      expect(b.expectedRevision).toBe(r.revision);
+      Object.assign(r, {
+        name: b.name,
+        kind: b.kind,
+        bounds: { min: b.min, max: b.max },
+        geometry: b.geometry || null,
+        revision: r.revision + 1,
+      });
+      sectionHistories[id].unshift({
+        revision: r.revision,
+        section: structuredClone(r),
+        createdAt: '2026-10-12',
+      });
+      json = { section: r };
+    } else if (path.endsWith('/revisions'))
+      json = { revisions: sectionHistories[path.split('/')[3]] || [] };
+    else if (path === '/api/sections') json = { sections };
     else if (path === '/api/fiducials' && method === 'POST') {
       const b = route.request().postDataJSON();
       fiducials.push({
@@ -222,14 +248,12 @@ test('admin uploads one complete scene, previews and publishes it', async ({
     const ratio =
       box!.height /
       (2 * Math.tan(Math.PI / 8) * capture.initialCamera.distance);
-    await page
-      .locator('canvas')
-      .click({
-        position: {
-          x: box!.width / 2 + (x - capture.initialCamera.target[0]) * ratio,
-          y: box!.height / 2 - (y - capture.initialCamera.target[1]) * ratio,
-        },
-      });
+    await page.locator('canvas').click({
+      position: {
+        x: box!.width / 2 + (x - capture.initialCamera.target[0]) * ratio,
+        y: box!.height / 2 - (y - capture.initialCamera.target[1]) * ratio,
+      },
+    });
   }
   await expect(
     page.getByRole('button', { name: 'Eliminar vértice 4', exact: true }),
@@ -244,6 +268,54 @@ test('admin uploads one complete scene, previews and publishes it', async ({
       .flat()
       .every((n: number) => Number.isFinite(n)),
   ).toBe(true);
+  await page
+    .getByLabel('Mostrar sección en la vista')
+    .selectOption(sections[0].id);
+  await page
+    .getByRole('button', { name: 'Editar sección seleccionada' })
+    .click();
+  await page
+    .getByLabel('Nombre de sección', { exact: true })
+    .fill('Cancelled name');
+  await page
+    .getByRole('button', { name: 'Cancelar edición de sección' })
+    .click();
+  expect(sections[0].revision).toBe(1);
+  expect(sections[0].name).toBe('Spray izquierda');
+  await page
+    .getByRole('button', { name: 'Editar sección seleccionada' })
+    .click();
+  await page
+    .getByLabel('Nombre de sección', { exact: true })
+    .fill('Spray revisada');
+  await page.getByLabel('Centro X', { exact: true }).fill('0.3');
+  await page
+    .locator('form')
+    .filter({
+      has: page.getByRole('heading', {
+        name: 'Definir sección estable',
+        exact: true,
+      }),
+    })
+    .screenshot({ path: `/tmp/section-edit-${test.info().project.name}.png` });
+  await page
+    .getByRole('button', { name: 'Guardar cambios de sección' })
+    .click();
+  await expect.poll(() => sections[0].revision).toBe(2);
+  expect(sections[0].id).toBe('section-1');
+  await page.getByRole('button', { name: 'Ver historial de sección' }).click();
+  await expect(
+    page.getByText('Revisión 1 · Spray izquierda', { exact: false }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Preparar esta revisión para restaurar' })
+    .last()
+    .click();
+  await page
+    .getByRole('button', { name: 'Guardar cambios de sección' })
+    .click();
+  await expect.poll(() => sections[0].revision).toBe(3);
+  expect(sections[0].name).toBe('Spray izquierda');
   await page
     .getByLabel('Revisé visualmente la alineación y la captura completa')
     .check();

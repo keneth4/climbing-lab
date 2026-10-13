@@ -13,6 +13,7 @@ export type CameraView = {
 };
 export type Route = {
   sectionId?: string;
+  sectionRevision?: number;
   captureId?: string;
   id: string;
   revision: number;

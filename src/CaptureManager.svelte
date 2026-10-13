@@ -111,6 +111,60 @@
     polygonMode = true;
     vertices = [];
   }
+  let editId = $state(''),
+    editRevision = $state(0);
+  let sectionHistory = $state<
+    { revision: number; section: Section; createdAt: string }[]
+  >([]);
+  let historyId = $state('');
+  function cancelRegion() {
+    editId = '';
+    editRevision = 0;
+    editingSection = false;
+    polygonMode = false;
+    vertices = [];
+    sectionName = '';
+    minimum = '';
+    maximum = '';
+    message = 'Edición cancelada; no se guardaron cambios.';
+  }
+  function editRegion(region: Section) {
+    editId = region.id;
+    editRevision = region.revision || 1;
+    sectionName = region.name;
+    sectionKind = region.kind || 'wall';
+    editingSection = true;
+    center = region.bounds.min.map(
+      (n, i) => (n + region.bounds.max[i]) / 2,
+    ) as Point;
+    dimensions = region.bounds.min.map(
+      (n, i) => region.bounds.max[i] - n,
+    ) as Point;
+    minimum = region.bounds.min.join(', ');
+    maximum = region.bounds.max.join(', ');
+    polygonMode = !!region.geometry;
+    if (region.geometry) {
+      plane = region.geometry.plane;
+      elevation = region.geometry.elevation;
+      thickness = region.geometry.thickness;
+      vertices = region.geometry.vertices.map((p) => [...p] as Point);
+    } else vertices = [];
+    message =
+      'Editando revisión ' +
+      editRevision +
+      '. Las rutas conservarán su revisión de sección anterior hasta que sean revisadas.';
+  }
+  async function historyRegion() {
+    if (!previewSectionId) return;
+    const id = previewSectionId;
+    await operation(async () => {
+      const data = await api(`/sections/${id}/revisions`);
+      if (previewSectionId === id) {
+        sectionHistory = data.revisions;
+        historyId = id;
+      }
+    });
+  }
   const coordinates = (value: string) => {
     const parts = value.split(',');
     if (
@@ -185,6 +239,8 @@
       await refresh();
       selectedId = metadata.id;
       editingSection = false;
+      editId = '';
+      editRevision = 0;
       picked = undefined;
       reviewedAlignment = false;
       progress = 'Captura completa subida como borrador.';
@@ -252,6 +308,8 @@
     onchange={() => {
       reviewedAlignment = false;
       editingSection = false;
+      editId = '';
+      editRevision = 0;
       picked = undefined;
       reviewed = [];
       imports = [];
@@ -329,16 +387,28 @@
     onsubmit={(e) => {
       e.preventDefault();
       operation(async () => {
-        await api('/sections', {
-          name: sectionName,
-          kind: sectionKind,
-          ...(polygonMode && editingSection
-            ? { geometry: polygonGeometry(polygon) }
-            : {}),
-          min: editingSection ? draftSection.bounds.min : coordinates(minimum),
-          max: editingSection ? draftSection.bounds.max : coordinates(maximum),
-        });
+        await api(
+          editId ? `/sections/${editId}` : '/sections',
+          {
+            ...(editId ? { expectedRevision: editRevision } : {}),
+            name: sectionName,
+            kind: sectionKind,
+            ...(polygonMode && editingSection
+              ? { geometry: polygonGeometry(polygon) }
+              : {}),
+            min: editingSection
+              ? draftSection.bounds.min
+              : coordinates(minimum),
+            max: editingSection
+              ? draftSection.bounds.max
+              : coordinates(maximum),
+          },
+          editId ? 'PUT' : 'POST',
+        );
         await refresh();
+        editId = '';
+        editRevision = 0;
+        sectionHistory = [];
         sectionName = '';
         editingSection = false;
         polygonMode = false;
@@ -348,6 +418,45 @@
     }}
   >
     <h2>Definir sección estable</h2>
+    <div class="actions">
+      <button
+        type="button"
+        disabled={busy || !previewSectionId}
+        onclick={() => {
+          const r = sections.find((s) => s.id === previewSectionId);
+          if (r) editRegion(r);
+        }}>Editar sección seleccionada</button
+      >
+      <button
+        type="button"
+        disabled={busy || !previewSectionId}
+        onclick={historyRegion}>Ver historial de sección</button
+      >
+    </div>
+    {#if editId}<p>
+        Editando sección existente · revisión {editRevision}. Guardar conserva
+        su identidad.
+      </p>
+      <button type="button" disabled={busy} onclick={cancelRegion}
+        >Cancelar edición de sección</button
+      >{/if}
+    {#if historyId === previewSectionId && sectionHistory.length}<details open>
+        <summary>Historial de sección</summary>
+        <ol>
+          {#each sectionHistory as r}<li>
+              Revisión {r.revision} · {r.section.name} · {r.createdAt}<button
+                type="button"
+                onclick={() => {
+                  editRegion(r.section);
+                  editRevision =
+                    sections.find((s) => s.id === r.section.id)?.revision || 1;
+                  message =
+                    'Revisión histórica preparada como borrador. Guardar creará una revisión nueva.';
+                }}>Preparar esta revisión para restaurar</button
+              >
+            </li>{/each}
+        </ol>
+      </details>{/if}
     <label
       >Tipo de región<select bind:value={sectionKind}
         ><option value="wall">Sección de pared</option><option
@@ -410,6 +519,17 @@
       </p>
       <ol>
         {#each vertices as v, i}<li>
+            <div class="spatial-fields">
+              {#each planeAxes(plane).slice(0, 2) as axis}<label
+                  >Vértice {i + 1}
+                  {['X', 'Y', 'Z'][axis]}<input
+                    type="number"
+                    step="any"
+                    required
+                    bind:value={vertices[i][axis]}
+                  /></label
+                >{/each}
+            </div>
             Vértice {i + 1}: {projectVertex(v, plane, elevation)
               .map((n) => n.toFixed(3))
               .join(', ')}
@@ -465,8 +585,12 @@
           .map((n) => n.toFixed(3))
           .join(', ')}
       </p>
-      <button type="button" onclick={() => (editingSection = false)}
-        >Cancelar preparación visual</button
+      <button
+        type="button"
+        onclick={() => {
+          if (editId) cancelRegion();
+          else editingSection = false;
+        }}>Cancelar preparación visual</button
       >
     {/if}
     <label
@@ -489,7 +613,7 @@
         /></label
       >{/if}<button
       disabled={busy || (polygonMode && editingSection && vertices.length < 3)}
-      >Crear sección</button
+      >{editId ? 'Guardar cambios de sección' : 'Crear sección'}</button
     >
     <p>
       Los límites están en el sistema de coordenadas del gimnasio y permanecen

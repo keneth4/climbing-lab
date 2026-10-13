@@ -127,6 +127,7 @@ function routePayload(b: Record<string, unknown>) {
   )
     throw new HttpError(400, 'Cámara inválida.');
   return {
+    sectionRevision: undefined as number | undefined,
     name,
     grade,
     sector,
@@ -210,13 +211,14 @@ export async function handle(
             .first<string>('section_id')
         : null;
       payload.sectionId = payload.sectionId || existingSection || undefined;
-      if (
-        !payload.sectionId ||
-        !(await env.DB.prepare('SELECT id FROM sections WHERE id=?')
-          .bind(payload.sectionId)
-          .first())
-      )
+      const section = payload.sectionId
+        ? await env.DB.prepare('SELECT revision FROM sections WHERE id=?')
+            .bind(payload.sectionId)
+            .first<{ revision: number }>()
+        : null;
+      if (!section)
         throw new HttpError(400, 'Selecciona una sección del gimnasio.');
+      payload.sectionRevision = section.revision;
       if (!routeMatch && !gym.active_capture_id)
         throw new HttpError(409, 'Publica primero una captura del gimnasio.');
       if (payload.captureId && payload.captureId !== gym.active_capture_id)

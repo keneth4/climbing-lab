@@ -86,6 +86,18 @@ export async function captureApi(
       })),
     });
   }
+  const sectionRevisionMatch = path.match(
+    /^\/api\/sections\/([^/]+)\/revisions\/(\d+)$/,
+  );
+  if (sectionRevisionMatch && request.method === 'GET') {
+    const row = await env.DB.prepare(
+      'SELECT snapshot FROM section_revisions WHERE section_id=? AND revision=?',
+    )
+      .bind(sectionRevisionMatch[1], Number(sectionRevisionMatch[2]))
+      .first<{ snapshot: string }>();
+    if (!row) throw new HttpError(404, 'Revisión de sección no encontrada.');
+    return json({ section: JSON.parse(row.snapshot) });
+  }
   const metadataMatch = path.match(/^\/api\/captures\/([^/]+)\/metadata$/);
   if (metadataMatch && request.method === 'GET') {
     const c = await capture(env, metadataMatch[1]);
@@ -148,7 +160,28 @@ export async function captureApi(
       .run();
     return json({ id }, 201);
   }
-  if (path === '/api/sections' && request.method === 'POST') {
+  const sectionEditMatch = path.match(/^\/api\/sections\/([^/]+)$/);
+  const sectionHistoryMatch = path.match(
+    /^\/api\/sections\/([^/]+)\/revisions$/,
+  );
+  if (sectionHistoryMatch && request.method === 'GET') {
+    const rows = await env.DB.prepare(
+      'SELECT revision,snapshot,created_at FROM section_revisions WHERE section_id=? ORDER BY revision DESC LIMIT 100',
+    )
+      .bind(sectionHistoryMatch[1])
+      .all<{ revision: number; snapshot: string; created_at: string }>();
+    return json({
+      revisions: rows.results.map((r) => ({
+        revision: r.revision,
+        section: JSON.parse(r.snapshot),
+        createdAt: r.created_at,
+      })),
+    });
+  }
+  if (
+    (path === '/api/sections' && request.method === 'POST') ||
+    (sectionEditMatch && request.method === 'PUT')
+  ) {
     const b = await body(request);
     let min: Point, max: Point;
     let geometry = null;
@@ -171,19 +204,79 @@ export async function captureApi(
         400,
         'Los límites mínimo y máximo deben formar un volumen.',
       );
-    const id = crypto.randomUUID();
-    await env.DB.prepare(
-      'INSERT INTO sections(id,name,bounds,geometry,kind) VALUES(?,?,?,?,?)',
-    )
-      .bind(
+    const id = sectionEditMatch?.[1] || crypto.randomUUID();
+    const name = text(b.name, 80),
+      bounds = JSON.stringify({ min, max }),
+      shape = geometry ? JSON.stringify(geometry) : null;
+    const current = sectionEditMatch
+      ? await env.DB.prepare('SELECT revision FROM sections WHERE id=?')
+          .bind(id)
+          .first<{ revision: number }>()
+      : null;
+    if (sectionEditMatch && !current)
+      throw new HttpError(404, 'Sección no encontrada.');
+    if (current && b.expectedRevision !== current.revision)
+      throw new HttpError(
+        409,
+        'La sección cambió. Recarga y revisa antes de guardar.',
+      );
+    const revision = (current?.revision || 0) + 1,
+      now = new Date().toISOString(),
+      guard = crypto.randomUUID();
+    const snapshot = JSON.stringify({
+      id,
+      name,
+      bounds: { min, max },
+      geometry,
+      kind,
+      revision,
+    });
+    const statements = current
+      ? [
+          env.DB.prepare(
+            'INSERT INTO mutation_guards(id,verified) VALUES(?,COALESCE((SELECT CASE WHEN revision=? THEN 1 ELSE 0 END FROM sections WHERE id=?),0))',
+          ).bind(guard, current.revision, id),
+          env.DB.prepare(
+            'UPDATE sections SET name=?,bounds=?,geometry=?,kind=?,revision=? WHERE id=? AND revision=?',
+          ).bind(name, bounds, shape, kind, revision, id, current.revision),
+        ]
+      : [
+          env.DB.prepare(
+            'INSERT INTO sections(id,name,bounds,geometry,kind,revision) VALUES(?,?,?,?,?,?)',
+          ).bind(id, name, bounds, shape, kind, revision),
+        ];
+    statements.push(
+      env.DB.prepare('INSERT INTO section_revisions VALUES(?,?,?,?,?)').bind(
         id,
-        text(b.name, 80),
-        JSON.stringify({ min, max }),
-        geometry ? JSON.stringify(geometry) : null,
-        kind,
-      )
-      .run();
-    return json({ id }, 201);
+        revision,
+        snapshot,
+        user,
+        now,
+      ),
+      env.DB.prepare('INSERT INTO audit_events VALUES(?,?,?,?,?)').bind(
+        crypto.randomUUID(),
+        user,
+        current ? 'section.update' : 'section.create',
+        id,
+        now,
+      ),
+    );
+    if (current)
+      statements.push(
+        env.DB.prepare('DELETE FROM mutation_guards WHERE id=?').bind(guard),
+      );
+    try {
+      await env.DB.batch(statements);
+    } catch {
+      throw new HttpError(
+        409,
+        'La sección cambió. Recarga y revisa antes de guardar.',
+      );
+    }
+    return json(
+      { id, revision, section: JSON.parse(snapshot) },
+      current ? 200 : 201,
+    );
   }
   if (path === '/api/captures' && request.method === 'POST') {
     const b = await body(request);
@@ -509,6 +602,7 @@ export async function captureApi(
         captureId: keep ? c.id : old.captureId || null,
         snapshot: {
           ...old,
+          sectionRevision: old.sectionRevision || 1,
           revision: r.revision + 1,
           status: keep ? 'activa' : 'retirada',
           ...(keep
