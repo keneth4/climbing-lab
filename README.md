@@ -14,6 +14,7 @@ Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](d
 - [Pantallas y flujos](docs/interfaz-base.md)
 - [Etapas y preguntas pendientes](docs/roadmap.md)
 - [QR y detalle por zona](docs/qr-y-lod.md)
+- [Comparación de backend y costos](docs/backend.md)
 
 Primero se construirá una interfaz base enfocada en funcionalidad. El diseño particular de cada sitio se trabajará después, siguiendo el enfoque de MenuMaker y el sitio de AMPM.
 
