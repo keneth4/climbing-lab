@@ -4,6 +4,11 @@ export type Hold = {
   y: number;
   role: 'inicio' | 'intermedio' | 'final';
 };
+export type Hold3D = {
+  id: string;
+  position: [number, number, number];
+  role: Hold['role'];
+};
 export type CameraView = {
   captureId: string;
   yaw: number;
@@ -23,6 +28,7 @@ export type Route = {
   beta: string;
   status: 'activa' | 'retirada';
   holds: Hold[];
+  holds3D?: Hold3D[];
   camera?: CameraView;
 };
 export type Entry = {

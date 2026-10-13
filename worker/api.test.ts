@@ -379,3 +379,88 @@ it('validates camera geometry before storing a revision', async () => {
   );
   expect(response.status).toBe(400);
 });
+it('validates 3D markers and preserves their positions in historical ascents', async () => {
+  const payload = {
+    name: '3D route',
+    grade: 'V2',
+    sector: 'Wall',
+    sectionId: 'section-gym-a',
+    captureId: 'cap-gym-a',
+    beta: 'Start with both hands',
+    status: 'activa',
+    holds: [],
+    holds3D: [{ id: 'hold-3d', position: [1, 2, 3], role: 'inicio' }],
+  };
+  const post = (v: unknown, user = 'alice') =>
+    handle(req('/api/routes', v), a, asUser(user));
+  expect((await post(payload, 'visitor')).status).toBe(403);
+  expect((await post({ ...payload, captureId: undefined })).status).toBe(400);
+  expect((await post({ ...payload, captureId: 'cap-gym-b' })).status).toBe(409);
+  expect(
+    (
+      await post({
+        ...payload,
+        holds3D: [{ id: 'bad', position: [1, 2, null], role: 'inicio' }],
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await post({
+        ...payload,
+        holds3D: [...payload.holds3D, ...payload.holds3D],
+      })
+    ).status,
+  ).toBe(400);
+  const created = await (await post(payload)).json();
+  expect(created.snapshot.holds3D).toEqual(payload.holds3D);
+  expect(
+    (
+      await handle(
+        req('/api/entries', {
+          routeId: created.id,
+          attempts: 1,
+          result: 'ascenso',
+          notes: '',
+        }),
+        a,
+        asUser('marker-visitor'),
+      )
+    ).status,
+  ).toBe(201);
+  const updated = await handle(
+    new Request('https://local.test/api/routes/' + created.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        expectedRevision: 1,
+        holds3D: [{ ...payload.holds3D[0], position: [2, 3, 4] }],
+      }),
+    }),
+    a,
+    asUser('alice'),
+  );
+  expect(updated.status).toBe(200);
+  const legacy = await handle(
+    new Request('https://local.test/api/routes/' + created.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        expectedRevision: 2,
+        holds3D: undefined,
+      }),
+    }),
+    a,
+    asUser('alice'),
+  );
+  expect(legacy.status).toBe(200);
+  expect((await legacy.json()).snapshot.holds3D[0].position).toEqual([2, 3, 4]);
+
+  const rows = await a.DB.prepare(
+    "SELECT rr.snapshot FROM entries e JOIN route_revisions rr ON rr.route_id=e.route_id AND rr.revision=e.revision WHERE e.user_id='marker-visitor'",
+  ).all<{ snapshot: string }>();
+  expect(JSON.parse(rows.results[0].snapshot).holds3D).toEqual(payload.holds3D);
+  expect((await handle(req('/api/routes/' + created.id), b)).status).toBe(404);
+});

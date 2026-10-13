@@ -9,7 +9,7 @@
     type Point,
     type Transform,
   } from '../shared/alignment';
-  import type { CameraView } from './domain';
+  import type { CameraView, Hold3D } from './domain';
   let {
     saved,
     onSave,
@@ -24,7 +24,9 @@
     onBounds,
     grid,
     continuousPick = false,
+    holds3D = [],
   }: {
+    holds3D?: Hold3D[];
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
@@ -46,6 +48,7 @@
   } = $props();
   let canvas: HTMLCanvasElement;
   let status = $state('Selecciona una captura para explorarla.');
+  let showRouteHolds = $state(true);
   let navigation = $state<'orbit' | 'pan'>('orbit');
   let picking = $state(false);
   let selectedPoint = $state<Point | undefined>();
@@ -624,6 +627,27 @@
                     false,
                   );
           }
+          if (showRouteHolds)
+            for (const h of holds3D) {
+              const p = new pc.Vec3(...h.position),
+                r = Math.max(distance * 0.01, 0.015);
+              const color =
+                h.role === 'inicio'
+                  ? new pc.Color(0.1, 1, 0.3)
+                  : h.role === 'final'
+                    ? new pc.Color(1, 0.5, 0.1)
+                    : new pc.Color(0.2, 0.6, 1);
+              for (const offset of [
+                camera.right.clone().mulScalar(r),
+                camera.up.clone().mulScalar(r),
+              ])
+                app.drawLine(
+                  p.clone().sub(offset),
+                  p.clone().add(offset),
+                  color,
+                  false,
+                );
+            }
           if (pickedWorld) {
             const p = new pc.Vec3(...pickedWorld),
               r = Math.max(distance * 0.01, 0.01);
@@ -649,9 +673,12 @@
           abort.abort();
           resize.disconnect();
           controller = undefined;
-          app.destroy();
+          markersRoot?.destroy();
+          pickedEntity?.destroy();
+          sectionEntity?.destroy();
           green.destroy();
           red.destroy();
+          app.destroy();
         };
       })
       .catch(() => {
@@ -683,28 +710,40 @@
   </p>
   <div class="actions">
     <button
+      type="button"
       disabled={!ready}
       aria-pressed={navigation === 'orbit'}
       onclick={() => (navigation = 'orbit')}>Orbitar</button
     >
     <button
+      type="button"
       disabled={!ready}
       aria-pressed={navigation === 'pan'}
       onclick={() => (navigation = 'pan')}>Desplazar</button
     >
-    <button disabled={!ready} onclick={() => controller?.zoom(0.8)}
-      >Acercar</button
+    <button
+      type="button"
+      disabled={!ready}
+      onclick={() => controller?.zoom(0.8)}>Acercar</button
     >
-    <button disabled={!ready} onclick={() => controller?.zoom(1.25)}
-      >Alejar</button
+    <button
+      type="button"
+      disabled={!ready}
+      onclick={() => controller?.zoom(1.25)}>Alejar</button
     >
-    <button disabled={!ready} onclick={() => controller?.framePrincipal()}
+    <button
+      type="button"
+      disabled={!ready}
+      onclick={() => controller?.framePrincipal()}
       >Enfocar contenido principal</button
     >
-    <button disabled={!ready} onclick={() => controller?.frameAll()}
-      >Ver límites completos</button
+    <button
+      type="button"
+      disabled={!ready}
+      onclick={() => controller?.frameAll()}>Ver límites completos</button
     >
     {#if section}<button
+        type="button"
         disabled={!ready}
         onclick={() => {
           const { min, max } = section.bounds;
@@ -712,18 +751,28 @@
         }}>Enfocar sección</button
       >{/if}
     {#if onPoint}<button
+        type="button"
         disabled={!ready}
         aria-pressed={picking}
         onclick={() => (picking = !picking)}
         >{picking ? 'Cancelar selección' : 'Seleccionar punto'}</button
       >{/if}
     {#if onInitialSave}<button
+        type="button"
         disabled={!ready || capture?.status !== 'draft'}
         onclick={() => {
           if (controller) onInitialSave(controller.save());
         }}>Guardar cámara inicial del gimnasio</button
       >{/if}
   </div>
+  {#if holds3D.length}<label class="toggle"
+      ><input type="checkbox" bind:checked={showRouteHolds} />Mostrar agarres 3D
+      ({holds3D.length})</label
+    >
+    <p>
+      Verde: inicio · Azul: intermedio · Naranja: final. Marcadores aproximados
+      visibles a través de superficies; verifica su posición.
+    </p>{/if}
   {#if picking}<p role="status">
       Haz clic o toca sobre la pared para seleccionar un centro gaussiano
       aproximado. Escape cancela.
@@ -734,14 +783,16 @@
         .join(', ')}. Confirma su posición antes de guardarlo.
     </p>{/if}
   <div class="actions">
-    <button disabled={!ready} onclick={() => controller?.reset()}
+    <button type="button" disabled={!ready} onclick={() => controller?.reset()}
       >Vista general</button
     >{#if staff}<button
+        type="button"
         disabled={!ready}
         onclick={() => {
           if (controller) onSave(controller.save());
         }}>Guardar cámara para esta ruta</button
       >{/if}<button
+      type="button"
       disabled={!ready}
       onclick={() => {
         const a = document.createElement('a');

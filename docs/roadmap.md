@@ -87,3 +87,7 @@ Gestión de socios y QR de visitas → planes, vigencias y cobros manuales → p
 La edición administrativa mantiene ID, registra snapshots y auditoría, detecta revisión obsoleta y permite cancelar sin escribir. Historial y preparación de restauración disponibles en Capturas. Las restauraciones requieren confirmación y crean una revisión nueva. Los vértices admiten corrección numérica además de selección aproximada.
 
 Verificación: 27 pruebas backend, 9 de dominio/geometría y 10 de navegador; tipos y build. Las pruebas de navegador usan auth/API simulados; las pruebas del Worker ejercitan D1 local y transacciones. Migración 0005 aplicada en bases A/B locales. Sigue pendiente la siguiente entrega: gizmos y plano de orientación libre.
+
+## Continuación fuera del editor de secciones
+
+La mejora de UX/UI, gizmos y orientación libre de secciones se mantiene pendiente por indicación del usuario. Se implementó el [flujo de agarres 3D de rutas](rutas-3d.md): preparación, cámara, beta y visualización con revisiones. El siguiente trabajo funcional es mejorar la relación entre beta/agarres y exportaciones, junto con la validación de continuidad usando dos capturas reales.

@@ -1,3 +1,4 @@
+import { point } from '../shared/alignment';
 import { HttpError, json, body, text } from './http';
 import { captureApi } from './captures';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
@@ -65,6 +66,7 @@ function routePayload(b: Record<string, unknown>) {
     'beta',
     'status',
     'holds',
+    'holds3D',
     'camera',
     'expectedRevision',
     'sectionId',
@@ -102,6 +104,28 @@ function routePayload(b: Record<string, unknown>) {
     throw new HttpError(400, 'Marcadores inválidos.');
   if (new Set(b.holds.map((h) => h.id)).size !== b.holds.length)
     throw new HttpError(400, 'Marcadores duplicados.');
+  const holds3D = b.holds3D === undefined ? [] : b.holds3D;
+  if (!Array.isArray(holds3D) || holds3D.length + b.holds.length > 40)
+    throw new HttpError(400, 'Usa hasta 40 marcadores por ruta.');
+  try {
+    for (const h of holds3D) {
+      if (
+        !h ||
+        typeof h.id !== 'string' ||
+        !h.id.trim() ||
+        h.id.length > 100 ||
+        !['inicio', 'intermedio', 'final'].includes(h.role) ||
+        Object.keys(h).some((k) => !['id', 'position', 'role'].includes(k))
+      )
+        throw new Error('Marcador 3D inválido.');
+      point(h.position);
+    }
+    const ids = [...b.holds, ...holds3D].map((h) => h.id);
+    if (new Set(ids).size !== ids.length)
+      throw new Error('Marcadores duplicados.');
+  } catch (e) {
+    throw new HttpError(400, (e as Error).message);
+  }
   const camera = b.camera as Record<string, unknown> | undefined;
   if (
     camera !== undefined &&
@@ -134,6 +158,7 @@ function routePayload(b: Record<string, unknown>) {
     beta: b.beta,
     status: b.status,
     holds: b.holds,
+    holds3D,
     ...(b.sectionId ? { sectionId: text(b.sectionId, 100) } : {}),
     ...(b.captureId ? { captureId: text(b.captureId, 100) } : {}),
     ...(camera ? { camera } : {}),
@@ -199,7 +224,7 @@ export async function handle(
       (routeMatch && request.method === 'PUT')
     ) {
       await editor(env, user);
-      const b = await body(request);
+      const b = await body(request, 16384);
       const payload = routePayload(b);
       const gym = await env.DB.prepare(
         'SELECT active_capture_id,generation FROM gym_state WHERE id=1',
@@ -221,6 +246,11 @@ export async function handle(
       payload.sectionRevision = section.revision;
       if (!routeMatch && !gym.active_capture_id)
         throw new HttpError(409, 'Publica primero una captura del gimnasio.');
+      if (payload.holds3D.length && !payload.captureId)
+        throw new HttpError(
+          400,
+          'Los marcadores 3D requieren identificar la captura.',
+        );
       if (payload.captureId && payload.captureId !== gym.active_capture_id)
         throw new HttpError(
           409,
@@ -241,6 +271,10 @@ export async function handle(
           b.expectedRevision !== current.revision
         )
           throw new HttpError(409, 'La ruta cambió. Recarga antes de guardar.');
+        if (b.holds3D === undefined)
+          payload.holds3D = JSON.parse(current.snapshot).holds3D || [];
+        if (payload.holds.length + payload.holds3D.length > 40)
+          throw new HttpError(400, 'Usa hasta 40 marcadores por ruta.');
         next = current.revision + 1;
       } else if (b.expectedRevision !== undefined)
         throw new HttpError(400, 'No hay revisión anterior.');

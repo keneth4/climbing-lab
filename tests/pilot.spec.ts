@@ -74,7 +74,8 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
   page,
 }) => {
   const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
+  const appErrors: string[] = [];
+  page.on('pageerror', (e) => appErrors.push(e.message));
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Ruta A V2' })).toBeVisible();
   await expect(
@@ -192,6 +193,8 @@ test('published capture loads automatically without a route file input', async (
 test('staff editor saves a version and keeps retired routes accessible', async ({
   page,
 }) => {
+  const appErrors: string[] = [];
+  page.on('pageerror', (e) => appErrors.push(e.message));
   const exp = Math.floor(Date.now() / 1000) + 3600;
   const token = `${Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url')}.${Buffer.from(JSON.stringify({ sub: 'staff-test', exp })).toString('base64url')}.test`;
   await page.addInitScript(
@@ -225,6 +228,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     beta: 'Beta de prueba',
     status: 'activa',
     holds: [],
+    holds3D: [] as any[],
     sectionId: 'section-a',
     captureId: 'cap-a',
   };
@@ -292,6 +296,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
         current = { ...current, ...body, revision: current.revision + 1 };
       }
       json = {
+        id: current.id,
         revision: current.revision,
         snapshot: current,
         status: current.status,
@@ -307,6 +312,47 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await page
     .getByLabel('Nombre de ruta', { exact: true })
     .fill('Ruta revisada');
+  const markerEditor = page.locator('.route-markers');
+  await markerEditor
+    .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
+    .click();
+  await expect(
+    markerEditor.getByRole('button', {
+      name: 'Seleccionar punto',
+      exact: true,
+    }),
+  ).toBeEnabled();
+  await markerEditor
+    .getByRole('button', { name: 'Seleccionar punto', exact: true })
+    .click();
+  const bounds = await markerEditor.locator('canvas').boundingBox();
+  const ratio =
+    bounds!.height /
+    (2 * Math.tan(Math.PI / 8) * (Math.sqrt(0.9 ** 2 * 2) * 2.5));
+  await markerEditor.locator('canvas').click({
+    position: {
+      x: bounds!.width / 2 - 0.1 * ratio,
+      y: bounds!.height / 2 + 0.1 * ratio,
+    },
+  });
+  await expect(
+    markerEditor.getByRole('heading', {
+      name: 'Confirmar agarre seleccionado',
+    }),
+  ).toBeVisible();
+  await markerEditor.getByLabel('Función del agarre').selectOption('inicio');
+  await markerEditor
+    .getByRole('button', { name: 'Añadir agarre a la ruta' })
+    .click();
+  expect(current.revision).toBe(1);
+  expect(current.holds3D).toEqual([]);
+  await markerEditor
+    .getByRole('button', { name: 'Guardar cámara para esta ruta' })
+    .click();
+  expect(current.revision).toBe(1);
+  await markerEditor
+    .locator('canvas')
+    .screenshot({ path: `/tmp/route-markers-${test.info().project.name}.png` });
   await page.getByRole('button', { name: 'Guardar ruta en D1' }).click();
   await expect(
     page.getByRole('heading', { name: 'Ruta revisada V2' }),
@@ -314,6 +360,11 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await expect(
     page.getByText('Spray wall · Revisión 2 · activa', { exact: true }),
   ).toBeVisible();
+  expect(current.holds3D).toHaveLength(1);
+  expect(current.holds3D[0].role).toBe('inicio');
+  await expect(page.getByLabel('Mostrar agarres 3D (1)')).toBeVisible();
+  await page.getByLabel('Mostrar agarres 3D (1)').uncheck();
+  await page.getByLabel('Mostrar agarres 3D (1)').check();
   await page.locator('summary').filter({ hasText: 'Editar ruta' }).click();
   await page
     .getByRole('combobox', { name: 'Estado', exact: true })
@@ -322,6 +373,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await expect(
     page.getByText('Spray wall · Revisión 3 · retirada', { exact: true }),
   ).toBeVisible();
+  expect(appErrors).toEqual([]);
   await page.screenshot({
     path: `/tmp/climbing-editor-${test.info().project.name}.png`,
     fullPage: true,

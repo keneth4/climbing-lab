@@ -15,6 +15,7 @@
   db.reports = [];
   let userEmail = $state('');
   let adminRole = $state(false);
+  let routePreparing = $state(false);
   let historicalSection = $state<Section | undefined>();
   let sectionTicket = 0;
   $effect(() => {
@@ -118,7 +119,7 @@
   async function saveCamera(view: CameraView) {
     if (!selected) return;
     try {
-      const { id, revision, ...values } = selected;
+      const { id, revision, sectionRevision, ...values } = selected;
       await api(
         `/routes/${id}`,
         { ...values, camera: view, expectedRevision: revision },
@@ -368,24 +369,26 @@
           <p>
             {selected.sector} · Revisión {selected.revision} · {selected.status}
           </p>
-          <SplatViewer
-            capture={selectedCapture}
-            section={historicalSection ||
-              sections.find(
-                (s) =>
-                  s.id === selected.sectionId &&
-                  (s.revision || 1) === (selected.sectionRevision || 1),
-              )}
-            routeId={selected.id}
-            saved={selected.camera}
-            {staff}
-            onSave={(view) => {
-              saveCamera(view);
-            }}
-          />
-          {#if staff}{#key selected.id + ':' + selected.revision}<details>
+          {#if !routePreparing}<SplatViewer
+              capture={selectedCapture}
+              section={historicalSection ||
+                sections.find(
+                  (s) =>
+                    s.id === selected.sectionId &&
+                    (s.revision || 1) === (selected.sectionRevision || 1),
+                )}
+              holds3D={selected.holds3D}
+              routeId={selected.id}
+              saved={selected.camera}
+              {staff}
+              onSave={(view) => {
+                saveCamera(view);
+              }}
+            />
+          {/if}{#if staff}{#key selected.id + ':' + selected.revision}<details>
                 <summary>Editar ruta</summary><RouteEditor
                   route={selected}
+                  onPreparing={(active) => (routePreparing = active)}
                   onSaved={(id) => refreshRoutes(id)}
                 />
               </details>{/key}{/if}
