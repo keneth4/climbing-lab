@@ -19,6 +19,7 @@ Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](d
 - [API local y pruebas de aislamiento](docs/api-local.md)
 - [Login Supabase y conexión a D1](docs/auth-integracion.md)
 - [Editor de rutas y revisiones](docs/editor-rutas.md)
+- [Secciones por vértices y cuadrícula](docs/secciones-y-cuadricula.md)
 - [Preparación de capturas: requisitos, tareas y logros](docs/preparacion-capturas.md)
 - [Clon digital: capturas completas, secciones y alineación](docs/clon-digital.md)
 

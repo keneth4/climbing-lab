@@ -45,6 +45,12 @@ beforeAll(async () => {
       new URL('../migrations/0003_capture_camera.sql', import.meta.url),
       'utf8',
     ));
+  migration +=
+    '\n' +
+    (await readFile(
+      new URL('../migrations/0004_section_geometry.sql', import.meta.url),
+      'utf8',
+    ));
   const envs = [];
   for (const id of ['gym-a', 'gym-b']) {
     const db = await mf.getD1Database('DB', id);
@@ -66,7 +72,7 @@ beforeAll(async () => {
       .bind(id === 'gym-a' ? 'alice' : 'bob', 'editor')
       .run();
     await db
-      .prepare('INSERT INTO sections VALUES(?,?,?)')
+      .prepare('INSERT INTO sections(id,name,bounds) VALUES(?,?,?)')
       .bind(
         'section-' + id,
         'Wall',

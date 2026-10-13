@@ -3,6 +3,13 @@
   import { api, supabase } from './auth';
   import SplatViewer from './SplatViewer.svelte';
   import type { Capture, Section, Fiducial } from './twin';
+  import {
+    projectVertex,
+    polygonGeometry,
+    polygonBounds,
+    planeAxes,
+    type SectionGeometry,
+  } from '../shared/sections';
   import type { Point } from '../shared/alignment';
   import type { Route, CameraView } from './domain';
   let { routes, onPublished }: { routes: Route[]; onPublished: () => void } =
@@ -65,6 +72,44 @@
       await refresh();
       message = 'Cámara inicial guardada. Se restaurará al abrir esta captura.';
     });
+  }
+  let polygonMode = $state(false),
+    vertices = $state<Point[]>([]);
+  let plane = $state<SectionGeometry['plane']>('XY'),
+    elevation = $state(0),
+    thickness = $state(0.5);
+  let gridVisible = $state(true),
+    gridStep = $state(0.5),
+    snapGrid = $state(false);
+  let sectionKind = $state<'wall' | 'accessible-area'>('wall');
+  let polygon = $derived<SectionGeometry>({
+    type: 'polygon',
+    plane,
+    elevation,
+    thickness,
+    vertices: vertices.map((p) => projectVertex(p, plane, elevation)),
+  });
+  let polygonPreview = $derived<Section>({
+    id: 'polygon-preview',
+    name: sectionName || 'Contorno en preparación',
+    geometry: polygon,
+    kind: sectionKind,
+    bounds: vertices.length ? polygonBounds(polygon) : draftSection.bounds,
+  });
+  function addVertex(world: Point) {
+    if (vertices.length >= 32) {
+      message = 'Máximo 32 vértices por sección.';
+      return;
+    }
+    vertices = [
+      ...vertices,
+      projectVertex(world, plane, elevation, snapGrid ? gridStep : 0),
+    ];
+  }
+  function beginPolygon() {
+    editingSection = true;
+    polygonMode = true;
+    vertices = [];
   }
   const coordinates = (value: string) => {
     const parts = value.split(',');
@@ -232,6 +277,7 @@
     onInitialSave={selected.status === 'draft' ? saveInitial : undefined}
     onPoint={(raw, world) => {
       picked = { raw, world };
+      if (polygonMode && editingSection) addVertex(world);
     }}
     onBounds={(bounds) => {
       sceneBounds = bounds;
@@ -240,8 +286,14 @@
         center = bounds.min.map((n, i) => (n + bounds.max[i]) / 2) as Point;
       }
     }}
+    continuousPick={polygonMode && editingSection}
+    grid={gridVisible
+      ? { plane, elevation, step: gridStep, center: center }
+      : undefined}
     section={editingSection
-      ? draftSection
+      ? polygonMode
+        ? polygonPreview
+        : draftSection
       : sections.find((s) => s.id === previewSectionId)}
     routeId="capture-preview"
     staff={false}
@@ -265,6 +317,9 @@
         <button onclick={() => (referencePosition = picked!.world.join(', '))}
           >Usar como referencia permanente</button
         >
+        <button onclick={() => (elevation = picked!.world[planeAxes(plane)[2]])}
+          >Posicionar plano en este punto</button
+        >
         <button onclick={() => (picked = undefined)}>Descartar posición</button>
       </div>
     </section>{/if}
@@ -276,23 +331,111 @@
       operation(async () => {
         await api('/sections', {
           name: sectionName,
+          kind: sectionKind,
+          ...(polygonMode && editingSection
+            ? { geometry: polygonGeometry(polygon) }
+            : {}),
           min: editingSection ? draftSection.bounds.min : coordinates(minimum),
           max: editingSection ? draftSection.bounds.max : coordinates(maximum),
         });
         await refresh();
         sectionName = '';
         editingSection = false;
+        polygonMode = false;
+        vertices = [];
         message = 'Sección guardada en las coordenadas del gimnasio.';
       });
     }}
   >
     <h2>Definir sección estable</h2>
+    <label
+      >Tipo de región<select bind:value={sectionKind}
+        ><option value="wall">Sección de pared</option><option
+          value="accessible-area">Área accesible</option
+        ></select
+      ></label
+    >
     <button
       type="button"
       disabled={!selected || !sceneBounds}
-      onclick={startSection}>Preparar sección visual</button
+      onclick={beginPolygon}>Delimitar con vértices</button
     >
-    {#if editingSection}<p>
+    <label
+      >Plano de referencia<select
+        bind:value={plane}
+        onchange={() => {
+          vertices = [];
+        }}><option>XY</option><option>XZ</option><option>YZ</option></select
+      ></label
+    >
+    <label
+      >Posición del plano<input
+        type="number"
+        step="any"
+        bind:value={elevation}
+      /></label
+    >
+    <label
+      >Espesor de región<input
+        type="number"
+        min="0.01"
+        step="any"
+        bind:value={thickness}
+      /></label
+    >
+    <label
+      >Paso de cuadrícula<input
+        type="number"
+        min="0.01"
+        step="any"
+        bind:value={gridStep}
+      /></label
+    >
+    <label class="toggle"
+      ><input type="checkbox" bind:checked={gridVisible} />Mostrar cuadrícula</label
+    >
+    <label class="toggle"
+      ><input type="checkbox" bind:checked={snapGrid} />Ajustar nuevos vértices
+      a cuadrícula</label
+    >
+    <p>
+      XY suele servir para paredes; XZ para suelo, si Y es vertical. Usa
+      coordenadas alineadas del gimnasio. El paso representa unidades del clon,
+      no metros hasta calibrar escala.
+    </p>
+    {#if polygonMode && editingSection}<p>
+        Activa Seleccionar punto en el visor y marca el contorno en orden. Cada
+        punto se proyecta al plano elegido. Usa al menos tres vértices; no
+        cruces los bordes.
+      </p>
+      <ol>
+        {#each vertices as v, i}<li>
+            Vértice {i + 1}: {projectVertex(v, plane, elevation)
+              .map((n) => n.toFixed(3))
+              .join(', ')}
+            <button
+              type="button"
+              onclick={() => (vertices = vertices.filter((_, j) => j !== i))}
+              >Eliminar vértice {i + 1}</button
+            >
+          </li>{/each}
+      </ol>
+      <button
+        type="button"
+        disabled={!vertices.length}
+        onclick={() => (vertices = vertices.slice(0, -1))}
+        >Deshacer vértice</button
+      >
+    {/if}
+    <button
+      type="button"
+      disabled={!selected || !sceneBounds}
+      onclick={() => {
+        polygonMode = false;
+        startSection();
+      }}>Preparar sección visual</button
+    >
+    {#if editingSection && !polygonMode}<p>
         El volumen verde muestra la sección en preparación. Ajusta su centro y
         tamaño; guardar confirma los límites.
       </p>
@@ -344,7 +487,10 @@
           placeholder="5, 4, 1"
           required
         /></label
-      >{/if}<button disabled={busy}>Crear sección</button>
+      >{/if}<button
+      disabled={busy || (polygonMode && editingSection && vertices.length < 3)}
+      >Crear sección</button
+    >
     <p>
       Los límites están en el sistema de coordenadas del gimnasio y permanecen
       entre capturas.

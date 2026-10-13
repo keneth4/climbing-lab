@@ -46,3 +46,7 @@ Las pruebas cubren restricciones de administrador, aislamiento entre gimnasios, 
 ## Revisión con captura real
 
 La [revisión de la Spray Wall](revision-capturas-crux.md) identifica problemas de encuadre y edición espacial que deben resolverse antes de considerar completo el flujo de preparación de capturas.
+
+## Contornos y áreas
+
+Además de cajas, el administrador puede crear [regiones por vértices con cuadrícula](secciones-y-cuadricula.md). Se guardan como polígonos proyectados a un plano con espesor y clasificación de pared/área accesible. Son anotaciones manuales estables; no modifican el splat ni determinan automáticamente transitabilidad.

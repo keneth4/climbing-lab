@@ -42,6 +42,7 @@ beforeAll(async () => {
       '0001_initial.sql',
       '0002_digital_twin.sql',
       '0003_capture_camera.sql',
+      '0004_section_geometry.sql',
     ]) {
       const sql = await readFile(
         new URL('../migrations/' + file, import.meta.url),
@@ -120,7 +121,7 @@ it('stores a complete draft privately and publishes the initial capture', async 
     ['right', 'Right'],
   ];
   for (const [id, name] of sections)
-    await a.DB.prepare('INSERT INTO sections VALUES(?,?,?)')
+    await a.DB.prepare('INSERT INTO sections(id,name,bounds) VALUES(?,?,?)')
       .bind(id, name, JSON.stringify({ min: [0, 0, 0], max: [1, 1, 1] }))
       .run();
   expect(
@@ -352,4 +353,57 @@ it('persists an initial camera, rejects stale/invalid/unauthorized edits and cle
       })
     ).status,
   ).toBe(409);
+});
+it('stores polygon sections and accessible areas with validation and admin isolation', async () => {
+  const geometry = {
+    type: 'polygon',
+    plane: 'XZ',
+    elevation: 0,
+    thickness: 0.2,
+    vertices: [
+      [0, 0, 0],
+      [2, 0, 0],
+      [2, 0, 2],
+      [0, 0, 2],
+    ],
+  };
+  expect(
+    (
+      await post(
+        '/api/sections',
+        { name: 'Floor', kind: 'accessible-area', geometry },
+        a,
+        'editor',
+      )
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await post('/api/sections', {
+        name: 'Crossed',
+        geometry: {
+          ...geometry,
+          vertices: [
+            [0, 0, 0],
+            [2, 0, 2],
+            [0, 0, 2],
+            [2, 0, 0],
+          ],
+        },
+      })
+    ).status,
+  ).toBe(400);
+  const response = await post('/api/sections', {
+    name: 'Floor',
+    kind: 'accessible-area',
+    geometry,
+  });
+  expect(response.status).toBe(201);
+  const { id } = await response.json();
+  const data = await (await get('/api/sections', a, 'visitor')).json();
+  const region = data.sections.find((r: { id: string }) => r.id === id);
+  expect(region.geometry).toEqual(geometry);
+  expect(region.kind).toBe('accessible-area');
+  expect(region.bounds).toEqual({ min: [0, -0.1, 0], max: [2, 0.1, 2] });
+  expect((await (await get('/api/sections', b)).json()).sections).toEqual([]);
 });

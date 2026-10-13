@@ -61,3 +61,7 @@ Detección automática de fiduciales, arrastre de gizmos 3D, segmentación de ag
 ### Límites del logro
 
 La selección es un centro gaussiano estimado cerca del cursor, no una reconstrucción exacta de superficie ni un detector de fiduciales. El encuadre por percentiles puede omitir zonas relevantes de la vista. El usuario debe revisar cámara, volumen y referencias antes de publicar. No se probaron teléfono físico, consumo de memoria ni velocidad por internet. No se activaron recursos remotos de Cloudflare.
+
+## Segunda iteración
+
+El seguimiento de selección por vértices y cuadrícula está en [secciones y cuadrícula](secciones-y-cuadricula.md). Las cajas siguen disponibles; los nuevos contornos no recortan ni fragmentan el splat.

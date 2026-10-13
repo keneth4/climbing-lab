@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { planeAxes } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
   import { onMount } from 'svelte';
   import { supabase } from './auth';
@@ -21,6 +22,8 @@
     onInitialSave,
     onPoint,
     onBounds,
+    grid,
+    continuousPick = false,
   }: {
     saved?: CameraView;
     onSave: (view: CameraView) => void;
@@ -32,6 +35,13 @@
     fiducials?: Fiducial[];
     onInitialSave?: (view: CameraView) => void;
     onPoint?: (raw: Point, world: Point) => void;
+    grid?: {
+      plane: 'XY' | 'XZ' | 'YZ';
+      elevation: number;
+      step: number;
+      center: Point;
+    };
+    continuousPick?: boolean;
     onBounds?: (bounds: { min: Point; max: Point }) => void;
   } = $props();
   let canvas: HTMLCanvasElement;
@@ -64,6 +74,9 @@
         framePrincipal: () => void;
       }
     | undefined;
+  $effect(() => {
+    if (!continuousPick) picking = false;
+  });
   $effect(() => {
     const view = saved;
     void routeId;
@@ -273,7 +286,7 @@
           for (const mesh of pickedEntity.render!.meshInstances)
             mesh.material = red;
           app.root.addChild(pickedEntity);
-          picking = false;
+          picking = continuousPick;
           onPoint?.(raw, selectedPoint);
         };
         let drag: { x: number; y: number } | undefined;
@@ -396,7 +409,7 @@
             visibleSection = selected;
             sectionEntity?.destroy();
             sectionEntity = undefined;
-            if (!selected) return;
+            if (!selected || selected.geometry) return;
             const { min, max } = selected.bounds;
             sectionEntity = new pc.Entity('section');
             sectionEntity.addComponent('render', { type: 'box' });
@@ -529,7 +542,68 @@
           },
         };
         app.on('update', () => {
-          if (visibleSection) {
+          if (
+            grid &&
+            Number.isFinite(grid.step) &&
+            grid.step >= 0.01 &&
+            Number.isFinite(grid.elevation)
+          ) {
+            const [a, b, n] = planeAxes(grid.plane),
+              step = grid.step;
+            const base = [...grid.center] as Point;
+            base[n] = grid.elevation;
+            base[a] = Math.round(base[a] / step) * step;
+            base[b] = Math.round(base[b] / step) * step;
+            const color = new pc.Color(0.35, 0.55, 0.65);
+            for (let j = -10; j <= 10; j++)
+              for (const axis of [a, b]) {
+                const other = axis === a ? b : a,
+                  from = [...base] as Point,
+                  to = [...base] as Point;
+                from[axis] -= 10 * step;
+                to[axis] += 10 * step;
+                from[other] += j * step;
+                to[other] += j * step;
+                app.drawLine(
+                  new pc.Vec3(...from),
+                  new pc.Vec3(...to),
+                  color,
+                  false,
+                );
+              }
+          }
+          if (visibleSection?.geometry) {
+            const g = visibleSection.geometry,
+              [, , n] = planeAxes(g.plane),
+              color = new pc.Color(0.1, 1, 0.4);
+            for (let i = 0; i < g.vertices.length; i++) {
+              const p = g.vertices[i],
+                q = g.vertices[(i + 1) % g.vertices.length];
+              const lower = [...p] as Point,
+                upper = [...p] as Point;
+              lower[n] -= g.thickness / 2;
+              upper[n] += g.thickness / 2;
+              app.drawLine(
+                new pc.Vec3(...lower),
+                new pc.Vec3(...upper),
+                color,
+                false,
+              );
+              if (g.vertices.length > 1)
+                for (const offset of [-g.thickness / 2, 0, g.thickness / 2]) {
+                  const start = [...p] as Point,
+                    end = [...q] as Point;
+                  start[n] += offset;
+                  end[n] += offset;
+                  app.drawLine(
+                    new pc.Vec3(...start),
+                    new pc.Vec3(...end),
+                    color,
+                    false,
+                  );
+                }
+            }
+          } else if (visibleSection) {
             const { min, max } = visibleSection.bounds;
             const corners = Array.from(
               { length: 8 },

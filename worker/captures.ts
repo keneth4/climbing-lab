@@ -1,3 +1,4 @@
+import { polygonGeometry, polygonBounds } from '../shared/sections';
 import {
   align,
   defaultTransform,
@@ -74,9 +75,15 @@ export async function captureApi(
       id: string;
       name: string;
       bounds: string;
+      geometry: string | null;
+      kind: string;
     }>();
     return json({
-      sections: r.results.map((v) => ({ ...v, bounds: JSON.parse(v.bounds) })),
+      sections: r.results.map((v) => ({
+        ...v,
+        bounds: JSON.parse(v.bounds),
+        geometry: v.geometry ? JSON.parse(v.geometry) : null,
+      })),
     });
   }
   const metadataMatch = path.match(/^\/api\/captures\/([^/]+)\/metadata$/);
@@ -144,9 +151,18 @@ export async function captureApi(
   if (path === '/api/sections' && request.method === 'POST') {
     const b = await body(request);
     let min: Point, max: Point;
+    let geometry = null;
+    const kind = b.kind ?? 'wall';
+    if (!['wall', 'accessible-area'].includes(String(kind)))
+      throw new HttpError(400, 'Tipo de sección inválido.');
     try {
-      min = point(b.min);
-      max = point(b.max);
+      if (b.geometry) {
+        geometry = polygonGeometry(b.geometry);
+        ({ min, max } = polygonBounds(geometry));
+      } else {
+        min = point(b.min);
+        max = point(b.max);
+      }
     } catch (e) {
       throw new HttpError(400, (e as Error).message);
     }
@@ -156,8 +172,16 @@ export async function captureApi(
         'Los límites mínimo y máximo deben formar un volumen.',
       );
     const id = crypto.randomUUID();
-    await env.DB.prepare('INSERT INTO sections VALUES(?,?,?)')
-      .bind(id, text(b.name, 80), JSON.stringify({ min, max }))
+    await env.DB.prepare(
+      'INSERT INTO sections(id,name,bounds,geometry,kind) VALUES(?,?,?,?,?)',
+    )
+      .bind(
+        id,
+        text(b.name, 80),
+        JSON.stringify({ min, max }),
+        geometry ? JSON.stringify(geometry) : null,
+        kind,
+      )
       .run();
     return json({ id }, 201);
   }

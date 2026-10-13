@@ -54,6 +54,8 @@ test('admin uploads one complete scene, previews and publishes it', async ({
     else if (path === '/api/sections' && method === 'POST') {
       const b = route.request().postDataJSON();
       sections.push({
+        geometry: b.geometry || null,
+        kind: b.kind || 'wall',
         id: 'section-test',
         name: b.name,
         bounds: { min: b.min, max: b.max },
@@ -171,18 +173,13 @@ test('admin uploads one complete scene, previews and publishes it', async ({
   const pixelsPerUnit =
     canvasBox!.height /
     (2 * Math.tan(Math.PI / 8) * capture.initialCamera.distance);
-  await page
-    .locator('canvas')
-    .click({
-      position: {
-        x:
-          canvasBox!.width / 2 -
-          capture.initialCamera.target[0] * pixelsPerUnit,
-        y:
-          canvasBox!.height / 2 +
-          capture.initialCamera.target[1] * pixelsPerUnit,
-      },
-    });
+  await page.locator('canvas').click({
+    position: {
+      x: canvasBox!.width / 2 - capture.initialCamera.target[0] * pixelsPerUnit,
+      y:
+        canvasBox!.height / 2 + capture.initialCamera.target[1] * pixelsPerUnit,
+    },
+  });
   await expect(
     page.getByRole('heading', { name: 'Confirmar posición seleccionada' }),
   ).toBeVisible();
@@ -205,6 +202,48 @@ test('admin uploads one complete scene, previews and publishes it', async ({
   await expect(page.getByPlaceholder('X, Y, Z de la captura')).not.toHaveValue(
     '',
   );
+  await page
+    .getByRole('button', { name: 'Delimitar con vértices', exact: true })
+    .click();
+  await page
+    .getByLabel('Nombre de sección', { exact: true })
+    .fill('Contorno prueba');
+  await page.getByLabel('Ajustar nuevos vértices a cuadrícula').check();
+  await page
+    .getByRole('button', { name: 'Seleccionar punto', exact: true })
+    .click();
+  for (const [x, y] of [
+    [0.4, 0.4],
+    [-0.4, 0.4],
+    [-0.4, -0.4],
+    [0.4, -0.4],
+  ]) {
+    const box = await page.locator('canvas').boundingBox();
+    const ratio =
+      box!.height /
+      (2 * Math.tan(Math.PI / 8) * capture.initialCamera.distance);
+    await page
+      .locator('canvas')
+      .click({
+        position: {
+          x: box!.width / 2 + (x - capture.initialCamera.target[0]) * ratio,
+          y: box!.height / 2 - (y - capture.initialCamera.target[1]) * ratio,
+        },
+      });
+  }
+  await expect(
+    page.getByRole('button', { name: 'Eliminar vértice 4', exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Crear sección', exact: true })
+    .click();
+  await expect.poll(() => sections.length).toBe(2);
+  expect(sections[1].geometry.vertices).toHaveLength(4);
+  expect(
+    sections[1].geometry.vertices
+      .flat()
+      .every((n: number) => Number.isFinite(n)),
+  ).toBe(true);
   await page
     .getByLabel('Revisé visualmente la alineación y la captura completa')
     .check();

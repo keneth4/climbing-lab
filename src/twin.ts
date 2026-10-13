@@ -1,3 +1,4 @@
+import type { SectionGeometry } from '../shared/sections';
 import type { CameraView } from './domain';
 import type { Transform, Point } from '../shared/alignment';
 export type Capture = {
@@ -19,5 +20,7 @@ export type Section = {
   id: string;
   name: string;
   bounds: { min: Point; max: Point };
+  geometry?: SectionGeometry | null;
+  kind?: 'wall' | 'accessible-area';
 };
 export type Fiducial = { id: string; label: string; position: Point };
