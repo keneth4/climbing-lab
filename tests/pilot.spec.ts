@@ -84,6 +84,26 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
   await expect(
     page.getByRole('button', { name: 'Staff', exact: true }),
   ).toHaveCount(0);
+  const canvas = page.getByLabel('Visor de Gaussian Splatting');
+  await expect(canvas).toBeVisible();
+  const expanded = await canvas.boundingBox();
+  await page.getByRole('button', { name: 'Plegar herramientas' }).click();
+  await expect(canvas).toBeVisible();
+  const collapsed = await canvas.boundingBox();
+  expect(collapsed!.width * collapsed!.height).toBeGreaterThan(
+    expanded!.width * expanded!.height,
+  );
+  await expect(
+    page.getByRole('heading', { name: 'Ruta A V2' }),
+  ).not.toBeVisible();
+  await page.screenshot({
+    path: `/tmp/workspace-closed-${test.info().project.name}.png`,
+  });
+  await page.getByRole('button', { name: 'Abrir herramientas' }).click();
+  await expect(page.getByRole('heading', { name: 'Ruta A V2' })).toBeVisible();
+  await page.screenshot({
+    path: `/tmp/workspace-open-${test.info().project.name}.png`,
+  });
   await page.getByText('QR de la ruta', { exact: true }).click();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Descargar QR' }).click();

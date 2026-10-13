@@ -126,3 +126,12 @@ Las mejoras del UX/UI de secciones, gizmos y orientación libre siguen registrad
 - [x] Flujo de navegador escritorio/móvil y limpieza del historial al refrescar sesión.
 
 Continúan pendientes fecha explícita de actividad pasada y CSV del intervalo completo. Luego: proyectos/sesiones, visuales 3D compartibles, piloto remoto y gestión comercial en el orden anterior.
+
+## Prioridad de interfaz espacial
+
+- [x] Visor fijo y herramientas en panel plegable, con distribución lateral/escritorio e inferior/móvil.
+- [x] Desplazamiento independiente: editar rutas/secciones no desplaza el muro fuera del viewport.
+- [ ] Compartir renderer entre herramientas para preservar cámara y carga al cambiar de módulo.
+- [ ] Validar ergonomía de selección de puntos con Crux y dispositivos físicos.
+
+Este principio de interfaz aplica a futuras herramientas del clon digital. Fecha de actividad pasada, exportaciones y módulos comerciales mantienen su alcance previo.

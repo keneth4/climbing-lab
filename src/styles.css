@@ -266,3 +266,122 @@ input[type='file'] {
 nav {
   flex-wrap: wrap;
 }
+
+/* One spatial work area shared by catalog and capture/route preparation. */
+:root {
+  --workspace-top: 175px;
+  --tools-width: min(440px, 42vw);
+}
+header {
+  padding: 10px 20px;
+  min-height: 66px;
+}
+.notice {
+  padding: 6px 20px;
+}
+nav {
+  padding: 8px 20px;
+}
+.workspace {
+  --scene-right: var(--tools-width);
+}
+.workspace.tools-closed {
+  --scene-right: 0px;
+}
+.scene-backdrop,
+.workspace-canvas {
+  position: fixed;
+  top: var(--workspace-top);
+  left: 0;
+  right: var(--scene-right);
+  bottom: 0;
+  width: calc(100vw - var(--scene-right)) !important;
+  height: calc(100dvh - var(--workspace-top)) !important;
+  margin: 0;
+  background: #172c3e;
+}
+.workspace-canvas {
+  visibility: visible;
+  z-index: 1;
+}
+.tools-panel {
+  position: fixed;
+  top: var(--workspace-top);
+  right: 0;
+  bottom: 0;
+  width: var(--tools-width);
+  max-width: none;
+  padding: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #f4f6f8;
+  border-left: 1px solid #aab7c2;
+}
+.tools-closed .tools-panel {
+  visibility: hidden;
+}
+.tools-panel .layout,
+.tools-panel .forms {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.tools-panel .actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tools-panel .wall {
+  height: 220px;
+}
+.drawer-toggle {
+  position: fixed;
+  top: calc(var(--workspace-top) + 10px);
+  left: 10px;
+  z-index: 3;
+}
+@media (max-width: 750px) {
+  :root {
+    --workspace-top: 215px;
+    --tools-width: 100vw;
+  }
+  header {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+  header > div:last-child {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  header span {
+    font-size: 11px;
+  }
+  nav {
+    padding: 6px 12px;
+    gap: 4px;
+  }
+  nav button {
+    padding: 7px 9px;
+  }
+  .notice {
+    padding: 4px 12px;
+    font-size: 11px;
+  }
+  .scene-backdrop,
+  .workspace-canvas {
+    right: 0;
+    width: 100vw !important;
+    height: calc((100dvh - var(--workspace-top)) * 0.48) !important;
+    bottom: auto;
+  }
+  .tools-panel {
+    top: calc(var(--workspace-top) + (100dvh - var(--workspace-top)) * 0.48);
+    width: 100%;
+    padding: 12px;
+    border-left: 0;
+    border-top: 1px solid #aab7c2;
+  }
+  .tools-closed .workspace-canvas,
+  .tools-closed .scene-backdrop {
+    height: calc(100dvh - var(--workspace-top)) !important;
+  }
+}

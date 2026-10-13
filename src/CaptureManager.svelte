@@ -12,7 +12,11 @@
   } from '../shared/sections';
   import type { Point } from '../shared/alignment';
   import type { Route, CameraView } from './domain';
-  let { routes, onPublished }: { routes: Route[]; onPublished: () => void } =
+  let {
+    routes,
+    onPublished,
+    currentCapture,
+  }: { routes: Route[]; onPublished: () => void; currentCapture?: Capture } =
     $props();
   let captures = $state<Capture[]>([]),
     sections = $state<Section[]>([]),
@@ -383,6 +387,12 @@
         <button onclick={() => (picked = undefined)}>Descartar posición</button>
       </div>
     </section>{/if}
+{:else}<SplatViewer
+    capture={currentCapture}
+    staff={false}
+    routeId="gym-overview"
+    onSave={() => {}}
+  />
 {/if}
 <div class="forms">
   <form

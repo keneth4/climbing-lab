@@ -700,6 +700,7 @@
     </p>{:else}<p>{capture.filename} · Versión del gimnasio</p>{/if}
   <p role="status">{status}</p>
   <canvas
+    class="workspace-canvas"
     bind:this={canvas}
     aria-label="Visor de Gaussian Splatting"
     tabindex="0"

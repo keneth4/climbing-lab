@@ -190,6 +190,18 @@
       data.subscription.unsubscribe();
     };
   });
+  let chrome: HTMLDivElement;
+  let toolsOpen = $state(true);
+  onMount(() => {
+    const resize = new ResizeObserver(() => {
+      document.documentElement.style.setProperty(
+        '--workspace-top',
+        `${chrome.getBoundingClientRect().height}px`,
+      );
+    });
+    resize.observe(chrome);
+    return () => resize.disconnect();
+  });
   let tab = $state(
     location.pathname.startsWith('/auth/') ? 'Cuenta' : 'Catálogo',
   );
@@ -334,294 +346,324 @@
   }
 </script>
 
-<header>
-  <div><strong>Climbing Lab</strong><span>Gimnasio de demostración</span></div>
-  <div>
-    {#if userEmail}<span>{userEmail}</span><button
-        onclick={() => supabase.auth.signOut()}>Cerrar sesión</button
-      >{:else}<button onclick={() => (tab = 'Cuenta')}>Iniciar sesión</button
-      >{/if}
-  </div>
-</header>
-<div class="notice">
-  API D1 local · Cuenta Supabase · Capturas y tarjetas 3D en desarrollo.
-</div>
-<nav aria-label="Principal">
-  {#each ['Catálogo', 'Bitácora', 'Cuenta', ...(staff ? ['Staff'] : []), ...(adminRole ? ['Capturas'] : [])] as item}<button
-      class:active={tab === item}
-      onclick={() => (tab = item)}>{item}</button
-    >{/each}
-</nav>
-<main>
-  {#if tab === 'Cuenta'}<AuthPanel
-    />{:else if tab === 'Capturas' && adminRole}<CaptureManager
-      routes={db.routes}
-      onPublished={async () => {
-        await refreshTwin();
-        await refreshRoutes();
-      }}
-    />{:else if tab === 'Catálogo'}
-    <div class="layout">
-      <aside>
-        <h1>Rutas</h1>
-        <label
-          >Buscar<input
-            bind:value={query}
-            placeholder="Nombre de ruta"
-          /></label
-        ><label
-          >Grado<select bind:value={grade}
-            ><option value="">Todos</option
-            >{#each [...new Set(db.routes.map((r) => r.grade))] as g}<option
-                >{g}</option
-              >{/each}</select
-          ></label
-        ><label class="toggle"
-          ><input type="checkbox" bind:checked={showRetired} /> Incluir retiradas</label
-        >
-        <div class="route-list">
-          {#each filtered as r}<button
-              class:selected={selectedId === r.id}
-              onclick={() => select(r.id)}
-              ><strong>{r.name}</strong><span
-                >{r.grade} · {r.sector} · {r.status}</span
-              ></button
-            >{/each}{#if !filtered.length}<p>
-              No hay rutas con estos filtros.
-            </p>{/if}
-        </div>
-      </aside>
-      <section>
-        {#if selected}<h2>{selected.name} <small>{selected.grade}</small></h2>
-          <p>
-            {selected.sector} · Revisión {selected.revision} · {selected.status}
-          </p>
-          {#if !routePreparing}<SplatViewer
-              capture={selectedCapture}
-              section={historicalSection ||
-                sections.find(
-                  (s) =>
-                    s.id === selected.sectionId &&
-                    (s.revision || 1) === (selected.sectionRevision || 1),
-                )}
-              holds3D={selected.holds3D}
-              routeId={selected.id}
-              saved={selected.camera}
-              {staff}
-              onSave={(view) => {
-                saveCamera(view);
-              }}
-            />
-          {/if}{#if staff}{#key selected.id + ':' + selected.revision}<details>
-                <summary>Editar ruta</summary><RouteEditor
-                  route={selected}
-                  onPreparing={(active) => (routePreparing = active)}
-                  onSaved={(id) => refreshRoutes(id)}
-                />
-              </details>{/key}{/if}
-          <div class="wall" aria-label="Esquema de agarres de la ruta">
-            <span class="wall-label"
-              >Esquema de ruta · captura 3D pendiente</span
-            >{#each selected.holds as hold}<span
-                class="hold {hold.role}"
-                style:left="{hold.x}%"
-                style:top="{hold.y}%"
-                title={hold.role}
-                >{hold.role === 'inicio'
-                  ? 'I'
-                  : hold.role === 'final'
-                    ? 'F'
-                    : ''}</span
-              >{/each}
-          </div>
-          <p class="legend">
-            Verde: inicio · Azul: intermedio · Naranja: final
-          </p>
-          <details>
-            <summary>Ver beta</summary>
-            <p>{selected.beta || 'El staff aún no ha añadido una beta.'}</p>
-          </details>
-          <div class="actions">
-            <button onclick={() => exportImage()}
-              >Exportar imagen de ruta</button
-            ><a href={routeUrl(selected.id)}>Enlace de ruta</a>
-          </div>
-          <details>
-            <summary>QR de la ruta</summary>{#if qr}<img
-                src={qr}
-                alt="QR del enlace a esta ruta"
-                width="220"
-                height="220"
-              /><button onclick={() => download(qr, `${selectedId}-qr.png`)}
-                >Descargar QR</button
-              >{/if}
-            <p>
-              Este enlace apunta al sitio actual; para compartirlo fuera del
-              equipo necesita una publicación accesible.
-            </p>
-          </details>
-          <div class="forms">
-            <form
-              onsubmit={(e) => {
-                e.preventDefault();
-                record();
-              }}
-            >
-              <h3>Registrar actividad</h3>
-              <label
-                >Intentos<input
-                  type="number"
-                  min="1"
-                  step="1"
-                  bind:value={attempts}
-                  required
-                /></label
-              ><label
-                >Resultado<select bind:value={result}
-                  ><option value="intento">Intento</option><option
-                    value="ascenso">Ascenso</option
-                  ></select
-                ></label
-              ><label>Notas<textarea bind:value={notes}></textarea></label
-              ><button
-                disabled={selected.status !== 'activa' ||
-                  !userEmail ||
-                  !sessionReady}>Guardar actividad</button
-              >
-            </form>
-            <form
-              onsubmit={(e) => {
-                e.preventDefault();
-                sendReport();
-              }}
-            >
-              <h3>Reportar un error</h3>
-              <label
-                >Descripción<textarea
-                  bind:value={report}
-                  required
-                  maxlength="2000"></textarea></label
-              ><button disabled={!userEmail || !sessionReady}
-                >Enviar reporte</button
-              >
-            </form>
-          </div>
-        {:else}<SplatViewer
-            capture={currentCapture}
-            staff={false}
-            routeId="gym-overview"
-            onSave={() => {}}
-          />
-          <h2>Selecciona una ruta</h2>
-          <p>Selecciona una ruta del catálogo.</p>{/if}
-      </section>
+<div bind:this={chrome}>
+  <header>
+    <div>
+      <strong>Climbing Lab</strong><span>Gimnasio de demostración</span>
     </div>
-  {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
-    <button
-      disabled={!userEmail || !sessionReady}
-      onclick={() => {
-        journalEntryOpen = true;
-        editingEntry = undefined;
-        retiringEntry = undefined;
-        journalNotice = '';
-      }}>Añadir registro</button
-    >
-    {#if journalNotice}<p role="status">{journalNotice}</p>{/if}
-    {#if journalEntryOpen && userEmail && sessionReady}{#key editingEntry?.id || 'new-entry'}<JournalEntry
-          entry={editingEntry}
-          routes={db.routes}
-          onCancel={() => (journalEntryOpen = false)}
-          onSaved={async () => {
-            const edited = !!editingEntry;
-            await refreshSession();
-            journalEntryOpen = false;
-            editingEntry = undefined;
-            journalNotice = edited
-              ? 'Registro corregido; historial conservado.'
-              : 'Registro añadido a tu bitácora.';
-          }}
-        />{/key}{/if}
-    {#if retiringEntry && userEmail && sessionReady}<EntryRetirement
-        entry={retiringEntry}
-        onCancel={() => (retiringEntry = undefined)}
-        onDone={async () => {
-          await refreshSession();
-          retiringEntry = undefined;
-          journalNotice = 'Registro retirado de tu actividad vigente.';
-        }}
+    <div>
+      {#if userEmail}<span>{userEmail}</span><button
+          onclick={() => supabase.auth.signOut()}>Cerrar sesión</button
+        >{:else}<button
+          onclick={() => {
+            tab = 'Cuenta';
+            toolsOpen = true;
+          }}>Iniciar sesión</button
+        >{/if}
+    </div>
+  </header>
+  <div class="notice">
+    API D1 local · Cuenta Supabase · Capturas y tarjetas 3D en desarrollo.
+  </div>
+  <nav aria-label="Principal">
+    {#each ['Catálogo', 'Bitácora', 'Cuenta', ...(staff ? ['Staff'] : []), ...(adminRole ? ['Capturas'] : [])] as item}<button
+        class:active={tab === item}
+        onclick={() => (tab = item)}>{item}</button
+      >{/each}
+  </nav>
+</div>
+<button
+  class="drawer-toggle"
+  aria-expanded={toolsOpen}
+  aria-controls="tools-panel"
+  onclick={() => (toolsOpen = !toolsOpen)}
+  >{toolsOpen ? 'Plegar herramientas' : 'Abrir herramientas'}</button
+>
+<div class="workspace" class:tools-closed={!toolsOpen}>
+  <div class="scene-backdrop" aria-hidden="true"></div>
+  <main
+    id="tools-panel"
+    class="tools-panel"
+    aria-label="Herramientas del gimnasio"
+  >
+    {#if !['Catálogo', 'Capturas'].includes(tab)}<SplatViewer
+        capture={currentCapture}
+        staff={false}
+        routeId="gym-overview"
+        onSave={() => {}}
       />{/if}
-    {#if userEmail && sessionReady}{#key userEmail}<JournalControls
-          onEntries={(entries) => (db.entries = entries)}
-        />{/key}
-
-      <label class="toggle"
-        ><input type="checkbox" bind:checked={privacy} /> Incluir nombre e intentos
-        en tarjeta</label
-      >{#if privacy}<label
-          >Nombre para la tarjeta<input
-            bind:value={name}
-            maxlength="35"
-          /></label
-        >{/if}{#each db.entries as entry (entry.id)}<article>
-          <h2>{entry.routeName} · {entry.grade}</h2>
-          <p>
-            {entry.result === 'ascenso' ? 'Ascenso' : 'Intento'} · {entry.attempts}
-            intentos · {new Date(entry.date).toLocaleDateString('es-MX')}
-          </p>
-          <p>{entry.notes}</p>
-          {#if entry.deletedAt}<p>
-              Registro retirado · versión {entry.entryVersion || 1}
-            </p>{:else}<div class="actions">
-              <button
-                onclick={() => {
-                  editingEntry = entry;
-                  journalEntryOpen = true;
-                  retiringEntry = undefined;
-                  journalNotice = '';
-                }}>Corregir registro</button
-              ><button
-                onclick={() => {
-                  retiringEntry = entry;
-                  journalEntryOpen = false;
-                  journalNotice = '';
-                }}>Retirar registro</button
-              >
-            </div>{/if}
-          <button
-            onclick={() =>
-              (historyEntryId = historyEntryId === entry.id ? '' : entry.id)}
-            >Ver historial del registro</button
+    {#if tab === 'Cuenta'}<AuthPanel
+      />{:else if tab === 'Capturas' && adminRole}<CaptureManager
+        {currentCapture}
+        routes={db.routes}
+        onPublished={async () => {
+          await refreshTwin();
+          await refreshRoutes();
+        }}
+      />{:else if tab === 'Catálogo'}
+      <div class="layout">
+        <aside>
+          <h1>Rutas</h1>
+          <label
+            >Buscar<input
+              bind:value={query}
+              placeholder="Nombre de ruta"
+            /></label
+          ><label
+            >Grado<select bind:value={grade}
+              ><option value="">Todos</option
+              >{#each [...new Set(db.routes.map((r) => r.grade))] as g}<option
+                  >{g}</option
+                >{/each}</select
+            ></label
+          ><label class="toggle"
+            ><input type="checkbox" bind:checked={showRetired} /> Incluir retiradas</label
           >
-          {#if historyEntryId === entry.id}{#key entry.id}<EntryHistory
-                entryId={entry.id}
-              />{/key}{/if}
-          {#if entry.result === 'ascenso' && !entry.deletedAt}<button
-              onclick={() => exportImage(entry)}
-              >Exportar tarjeta personal</button
+          <div class="route-list">
+            {#each filtered as r}<button
+                class:selected={selectedId === r.id}
+                onclick={() => select(r.id)}
+                ><strong>{r.name}</strong><span
+                  >{r.grade} · {r.sector} · {r.status}</span
+                ></button
+              >{/each}{#if !filtered.length}<p>
+                No hay rutas con estos filtros.
+              </p>{/if}
+          </div>
+        </aside>
+        <section>
+          {#if selected}<h2>{selected.name} <small>{selected.grade}</small></h2>
+            <p>
+              {selected.sector} · Revisión {selected.revision} · {selected.status}
+            </p>
+            {#if !routePreparing}<SplatViewer
+                capture={selectedCapture}
+                section={historicalSection ||
+                  sections.find(
+                    (s) =>
+                      s.id === selected.sectionId &&
+                      (s.revision || 1) === (selected.sectionRevision || 1),
+                  )}
+                holds3D={selected.holds3D}
+                routeId={selected.id}
+                saved={selected.camera}
+                {staff}
+                onSave={(view) => {
+                  saveCamera(view);
+                }}
+              />
+            {/if}{#if staff}{#key selected.id + ':' + selected.revision}<details
+                >
+                  <summary>Editar ruta</summary><RouteEditor
+                    route={selected}
+                    onPreparing={(active) => (routePreparing = active)}
+                    onSaved={(id) => refreshRoutes(id)}
+                  />
+                </details>{/key}{/if}
+            <div class="wall" aria-label="Esquema de agarres de la ruta">
+              <span class="wall-label"
+                >Esquema de ruta · captura 3D pendiente</span
+              >{#each selected.holds as hold}<span
+                  class="hold {hold.role}"
+                  style:left="{hold.x}%"
+                  style:top="{hold.y}%"
+                  title={hold.role}
+                  >{hold.role === 'inicio'
+                    ? 'I'
+                    : hold.role === 'final'
+                      ? 'F'
+                      : ''}</span
+                >{/each}
+            </div>
+            <p class="legend">
+              Verde: inicio · Azul: intermedio · Naranja: final
+            </p>
+            <details>
+              <summary>Ver beta</summary>
+              <p>{selected.beta || 'El staff aún no ha añadido una beta.'}</p>
+            </details>
+            <div class="actions">
+              <button onclick={() => exportImage()}
+                >Exportar imagen de ruta</button
+              ><a href={routeUrl(selected.id)}>Enlace de ruta</a>
+            </div>
+            <details>
+              <summary>QR de la ruta</summary>{#if qr}<img
+                  src={qr}
+                  alt="QR del enlace a esta ruta"
+                  width="220"
+                  height="220"
+                /><button onclick={() => download(qr, `${selectedId}-qr.png`)}
+                  >Descargar QR</button
+                >{/if}
+              <p>
+                Este enlace apunta al sitio actual; para compartirlo fuera del
+                equipo necesita una publicación accesible.
+              </p>
+            </details>
+            <div class="forms">
+              <form
+                onsubmit={(e) => {
+                  e.preventDefault();
+                  record();
+                }}
+              >
+                <h3>Registrar actividad</h3>
+                <label
+                  >Intentos<input
+                    type="number"
+                    min="1"
+                    step="1"
+                    bind:value={attempts}
+                    required
+                  /></label
+                ><label
+                  >Resultado<select bind:value={result}
+                    ><option value="intento">Intento</option><option
+                      value="ascenso">Ascenso</option
+                    ></select
+                  ></label
+                ><label>Notas<textarea bind:value={notes}></textarea></label
+                ><button
+                  disabled={selected.status !== 'activa' ||
+                    !userEmail ||
+                    !sessionReady}>Guardar actividad</button
+                >
+              </form>
+              <form
+                onsubmit={(e) => {
+                  e.preventDefault();
+                  sendReport();
+                }}
+              >
+                <h3>Reportar un error</h3>
+                <label
+                  >Descripción<textarea
+                    bind:value={report}
+                    required
+                    maxlength="2000"></textarea></label
+                ><button disabled={!userEmail || !sessionReady}
+                  >Enviar reporte</button
+                >
+              </form>
+            </div>
+          {:else}<SplatViewer
+              capture={currentCapture}
+              staff={false}
+              routeId="gym-overview"
+              onSave={() => {}}
+            />
+            <h2>Selecciona una ruta</h2>
+            <p>Selecciona una ruta del catálogo.</p>{/if}
+        </section>
+      </div>
+    {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
+      <button
+        disabled={!userEmail || !sessionReady}
+        onclick={() => {
+          journalEntryOpen = true;
+          editingEntry = undefined;
+          retiringEntry = undefined;
+          journalNotice = '';
+        }}>Añadir registro</button
+      >
+      {#if journalNotice}<p role="status">{journalNotice}</p>{/if}
+      {#if journalEntryOpen && userEmail && sessionReady}{#key editingEntry?.id || 'new-entry'}<JournalEntry
+            entry={editingEntry}
+            routes={db.routes}
+            onCancel={() => (journalEntryOpen = false)}
+            onSaved={async () => {
+              const edited = !!editingEntry;
+              await refreshSession();
+              journalEntryOpen = false;
+              editingEntry = undefined;
+              journalNotice = edited
+                ? 'Registro corregido; historial conservado.'
+                : 'Registro añadido a tu bitácora.';
+            }}
+          />{/key}{/if}
+      {#if retiringEntry && userEmail && sessionReady}<EntryRetirement
+          entry={retiringEntry}
+          onCancel={() => (retiringEntry = undefined)}
+          onDone={async () => {
+            await refreshSession();
+            retiringEntry = undefined;
+            journalNotice = 'Registro retirado de tu actividad vigente.';
+          }}
+        />{/if}
+      {#if userEmail && sessionReady}{#key userEmail}<JournalControls
+            onEntries={(entries) => (db.entries = entries)}
+          />{/key}
+
+        <label class="toggle"
+          ><input type="checkbox" bind:checked={privacy} /> Incluir nombre e intentos
+          en tarjeta</label
+        >{#if privacy}<label
+            >Nombre para la tarjeta<input
+              bind:value={name}
+              maxlength="35"
+            /></label
+          >{/if}{#each db.entries as entry (entry.id)}<article>
+            <h2>{entry.routeName} · {entry.grade}</h2>
+            <p>
+              {entry.result === 'ascenso' ? 'Ascenso' : 'Intento'} · {entry.attempts}
+              intentos · {new Date(entry.date).toLocaleDateString('es-MX')}
+            </p>
+            <p>{entry.notes}</p>
+            {#if entry.deletedAt}<p>
+                Registro retirado · versión {entry.entryVersion || 1}
+              </p>{:else}<div class="actions">
+                <button
+                  onclick={() => {
+                    editingEntry = entry;
+                    journalEntryOpen = true;
+                    retiringEntry = undefined;
+                    journalNotice = '';
+                  }}>Corregir registro</button
+                ><button
+                  onclick={() => {
+                    retiringEntry = entry;
+                    journalEntryOpen = false;
+                    journalNotice = '';
+                  }}>Retirar registro</button
+                >
+              </div>{/if}
+            <button
+              onclick={() =>
+                (historyEntryId = historyEntryId === entry.id ? '' : entry.id)}
+              >Ver historial del registro</button
+            >
+            {#if historyEntryId === entry.id}{#key entry.id}<EntryHistory
+                  entryId={entry.id}
+                />{/key}{/if}
+            {#if entry.result === 'ascenso' && !entry.deletedAt}<button
+                onclick={() => exportImage(entry)}
+                >Exportar tarjeta personal</button
+              >{/if}
+          </article>{/each}
+      {:else}<p>Inicia sesión para consultar tu bitácora personal.</p>{/if}
+    {:else if tab === 'Staff' && staff}<h1>Panel del staff</h1>
+      <RouteEditor
+        onSaved={async (id) => {
+          await refreshRoutes(id);
+          tab = 'Catálogo';
+        }}
+      />
+      <h2>Reportes</h2>
+      {#each db.reports as r}<article>
+          <strong
+            >{db.routes.find((route) => route.id === r.routeId)?.name ||
+              r.routeId}</strong
+          >
+          <p>{r.description}</p>
+          <p>{r.status}</p>
+          {#if r.status === 'pendiente'}<button
+              onclick={() => resolveReport(r.id)}>Marcar resuelto</button
             >{/if}
-        </article>{/each}
-    {:else}<p>Inicia sesión para consultar tu bitácora personal.</p>{/if}
-  {:else if tab === 'Staff' && staff}<h1>Panel del staff</h1>
-    <RouteEditor
-      onSaved={async (id) => {
-        await refreshRoutes(id);
-        tab = 'Catálogo';
-      }}
-    />
-    <h2>Reportes</h2>
-    {#each db.reports as r}<article>
-        <strong
-          >{db.routes.find((route) => route.id === r.routeId)?.name ||
-            r.routeId}</strong
-        >
-        <p>{r.description}</p>
-        <p>{r.status}</p>
-        {#if r.status === 'pendiente'}<button
-            onclick={() => resolveReport(r.id)}>Marcar resuelto</button
-          >{/if}
-      </article>{/each}{#if !db.reports.length}<p>No hay reportes.</p>{/if}
-  {:else}<p>
-      Inicia sesión con una cuenta autorizada para consultar el panel.
-    </p>{/if}
-  {#if message}<p class="message" role="status">{message}</p>{/if}
-</main>
+        </article>{/each}{#if !db.reports.length}<p>No hay reportes.</p>{/if}
+    {:else}<p>
+        Inicia sesión con una cuenta autorizada para consultar el panel.
+      </p>{/if}
+    {#if message}<p class="message" role="status">{message}</p>{/if}
+  </main>
+</div>
