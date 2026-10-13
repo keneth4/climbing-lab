@@ -14,7 +14,7 @@ D1 guarda versiones, secciones, referencias, rutas y auditoría. R2 guarda los a
 2. Comprueba que el visor pueda abrirlo. La orientación inicial mantiene la corrección vertical existente.
 3. Ajusta la vista y usa **Guardar cámara inicial del gimnasio**. Puedes recuperar el encuadre estimado con **Enfocar contenido principal** o revisar **Ver límites completos**.
 4. Usa **Preparar sección visual** para ajustar centro y dimensiones de una caja con contorno visible. **Seleccionar punto** permite centrarla en un centro gaussiano aproximado. Confirma con **Crear sección**; los límites quedan en el sistema de coordenadas del gimnasio.
-5. Si hay rutas de prueba anteriores, asígnales una sección en **Staff** antes de publicar. Sus cámaras locales antiguas no se trasladan automáticamente: guarda nuevas vistas tras publicar.
+5. Las rutas antiguas/de prueba sin sección ni captura no bloquean la publicación: se mantienen intactas y fuera de la migración de rutas. Después de publicar, asígnales una sección en **Staff** o **Editar ruta** y guarda nuevas cámaras. Una ruta ya vinculada a una captura pero sin sección sí requiere corregirse antes de publicar.
 6. Revisa las rutas que conservarás y confirma la revisión visual de la captura. Publica. El catálogo carga automáticamente esta captura y el staff puede guardar cámaras para sus rutas.
 
 ## Referencias y futuras capturas

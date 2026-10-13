@@ -91,3 +91,11 @@ Verificación: 27 pruebas backend, 9 de dominio/geometría y 10 de navegador; ti
 ## Continuación fuera del editor de secciones
 
 La mejora de UX/UI, gizmos y orientación libre de secciones se mantiene pendiente por indicación del usuario. Se implementó el [flujo de agarres 3D de rutas](rutas-3d.md): preparación, cámara, beta y visualización con revisiones. El siguiente trabajo funcional es mejorar la relación entre beta/agarres y exportaciones, junto con la validación de continuidad usando dos capturas reales.
+
+## Corrección de arranque del piloto
+
+- [x] Rutas antiguas/de prueba sin sección ni captura no bloquean la primera publicación ni se vinculan automáticamente. Mantienen su snapshot y pueden prepararse tras publicar.
+- [x] La interfaz identifica estas rutas como pendientes de asignación.
+- [x] Pruebas de publicación inicial y reemplazo con ruta de prueba, conservación de cámara local/snapshot y navegador escritorio/móvil.
+
+Se conserva el control para rutas ya vinculadas a una captura que perdieron su sección. Importar una ruta sin sección exige asignarla primero.

@@ -112,6 +112,27 @@ it('restricts captures to admins and rejects incomplete publication', async () =
   ).toBe(409);
 });
 it('stores a complete draft privately and publishes the initial capture', async () => {
+  await a.DB.prepare(
+    "INSERT INTO routes(id,name,grade,sector) VALUES('unassigned-demo','Demo','V1','Spray wall')",
+  ).run();
+  await a.DB.prepare(
+    "INSERT INTO route_revisions(route_id,revision,snapshot) VALUES('unassigned-demo',1,?)",
+  )
+    .bind(
+      JSON.stringify({
+        name: 'Demo',
+        grade: 'V1',
+        holds: [],
+        camera: {
+          captureId: 'legacy-local-file',
+          target: [0, 0, 0],
+          yaw: 0,
+          pitch: 0,
+          distance: 3,
+        },
+      }),
+    )
+    .run();
   first = await upload();
   expect(
     (await get(`/api/captures/${first}/file/scene.ply`, a, 'editor')).status,
@@ -140,6 +161,10 @@ it('stores a complete draft privately and publishes the initial capture', async 
   expect(
     (await get(`/api/captures/${first}/file/scene.ply`, a, 'visitor')).status,
   ).toBe(200);
+  const demo = await (await get('/api/routes/unassigned-demo')).json();
+  expect(demo.revision).toBe(1);
+  expect(demo.snapshot.captureId).toBeUndefined();
+  expect(demo.snapshot.camera.captureId).toBe('legacy-local-file');
   for (const [id, section] of [
     ['old-left', 'left'],
     ['old-right', 'right'],
@@ -217,6 +242,9 @@ it('aligns a replacement from fiducials and updates only selected sections', asy
   const retired = await (await get('/api/routes/old-left')).json(),
     preserved = await (await get('/api/routes/old-right')).json(),
     imported = await (await get('/api/routes/import-left')).json();
+  expect(
+    (await (await get('/api/routes/unassigned-demo')).json()).revision,
+  ).toBe(1);
   expect(retired.status).toBe('retirada');
   expect(retired.snapshot.captureId).toBe(first);
   expect(preserved.snapshot.captureId).toBe(next);

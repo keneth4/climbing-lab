@@ -555,18 +555,28 @@ export async function captureApi(
         400,
         'Esta versión admite hasta 100 rutas por publicación.',
       );
-    if (routes.results.some((r) => !r.section_id))
+    if (
+      routes.results.some(
+        (r) => !r.section_id && JSON.parse(r.snapshot).captureId,
+      )
+    )
       throw new HttpError(
         400,
-        'Asigna las rutas existentes a una sección antes de publicar.',
+        'Hay una ruta vinculada a una captura sin sección. Corrige su sección antes de publicar.',
       );
     const routeIds = new Set(routes.results.map((r) => r.id));
     if ([...imports, ...reviewed].some((id) => !routeIds.has(id)))
       throw new HttpError(400, 'Ruta desconocida.');
+    if (routes.results.some((r) => !r.section_id && imports.has(r.id)))
+      throw new HttpError(
+        400,
+        'Asigna una sección a la ruta antes de importarla.',
+      );
     const carried = routes.results.filter(
       (r) =>
-        (r.status === 'activa' && !changed.has(r.section_id)) ||
-        imports.has(r.id),
+        !!r.section_id &&
+        ((r.status === 'activa' && !changed.has(r.section_id)) ||
+          imports.has(r.id)),
     );
     if (carried.some((r) => !reviewed.has(r.id)))
       throw new HttpError(
@@ -593,29 +603,31 @@ export async function captureApi(
         now,
       ),
     ];
-    const updates = routes.results.map((r) => {
-      const keep = carried.some((k) => k.id === r.id),
-        old = JSON.parse(r.snapshot);
-      return {
-        id: r.id,
-        revision: r.revision + 1,
-        captureId: keep ? c.id : old.captureId || null,
-        snapshot: {
-          ...old,
-          sectionRevision: old.sectionRevision || 1,
+    const updates = routes.results
+      .filter((r) => r.section_id)
+      .map((r) => {
+        const keep = carried.some((k) => k.id === r.id),
+          old = JSON.parse(r.snapshot);
+        return {
+          id: r.id,
           revision: r.revision + 1,
-          status: keep ? 'activa' : 'retirada',
-          ...(keep
-            ? {
-                captureId: c.id,
-                ...(old.camera
-                  ? { camera: { ...old.camera, captureId: c.id } }
-                  : {}),
-              }
-            : {}),
-        },
-      };
-    });
+          captureId: keep ? c.id : old.captureId || null,
+          snapshot: {
+            ...old,
+            sectionRevision: old.sectionRevision || 1,
+            revision: r.revision + 1,
+            status: keep ? 'activa' : 'retirada',
+            ...(keep
+              ? {
+                  captureId: c.id,
+                  ...(old.camera
+                    ? { camera: { ...old.camera, captureId: c.id } }
+                    : {}),
+                }
+              : {}),
+          },
+        };
+      });
     if (updates.length) {
       const data = JSON.stringify(updates);
       statements.push(

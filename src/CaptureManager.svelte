@@ -273,7 +273,9 @@
         reviewedRouteIds: reviewed.filter((id) =>
           routes.some(
             (r) =>
-              r.id === id && (r.status === 'activa' || imports.includes(id)),
+              r.id === id &&
+              !!r.sectionId &&
+              (r.status === 'activa' || imports.includes(id)),
           ),
         ),
         reviewedAlignment,
@@ -691,20 +693,28 @@
     {#each routes as r}<article>
         <strong
           >{r.name} · {sections.find((s) => s.id === r.sectionId)?.name ||
-            'Sin sección: asígnala antes de publicar'}</strong
-        >{#if r.status === 'retirada' || changed.includes(r.sectionId || '')}<label
+            'Pendiente de asignar sección'}</strong
+        >{#if !r.sectionId && !r.captureId}<p>
+            Esta ruta aún no está vinculada al clon. No bloquea la publicación y
+            permanecerá intacta. Después de publicar, asígnale una sección desde
+            Staff o Editar ruta.
+          </p>{:else}{#if r.status === 'retirada' || changed.includes(r.sectionId || '')}<label
+              class="toggle"
+              ><input
+                type="checkbox"
+                bind:group={imports}
+                value={r.id}
+              />Importar esta ruta del armado anterior</label
+            >{:else}<p>Sección sin cambios: conservar la ruta.</p>{/if}<label
             class="toggle"
-            ><input type="checkbox" bind:group={imports} value={r.id} />Importar
-            esta ruta del armado anterior</label
-          >{:else}<p>Sección sin cambios: conservar la ruta.</p>{/if}<label
-          class="toggle"
-          ><input
-            type="checkbox"
-            bind:group={reviewed}
-            value={r.id}
-            disabled={r.status === 'retirada' && !imports.includes(r.id)}
-          />Revisé que esta ruta sigue siendo válida</label
-        >
+            ><input
+              type="checkbox"
+              bind:group={reviewed}
+              value={r.id}
+              disabled={r.status === 'retirada' && !imports.includes(r.id)}
+            />Revisé que esta ruta sigue siendo válida</label
+          >
+        {/if}
       </article>{/each}<label class="toggle"
       ><input type="checkbox" bind:checked={reviewedAlignment} />Revisé
       visualmente la alineación y la captura completa</label

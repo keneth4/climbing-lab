@@ -49,7 +49,28 @@ test('admin uploads one complete scene, previews and publishes it', async ({
       return;
     }
     if (path === '/api/me') json = { userId: 'owner', staff: 'admin' };
-    else if (path === '/api/routes') json = { routes: [] };
+    else if (path === '/api/routes')
+      json = {
+        routes:
+          new URL(route.request().url()).searchParams.get('status') ===
+          'retirada'
+            ? []
+            : [
+                {
+                  id: 'legacy-demo',
+                  name: 'Demo',
+                  grade: 'V1',
+                  sector: 'Spray wall',
+                  status: 'activa',
+                },
+              ],
+      };
+    else if (path === '/api/routes/legacy-demo')
+      json = {
+        revision: 1,
+        status: 'activa',
+        snapshot: { name: 'Demo', holds: [] },
+      };
     else if (path === '/api/entries') json = { entries: [] };
     else if (path === '/api/staff/reports') json = { reports: [] };
     else if (path === '/api/sections' && method === 'POST') {
@@ -316,6 +337,11 @@ test('admin uploads one complete scene, previews and publishes it', async ({
     .click();
   await expect.poll(() => sections[0].revision).toBe(3);
   expect(sections[0].name).toBe('Spray izquierda');
+  await expect(
+    page.getByText('Esta ruta aún no está vinculada al clon.', {
+      exact: false,
+    }),
+  ).toBeVisible();
   await page
     .getByLabel('Revisé visualmente la alineación y la captura completa')
     .check();
