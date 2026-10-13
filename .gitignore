@@ -11,3 +11,6 @@ playwright-report/
 .wrangler/
 .dev.vars
 .dev.vars.*
+
+wrangler.pilot.json
+private-backups/

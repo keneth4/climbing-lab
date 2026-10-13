@@ -30,17 +30,17 @@ Las bases locales persistentes se guardan en .wrangler, excluido de Git. Seeds i
 
 ## Contrato inicial
 
-| Método | Endpoint | Acceso y función |
-| --- | --- | --- |
-| GET | /api/health | Identidad del gimnasio configurado |
-| GET | /api/routes | Rutas activas del gimnasio |
-| GET | /api/routes/:id | Última revisión y estado; incluye históricas |
-| GET | /api/me | Identidad autenticada y rol staff local |
-| GET | /api/entries | Solo actividad del usuario autenticado |
-| POST | /api/entries | Crear intento/ascenso en ruta activa |
-| POST | /api/reports | Reportar error sin editar la ruta |
-| GET | /api/staff/reports | Bandeja del staff local |
-| POST | /api/staff/reports/:id/resolve | Resolver y registrar auditoría |
+| Método | Endpoint                       | Acceso y función                             |
+| ------ | ------------------------------ | -------------------------------------------- |
+| GET    | /api/health                    | Identidad del gimnasio configurado           |
+| GET    | /api/routes                    | Rutas activas del gimnasio                   |
+| GET    | /api/routes/:id                | Última revisión y estado; incluye históricas |
+| GET    | /api/me                        | Identidad autenticada y rol staff local      |
+| GET    | /api/entries                   | Solo actividad del usuario autenticado       |
+| POST   | /api/entries                   | Crear intento/ascenso en ruta activa         |
+| POST   | /api/reports                   | Reportar error sin editar la ruta            |
+| GET    | /api/staff/reports             | Bandeja del staff local                      |
+| POST   | /api/staff/reports/:id/resolve | Resolver y registrar auditoría               |
 
 Listas: `limit` entre 1 y 100 (default 50), `offset` entre 0 y 10000. El gimnasio y el usuario no son parámetros de selección. Las respuestas de esta primera API no se cachean; la caché pública se añadirá con una política de publicación/invalidation.
 
@@ -89,3 +89,9 @@ Fuentes: [D1 local](https://developers.cloudflare.com/d1/best-practices/local-de
 Se comprobó que la cuenta del propietario conservaba `admin` en D1 local del gimnasio A. La API de desarrollo estaba detenida; se restableció `npm run dev:api`. Frontend y API respondieron a `/api/me` con el rechazo esperado para una solicitud sin sesión, confirmando el proxy y el servicio. No se modificaron roles ni datos de usuario. La verificación de sesión en navegador requiere recargar con la cuenta autenticada.
 
 Para diagnosticar este síntoma, comprobar primero que Vite y Wrangler estén activos y que el proxy responda; después revisar `/api/me` autenticado y el rol local. La UI oculta herramientas protegidas mientras no puede verificar permisos: eso no demuestra que el rol haya sido eliminado. Pendiente mejorar el mensaje de estado y el reintento de conexión para distinguir indisponibilidad de API y falta de permisos.
+
+## Desarrollo conjunto y nuevos módulos — 13 de octubre de 2026
+
+Detén instancias previas de Vite/Wrangler y ejecuta `npm run dev:local`. Inicia frontend 5173 y API 8787 y finaliza ambos al cerrar el comando. Vite no cambia de puerto silenciosamente. Ante API caída se muestra un estado específico y Reintentar vuelve a verificar permisos sin escribir roles.
+
+Migraciones 0007/0008 aplicadas en bases A/B locales. Proyectos, agrupación diaria, recepción QR, cobros manuales e inventario se describen en [continuación integral](continuacion-integral.md). Las pruebas de operación usan bases aisladas; no se seedearon socios ni pagos reales. La cuenta del propietario conserva admin.

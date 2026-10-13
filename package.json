@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --host 127.0.0.1 --strictPort",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
@@ -21,7 +21,14 @@
     "db:seed": "node scripts/seed-local.mjs gym-a",
     "db:seed:b": "node scripts/seed-local.mjs gym-b",
     "format:api": "prettier --write worker scripts migrations/*.sql tsconfig.worker.json vitest.api.config.ts wrangler.jsonc --ignore-unknown",
-    "staff:local": "node scripts/staff-local.mjs"
+    "staff:local": "node scripts/staff-local.mjs",
+    "dev:local": "node scripts/dev-local.mjs",
+    "pilot:check": "node scripts/pilot.mjs check",
+    "pilot:dry-run": "node scripts/pilot.mjs dry-run",
+    "pilot:migrate": "node scripts/pilot.mjs migrate",
+    "pilot:deploy": "node scripts/pilot.mjs deploy",
+    "pilot:backup": "node scripts/pilot.mjs backup",
+    "pilot:prepare-restore": "node scripts/restore-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",

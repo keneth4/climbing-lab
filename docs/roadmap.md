@@ -159,3 +159,18 @@ El bloque de fecha pasada y exportaciones personales queda cerrado para el pilot
 - [x] Pruebas de identidad de canvas, valores de cámara y ausencia de descargas repetidas al cambiar de módulo.
 
 Siguiente bloque: proyectos personales y sesiones de escalada; después visuales 3D compartibles. Sigue pendiente validar el editor con Crux/dispositivos físicos y continuidad con dos capturas reales.
+
+## Implementación integral — 13 de octubre de 2026
+
+Fuente de estado actual: [continuación integral](continuacion-integral.md). Los candidatos descritos en cierres anteriores ya se implementaron localmente donde se indica abajo.
+
+- [x] E1 — Estado de conexión/permisos, Reintentar y comando conjunto de desarrollo.
+- [x] E2 — Proyectos privados versionados y agrupación diaria por zona del gimnasio.
+- [x] E3 — PNG 3D, atribución y preparación histórica con privacidad explícita.
+- [x] E4 — Barrido de video, detección de formato, cancelación y recuperación del visor.
+- [ ] E5 — Piloto remoto/validación física completa. Preparación, Crux de escritorio y restauración D1 local probados; faltan recursos/datos/dispositivos externos.
+- [x] E6 — Socios, credenciales QR revocables, recepción, visitas y consumo/corrección auditados.
+- [x] E7 — Planes, vigencias, cobros manuales, historial, dashboard y CSV.
+- [x] E8 — Productos/variantes, catálogo público, ventas e inventario atómicos.
+
+No hay despliegue remoto ni cambios de facturación. [Pasos externos y publicación](piloto-remoto.md). Antes de operar con clientes/dinero real se exige QA físico y servicio sin mocks. Checkout, suscripciones, facturación fiscal, gastos y conciliación con proveedor mantienen su etapa posterior.
