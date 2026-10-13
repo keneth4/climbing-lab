@@ -38,3 +38,7 @@ La publicación es atómica y detecta cambios concurrentes. Las capturas publica
 ## Verificación
 
 Las pruebas cubren restricciones de administrador, aislamiento entre gimnasios, subida binaria en el runtime del Worker, borradores privados, alineación, publicación, conservación por sección, importación desde una captura antigua y permanencia del historial. Las pruebas de navegador cubren el flujo de captura en escritorio y móvil.
+
+## Revisión con captura real
+
+La [revisión de la Spray Wall](revision-capturas-crux.md) identifica problemas de encuadre y edición espacial que deben resolverse antes de considerar completo el flujo de preparación de capturas.
