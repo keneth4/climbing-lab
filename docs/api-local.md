@@ -83,3 +83,9 @@ Wrangler generó worker-configuration.d.ts desde la configuración y la fecha de
 - Backups, restauración, monitoreo y pruebas remotas previos a operar membresías/pagos.
 
 Fuentes: [D1 local](https://developers.cloudflare.com/d1/best-practices/local-development/), [Wrangler config](https://developers.cloudflare.com/workers/wrangler/configuration/).
+
+## Diagnóstico de permisos aparentes — 12 de octubre de 2026
+
+Se comprobó que la cuenta del propietario conservaba `admin` en D1 local del gimnasio A. La API de desarrollo estaba detenida; se restableció `npm run dev:api`. Frontend y API respondieron a `/api/me` con el rechazo esperado para una solicitud sin sesión, confirmando el proxy y el servicio. No se modificaron roles ni datos de usuario. La verificación de sesión en navegador requiere recargar con la cuenta autenticada.
+
+Para diagnosticar este síntoma, comprobar primero que Vite y Wrangler estén activos y que el proxy responda; después revisar `/api/me` autenticado y el rol local. La UI oculta herramientas protegidas mientras no puede verificar permisos: eso no demuestra que el rol haya sido eliminado. Pendiente mejorar el mensaje de estado y el reintento de conexión para distinguir indisponibilidad de API y falta de permisos.
