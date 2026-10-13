@@ -110,6 +110,83 @@ async function revision(env: Env, id: string, active = false) {
     throw new HttpError(404, 'Ruta no disponible.');
   return r;
 }
+function routePayload(b: Record<string, unknown>) {
+  const allowed = [
+    'name',
+    'grade',
+    'sector',
+    'beta',
+    'status',
+    'holds',
+    'camera',
+    'expectedRevision',
+  ];
+  if (Object.keys(b).some((k) => !allowed.includes(k)))
+    throw new HttpError(400, 'Campo no permitido.');
+  const name = text(b.name, 80),
+    grade = text(b.grade, 15),
+    sector = text(b.sector, 80);
+  if (
+    typeof b.beta !== 'string' ||
+    b.beta.length > 2000 ||
+    !['activa', 'retirada'].includes(String(b.status))
+  )
+    throw new HttpError(400, 'Datos de ruta inválidos.');
+  if (
+    !Array.isArray(b.holds) ||
+    b.holds.length > 40 ||
+    b.holds.some(
+      (h) =>
+        !h ||
+        typeof h.id !== 'string' ||
+        h.id.length > 100 ||
+        !['inicio', 'intermedio', 'final'].includes(h.role) ||
+        !Number.isFinite(h.x) ||
+        !Number.isFinite(h.y) ||
+        h.x < 0 ||
+        h.x > 100 ||
+        h.y < 0 ||
+        h.y > 100 ||
+        Object.keys(h).some((k) => !['id', 'x', 'y', 'role'].includes(k)),
+    )
+  )
+    throw new HttpError(400, 'Marcadores inválidos.');
+  if (new Set(b.holds.map((h) => h.id)).size !== b.holds.length)
+    throw new HttpError(400, 'Marcadores duplicados.');
+  const camera = b.camera as Record<string, unknown> | undefined;
+  if (
+    camera !== undefined &&
+    (!camera ||
+      typeof camera.captureId !== 'string' ||
+      camera.captureId.length > 400 ||
+      !['yaw', 'pitch', 'distance'].every(
+        (k) =>
+          typeof camera[k] === 'number' &&
+          Number.isFinite(camera[k]) &&
+          Math.abs(Number(camera[k])) < 1e6,
+      ) ||
+      Number(camera.distance) <= 0 ||
+      !Array.isArray(camera.target) ||
+      camera.target.length !== 3 ||
+      camera.target.some(
+        (n) =>
+          typeof n !== 'number' || !Number.isFinite(n) || Math.abs(n) > 1e6,
+      ) ||
+      Object.keys(camera).some(
+        (k) => !['captureId', 'yaw', 'pitch', 'distance', 'target'].includes(k),
+      ))
+  )
+    throw new HttpError(400, 'Cámara inválida.');
+  return {
+    name,
+    grade,
+    sector,
+    beta: b.beta,
+    status: b.status,
+    holds: b.holds,
+    ...(camera ? { camera } : {}),
+  };
+}
 export async function handle(
   request: Request,
   env: Env,
@@ -120,7 +197,9 @@ export async function handle(
     const path = url.pathname;
     // No client field can select a different D1 binding or impersonate a user.
     if (
-      [...url.searchParams.keys()].some((k) => !['limit', 'offset'].includes(k))
+      [...url.searchParams.keys()].some(
+        (k) => !['limit', 'offset', 'status'].includes(k),
+      )
     )
       throw new HttpError(400, 'Parámetro no permitido.');
     if (path === '/api/health' && request.method === 'GET')
@@ -140,7 +219,11 @@ export async function handle(
       const rows = await env.DB.prepare(
         'SELECT * FROM routes WHERE status=? ORDER BY id LIMIT ? OFFSET ?',
       )
-        .bind('activa', limit, offset)
+        .bind(
+          url.searchParams.get('status') === 'retirada' ? 'retirada' : 'activa',
+          limit,
+          offset,
+        )
         .all();
       return json({ gymId: env.GYM_ID, routes: rows.results });
     }
@@ -155,6 +238,81 @@ export async function handle(
       });
     }
     const user = await authenticate(request, env);
+    if (
+      (path === '/api/routes' && request.method === 'POST') ||
+      (routeMatch && request.method === 'PUT')
+    ) {
+      await editor(env, user);
+      const b = await body(request);
+      const payload = routePayload(b);
+      const id = routeMatch ? routeMatch[1] : crypto.randomUUID();
+      let next = 1;
+      if (routeMatch) {
+        const current = await revision(env, id);
+        if (
+          !Number.isInteger(b.expectedRevision) ||
+          b.expectedRevision !== current.revision
+        )
+          throw new HttpError(409, 'La ruta cambió. Recarga antes de guardar.');
+        next = current.revision + 1;
+      } else if (b.expectedRevision !== undefined)
+        throw new HttpError(400, 'No hay revisión anterior.');
+      const snapshot = JSON.stringify({ ...payload, id, revision: next });
+      const now = new Date().toISOString();
+      const statements = routeMatch
+        ? [
+            env.DB.prepare(
+              'INSERT INTO route_revisions(route_id,revision,snapshot) VALUES(?,?,?)',
+            ).bind(id, next, snapshot),
+            env.DB.prepare(
+              'UPDATE routes SET name=?,grade=?,sector=?,beta=?,status=? WHERE id=?',
+            ).bind(
+              payload.name,
+              payload.grade,
+              payload.sector,
+              payload.beta,
+              payload.status,
+              id,
+            ),
+          ]
+        : [
+            env.DB.prepare(
+              'INSERT INTO routes(id,name,grade,sector,beta,status) VALUES(?,?,?,?,?,?)',
+            ).bind(
+              id,
+              payload.name,
+              payload.grade,
+              payload.sector,
+              payload.beta,
+              payload.status,
+            ),
+            env.DB.prepare(
+              'INSERT INTO route_revisions(route_id,revision,snapshot) VALUES(?,?,?)',
+            ).bind(id, next, snapshot),
+          ];
+      statements.push(
+        env.DB.prepare(
+          'INSERT INTO audit_events(id,user_id,action,object_id,created_at) VALUES(?,?,?,?,?)',
+        ).bind(
+          crypto.randomUUID(),
+          user,
+          routeMatch ? 'route.revise' : 'route.create',
+          id,
+          now,
+        ),
+      );
+      try {
+        await env.DB.batch(statements);
+      } catch (error) {
+        if (String(error).includes('UNIQUE constraint failed: route_revisions'))
+          throw new HttpError(409, 'La ruta cambió. Recarga antes de guardar.');
+        throw error;
+      }
+      return json(
+        { id, revision: next, snapshot: JSON.parse(snapshot) },
+        routeMatch ? 200 : 201,
+      );
+    }
     if (path === '/api/me' && request.method === 'GET') {
       const staff = await env.DB.prepare(
         'SELECT role FROM staff WHERE user_id=?',
@@ -169,7 +327,7 @@ export async function handle(
     }
     if (path === '/api/entries' && request.method === 'GET') {
       const rows = await env.DB.prepare(
-        "SELECT e.*, json_extract(rr.snapshot, '$.name') AS route_name, json_extract(rr.snapshot, '$.grade') AS grade FROM entries e JOIN route_revisions rr ON rr.route_id=e.route_id AND rr.revision=e.revision WHERE e.user_id=? ORDER BY e.created_at DESC,e.id LIMIT ? OFFSET ?",
+        "SELECT e.*, rr.snapshot AS route_snapshot, json_extract(rr.snapshot, '$.name') AS route_name, json_extract(rr.snapshot, '$.grade') AS grade FROM entries e JOIN route_revisions rr ON rr.route_id=e.route_id AND rr.revision=e.revision WHERE e.user_id=? ORDER BY e.created_at DESC,e.id LIMIT ? OFFSET ?",
       )
         .bind(user, limit, offset)
         .all();

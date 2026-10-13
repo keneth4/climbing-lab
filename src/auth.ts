@@ -4,10 +4,14 @@ export const supabase = createClient(
   'sb_publishable_1WjLUELSbBm3Rx75BcsWdg_6k49FKhz',
   { auth: { flowType: 'pkce', detectSessionInUrl: true } },
 );
-export async function api(path: string, body?: unknown) {
+export async function api(
+  path: string,
+  body?: unknown,
+  method?: 'POST' | 'PUT',
+) {
   const { data } = await supabase.auth.getSession();
   const response = await fetch(`/api${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
+    method: method || (body === undefined ? 'GET' : 'POST'),
     headers: {
       ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(data.session

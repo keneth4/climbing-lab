@@ -189,3 +189,96 @@ test('local splat remains usable with the authenticated app shell', async ({
     ),
   ).toBe(true);
 });
+test('staff editor saves a version and keeps retired routes accessible', async ({
+  page,
+}) => {
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const token = `${Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url')}.${Buffer.from(JSON.stringify({ sub: 'staff-test', exp })).toString('base64url')}.test`;
+  await page.addInitScript(
+    ({ token, exp }) =>
+      localStorage.setItem(
+        'sb-defblrjdwgnqyzzgozdf-auth-token',
+        JSON.stringify({
+          access_token: token,
+          refresh_token: 'test-refresh',
+          expires_at: exp,
+          expires_in: 3600,
+          token_type: 'bearer',
+          user: {
+            id: 'staff-test',
+            email: 'staff@example.com',
+            app_metadata: { provider: 'email' },
+            user_metadata: {},
+            aud: 'authenticated',
+            created_at: new Date().toISOString(),
+          },
+        }),
+      ),
+    { token, exp },
+  );
+  let current = {
+    id: 'route-a',
+    revision: 1,
+    name: 'Ruta A',
+    grade: 'V2',
+    sector: 'Spray wall',
+    beta: 'Beta de prueba',
+    status: 'activa',
+    holds: [],
+  };
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    let json: any = {};
+    if (path === '/api/me') json = { userId: 'staff-test', staff: 'editor' };
+    else if (path === '/api/entries') json = { entries: [] };
+    else if (path === '/api/staff/reports') json = { reports: [] };
+    else if (path === '/api/routes')
+      json = {
+        routes:
+          current.status === (url.searchParams.get('status') || 'activa')
+            ? [current]
+            : [],
+      };
+    else if (path === '/api/routes/route-a') {
+      if (route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON();
+        expect(body.expectedRevision).toBe(current.revision);
+        current = { ...current, ...body, revision: current.revision + 1 };
+      }
+      json = {
+        revision: current.revision,
+        snapshot: current,
+        status: current.status,
+      };
+    }
+    await route.fulfill({ json });
+  });
+  await page.goto('/');
+  await expect(
+    page.getByRole('button', { name: 'Staff', exact: true }),
+  ).toBeVisible();
+  await page.locator('summary').filter({ hasText: 'Editar ruta' }).click();
+  await page
+    .getByLabel('Nombre de ruta', { exact: true })
+    .fill('Ruta revisada');
+  await page.getByRole('button', { name: 'Guardar ruta en D1' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Ruta revisada V2' }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Spray wall · Revisión 2 · activa', { exact: true }),
+  ).toBeVisible();
+  await page.locator('summary').filter({ hasText: 'Editar ruta' }).click();
+  await page
+    .getByRole('combobox', { name: 'Estado', exact: true })
+    .selectOption('retirada');
+  await page.getByRole('button', { name: 'Guardar ruta en D1' }).click();
+  await expect(
+    page.getByText('Spray wall · Revisión 3 · retirada', { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: `/tmp/climbing-editor-${test.info().project.name}.png`,
+    fullPage: true,
+  });
+});

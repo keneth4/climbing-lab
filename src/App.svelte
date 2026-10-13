@@ -2,6 +2,8 @@
   import QRCode from 'qrcode';
   import { onMount } from 'svelte';
   import AuthPanel from './AuthPanel.svelte';
+  import RouteEditor from './RouteEditor.svelte';
+  import type { CameraView } from './domain';
   import { supabase, api } from './auth';
   import SplatViewer from './SplatViewer.svelte';
   import { loadState, routeUrl, type Entry } from './domain';
@@ -37,7 +39,7 @@
         attempts: e.attempts,
         result: e.result,
         notes: e.notes,
-        holds: [],
+        holds: e.route_snapshot ? JSON.parse(e.route_snapshot).holds || [] : [],
       }));
       if (staff) {
         const reports = await api('/staff/reports');
@@ -56,33 +58,53 @@
       if (ticket === generation) sessionReady = true;
     }
   }
+  async function refreshRoutes(id?: string) {
+    try {
+      const lists = await Promise.all([
+        api('/routes'),
+        api('/routes?status=retirada'),
+      ]);
+      const rows = lists.flatMap((d) => d.routes);
+      const routes = await Promise.all(
+        rows.map(async (r: any) => {
+          const detail = await api(`/routes/${r.id}`);
+          return {
+            ...detail.snapshot,
+            id: r.id,
+            revision: detail.revision,
+            status: detail.status,
+            holds: detail.snapshot.holds || [],
+            name: r.name,
+            grade: r.grade,
+            sector: r.sector,
+            beta: r.beta,
+          };
+        }),
+      );
+      db.routes = routes;
+      if (id) select(id);
+      else if (!selectedId) selectedId = routes[0]?.id || '';
+    } catch (e) {
+      message = (e as Error).message;
+    }
+  }
+  async function saveCamera(view: CameraView) {
+    if (!selected) return;
+    try {
+      const { id, revision, ...values } = selected;
+      await api(
+        `/routes/${id}`,
+        { ...values, camera: view, expectedRevision: revision },
+        'PUT',
+      );
+      await refreshRoutes(id);
+      message = 'Cámara guardada en una nueva revisión.';
+    } catch (e) {
+      message = (e as Error).message;
+    }
+  }
   onMount(() => {
-    api('/routes')
-      .then(async (data) => {
-        const routes = await Promise.all(
-          data.routes.map(async (r: any) => {
-            const detail = await api(`/routes/${r.id}`);
-            return {
-              ...detail.snapshot,
-              id: r.id,
-              revision: detail.revision,
-              name: r.name,
-              grade: r.grade,
-              sector: r.sector,
-              beta: r.beta,
-              status: r.status,
-              holds: detail.snapshot.holds || [],
-            };
-          }),
-        );
-        db.routes = routes;
-        if (
-          !routes.some((r) => r.id === selectedId) &&
-          !new URLSearchParams(location.search).has('ruta')
-        )
-          selectedId = routes[0]?.id || '';
-      })
-      .catch((e) => (message = (e as Error).message));
+    refreshRoutes();
     refreshSession();
     const { data } = supabase.auth.onAuthStateChange(() => {
       setTimeout(() => refreshSession(), 0);
@@ -290,9 +312,15 @@
             saved={selected.camera}
             {staff}
             onSave={(view) => {
-              if (selected) selected.camera = view;
+              saveCamera(view);
             }}
           />
+          {#if staff}{#key selected.id + ':' + selected.revision}<details>
+                <summary>Editar ruta</summary><RouteEditor
+                  route={selected}
+                  onSaved={(id) => refreshRoutes(id)}
+                />
+              </details>{/key}{/if}
           <div class="wall" aria-label="Esquema de agarres de la ruta">
             <span class="wall-label"
               >Esquema de ruta · captura 3D pendiente</span
@@ -404,7 +432,12 @@
         Aún no tienes actividad. Registra un intento desde el catálogo.
       </p>{/if}
   {:else if tab === 'Staff' && staff}<h1>Panel del staff</h1>
-    <p>El editor del catálogo se conectará en el siguiente incremento.</p>
+    <RouteEditor
+      onSaved={async (id) => {
+        await refreshRoutes(id);
+        tab = 'Catálogo';
+      }}
+    />
     <h2>Reportes</h2>
     {#each db.reports as r}<article>
         <strong

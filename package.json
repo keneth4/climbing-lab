@@ -20,7 +20,8 @@
     "test:api": "vitest run --config vitest.api.config.ts",
     "db:seed": "node scripts/seed-local.mjs gym-a",
     "db:seed:b": "node scripts/seed-local.mjs gym-b",
-    "format:api": "prettier --write worker scripts migrations/*.sql tsconfig.worker.json vitest.api.config.ts wrangler.jsonc --ignore-unknown"
+    "format:api": "prettier --write worker scripts migrations/*.sql tsconfig.worker.json vitest.api.config.ts wrangler.jsonc --ignore-unknown",
+    "staff:local": "node scripts/staff-local.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",

@@ -231,3 +231,88 @@ describe('per-gym D1 isolation', () => {
     ).toBe(401);
   });
 });
+it('only local staff can create routes and snapshot the camera', async () => {
+  const payload = {
+    name: 'Nueva ruta',
+    grade: 'V4',
+    sector: 'Spray wall',
+    beta: 'Cruce',
+    status: 'activa',
+    holds: [],
+    camera: {
+      captureId: 'local-test',
+      yaw: 0,
+      pitch: 0,
+      distance: 4,
+      target: [0, 0, 0],
+    },
+  };
+  expect(
+    (await handle(req('/api/routes', payload), a, asUser('visitor'))).status,
+  ).toBe(403);
+  expect(
+    (await handle(req('/api/routes', payload), b, asUser('alice'))).status,
+  ).toBe(403);
+  const response = await handle(
+    req('/api/routes', payload),
+    a,
+    asUser('alice'),
+  );
+  expect(response.status).toBe(201);
+  const created = await response.json();
+  expect(created.revision).toBe(1);
+  expect(created.snapshot.camera.distance).toBe(4);
+  expect((await handle(req(`/api/routes/${created.id}`), b)).status).toBe(404);
+});
+it('revision changes preserve ascent identity and reject stale edits', async () => {
+  const payload = {
+    name: 'Ruta renombrada',
+    grade: 'V5',
+    sector: 'Spray wall',
+    beta: 'Nueva beta',
+    status: 'activa',
+    holds: [],
+    expectedRevision: 1,
+  };
+  const update = () =>
+    new Request('https://local.test/api/routes/route-a', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  const responses = await Promise.all([
+    handle(update(), a, asUser('alice')),
+    handle(update(), a, asUser('alice')),
+  ]);
+  expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+  const entries = await (
+    await handle(req('/api/entries'), a, asUser('alice'))
+  ).json();
+  expect(entries.entries[0].revision).toBe(1);
+  expect(entries.entries[0].route_name).toBe('gym-a');
+  const current = await (await handle(req('/api/routes/route-a'), a)).json();
+  expect(current.revision).toBe(2);
+  expect(current.snapshot.name).toBe('Ruta renombrada');
+});
+it('validates camera geometry before storing a revision', async () => {
+  const response = await handle(
+    req('/api/routes', {
+      name: 'Bad',
+      grade: 'V1',
+      sector: 'Wall',
+      beta: '',
+      status: 'activa',
+      holds: [],
+      camera: {
+        captureId: 'x',
+        yaw: 0,
+        pitch: 0,
+        distance: -1,
+        target: [0, 0, 0],
+      },
+    }),
+    a,
+    asUser('alice'),
+  );
+  expect(response.status).toBe(400);
+});

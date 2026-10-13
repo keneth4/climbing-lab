@@ -47,6 +47,6 @@ No hay alta automática de staff. Un administrador inicial se asignará a un UUI
 
 Pruebas de navegador en escritorio/móvil con respuestas de auth/API simuladas: catálogo anónimo, controles de login, QR, sesión/password, Bearer y limpieza al logout. Regresión del visor con PLY sintético. Pruebas backend de firma y aislamiento contra D1 local independientes.
 
-Todavía no se ha completado login real de Google de extremo a extremo ni escrituras con un token real. El editor de rutas queda pendiente de API versionada; se retiraron controles que solo alteraban la demo local. Las cámaras del visor siguen siendo temporales en la interfaz; no se guardan en D1. La exportación de tarjetas sobre revisiones históricas completas sigue pendiente.
+Todavía no se ha completado login real de Google de extremo a extremo ni escrituras con un token real. El editor y guardado de cámaras ya usan la API versionada: ver [editor de rutas](editor-rutas.md). La exportación de tarjetas sobre revisiones históricas completas sigue pendiente.
 
 Caché del catálogo, rate limiting, revocación estricta de sesiones, publicación en Cloudflare y R2 siguen pendientes antes de producción.
