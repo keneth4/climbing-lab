@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { renderCard, downloadBlob, type CardInfo } from './media';
   import { planeAxes } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { supabase } from './auth';
   import type { Capture, Section, Fiducial } from './twin';
   import {
@@ -11,6 +12,8 @@
   } from '../shared/alignment';
   import type { CameraView, Hold3D } from './domain';
   let {
+    exportInfo,
+    onRecording,
     mount,
     saved,
     onSave,
@@ -27,6 +30,8 @@
     continuousPick = false,
     holds3D = [],
   }: {
+    exportInfo?: CardInfo;
+    onRecording?: (active: boolean) => void;
     mount?: (node: HTMLElement) => void;
     holds3D?: Hold3D[];
     saved?: CameraView;
@@ -51,7 +56,123 @@
   function mountViewer(node: HTMLElement) {
     mount?.(node);
   }
+  let recording = $state(false),
+    mediaError = $state(''),
+    mediaNotice = $state('');
+  let cancelRecording: (() => void) | undefined;
+  let recordedCaptureId = '';
+  let cancelButton = $state<HTMLButtonElement>();
   let canvas: HTMLCanvasElement;
+  function exportPng() {
+    if (!ready || loading || !exportInfo) return;
+    const card = renderCard(canvas, exportInfo);
+    card.toBlob((blob) => {
+      if (blob) downloadBlob(blob, 'ruta-3d.png');
+    }, 'image/png');
+  }
+  async function recordSweep() {
+    if (recording || !ready || loading || !exportInfo || !controller) return;
+    mediaError = '';
+    mediaNotice = '';
+    if (typeof MediaRecorder === 'undefined') {
+      mediaError =
+        'Este navegador no permite grabar video. Descarga una imagen 3D.';
+      return;
+    }
+    const mime = [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+      'video/mp4',
+    ].find((t) => MediaRecorder.isTypeSupported(t));
+    if (!mime) {
+      mediaError =
+        'No hay formato de video compatible. Descarga una imagen 3D.';
+      return;
+    }
+    const original = controller.save(),
+      info = exportInfo,
+      source = canvas,
+      card = renderCard(source, info);
+    if (typeof card.captureStream !== 'function') {
+      mediaError =
+        'Este navegador no permite grabar video. Descarga una imagen 3D.';
+      return;
+    }
+    let stream: MediaStream | undefined;
+    let recorder: MediaRecorder | undefined,
+      raf = 0,
+      cancelled = false;
+    const focused = document.activeElement as HTMLElement | null;
+    recordedCaptureId = original.captureId;
+    recording = true;
+    onRecording?.(true);
+    try {
+      await tick();
+      cancelButton?.focus();
+      stream = card.captureStream(30);
+      recorder = new MediaRecorder(stream, {
+        mimeType: mime,
+        videoBitsPerSecond: 4_000_000,
+      });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size) chunks.push(e.data);
+      };
+      const done = new Promise<void>((resolve, reject) => {
+        recorder!.onstop = () => resolve();
+        recorder!.onerror = () =>
+          reject(new Error('No se pudo grabar el video.'));
+      });
+      cancelRecording = () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
+        if (recorder?.state === 'recording') recorder.stop();
+      };
+      recorder.start();
+      const start = performance.now();
+      const animate = (now: number) => {
+        if (cancelled) return;
+        const t = Math.min((now - start) / 6000, 1);
+        controller?.apply({
+          ...original,
+          yaw: original.yaw + (t - 0.5) * 0.45,
+        });
+        try {
+          renderCard(source, info, card);
+        } catch (e) {
+          mediaError = (e as Error).message;
+          cancelled = true;
+          recorder?.stop();
+          return;
+        }
+        if (t < 1) raf = requestAnimationFrame(animate);
+        else recorder?.stop();
+      };
+      raf = requestAnimationFrame(animate);
+      await done;
+      if (!cancelled) {
+        downloadBlob(
+          new Blob(chunks, { type: mime }),
+          mime.includes('mp4') ? 'ruta-barrido.mp4' : 'ruta-barrido.webm',
+        );
+        mediaNotice = `Video descargado · ${mime.split(';')[0]}`;
+      }
+    } catch (e) {
+      mediaError = (e as Error).message;
+    } finally {
+      cancelAnimationFrame(raf);
+      if (recorder?.state === 'recording') recorder.stop();
+      stream?.getTracks().forEach((t) => t.stop());
+      controller?.apply(original);
+      cancelRecording = undefined;
+      recording = false;
+      onRecording?.(false);
+      await tick();
+      if (focused && document.contains(focused)) focused.focus();
+    }
+  }
+
   let status = $state('Selecciona una captura para explorarla.');
   let showRouteHolds = $state(true);
   let navigation = $state<'orbit' | 'pan'>('orbit');
@@ -106,6 +227,7 @@
     const source = capture;
     const initializedNow = initialized;
     if (initializedNow) {
+      if (recording && source?.id !== recordedCaptureId) cancelRecording?.();
       if (source) controller?.loadManaged(source);
       else controller?.clear();
     }
@@ -749,6 +871,7 @@
       });
     return () => {
       disposed = true;
+      cancelRecording?.();
       cleanup();
     };
   });
@@ -865,6 +988,41 @@
       }}>Descargar vista 3D</button
     >
   </div>
+  {#if exportInfo}<details>
+      <summary>Compartir visual 3D</summary>
+      <p>
+        Incluye nombre, grado y atribución. La tarjeta personal sólo incluye los
+        datos que hayas elegido.
+      </p>
+      <button disabled={!ready || loading || recording} onclick={exportPng}
+        >Descargar tarjeta 3D (PNG)</button
+      ><button disabled={!ready || loading || recording} onclick={recordSweep}
+        >Grabar barrido de 6 segundos</button
+      >
+    </details>{/if}
+  {#if recording}<button
+      class="cancel-recording"
+      bind:this={cancelButton}
+      onkeydown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          cancelRecording?.();
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          cancelButton?.focus();
+        }
+      }}
+      data-recording-control="true"
+      onclick={() => cancelRecording?.()}>Cancelar video</button
+    >
+    <p role="status">
+      Grabando barrido… Las herramientas están bloqueadas.
+    </p>{/if}
+  {#if mediaError}<p role="alert">{mediaError}</p>{/if}{#if mediaNotice}<p
+      role="status"
+    >
+      {mediaNotice}
+    </p>{/if}
   {#if saved}<p>Cámara de ruta guardada para esta captura.</p>{/if}
   <p>
     La captura completa permanece intacta. El encuadre principal usa una
@@ -874,6 +1032,12 @@
 </div>
 
 <style>
+  .cancel-recording {
+    position: fixed;
+    top: calc(var(--workspace-top) + 55px);
+    left: 10px;
+    z-index: 10;
+  }
   .splat-viewer {
     margin-top: 20px;
     padding: 18px;

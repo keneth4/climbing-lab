@@ -15,13 +15,17 @@
   import EntryHistory from './EntryHistory.svelte';
   import EntryRetirement from './EntryRetirement.svelte';
   import JournalEntry from './JournalEntry.svelte';
+  import OperationsPanel from './OperationsPanel.svelte';
+  import StorePanel from './StorePanel.svelte';
+  import HistoricalExport from './HistoricalExport.svelte';
+  import ProjectsPanel from './ProjectsPanel.svelte';
   import JournalControls from './JournalControls.svelte';
   import AuthPanel from './AuthPanel.svelte';
   import RouteEditor from './RouteEditor.svelte';
   import CaptureManager from './CaptureManager.svelte';
   import type { Capture, Section } from './twin';
   import type { CameraView } from './domain';
-  import { supabase, api } from './auth';
+  import { supabase, api, ApiError } from './auth';
   import SplatViewer from './SplatViewer.svelte';
   import { loadState, routeUrl, type Entry } from './domain';
   let db = $state(loadState());
@@ -29,10 +33,27 @@
   db.entries = [];
   db.reports = [];
   let userEmail = $state('');
+  let gymConfig = $state({
+    name: 'Gimnasio piloto',
+    currency: 'MXN',
+    timezone: 'America/Mexico_City',
+  });
+  onMount(() => {
+    let disposed = false;
+    api('/config')
+      .then((d) => {
+        if (!disposed && d.config) gymConfig = d.config;
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+    };
+  });
   let adminRole = $state(false);
   let editingEntry = $state<Entry | undefined>(),
     retiringEntry = $state<Entry | undefined>(),
-    historyEntryId = $state('');
+    historyEntryId = $state(''),
+    mediaEntry = $state<Entry | undefined>();
   let journalEntryOpen = $state(false),
     journalNotice = $state('');
   let routePreparing = $state(false);
@@ -59,17 +80,26 @@
   let selectedCapture = $state<Capture | undefined>();
   let sections = $state<Section[]>([]);
   let sessionReady = $state(false);
+  let accessState = $state<
+    'checking' | 'offline' | 'invalid' | 'confirmed' | 'anonymous'
+  >('checking');
+  let accessError = $state('');
   let generation = 0;
   async function refreshSession() {
     const ticket = ++generation;
     sessionReady = false;
+    accessState = 'checking';
+    accessError = '';
     historyEntryId = '';
+    mediaEntry = undefined;
     db.entries = [];
     db.reports = [];
     staff = false;
     adminRole = false;
     try {
-      const { data } = await supabase.auth.getSession();
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError)
+        throw new ApiError('Sesión inválida. Inicia sesión nuevamente.', 401);
       if (ticket !== generation) return;
       const nextEmail = data.session?.user.email || '';
       if (nextEmail !== userEmail) {
@@ -82,11 +112,16 @@
         name = '';
       }
       userEmail = nextEmail;
-      if (!data.session) return;
+      if (!data.session) {
+        accessState = 'anonymous';
+        return;
+      }
       const me = await api('/me');
       if (ticket !== generation) return;
       staff = !!me.staff;
       adminRole = me.staff === 'admin';
+      accessState = 'confirmed';
+      sessionReady = true;
       const dataEntries = await api('/entries');
       if (ticket !== generation) return;
       db.entries = dataEntries.entries.map((e: any) => ({
@@ -113,9 +148,21 @@
         }));
       }
     } catch (e) {
-      message = (e as Error).message;
+      if (ticket !== generation) return;
+      if (
+        accessState !== 'confirmed' ||
+        (e instanceof ApiError && (e.status === 0 || e.status >= 500))
+      ) {
+        staff = false;
+        adminRole = false;
+        accessState =
+          e instanceof ApiError && e.status === 401 ? 'invalid' : 'offline';
+        accessError = (e as Error).message;
+      } else message = (e as Error).message;
     } finally {
-      if (ticket === generation) sessionReady = true;
+      if (ticket === generation)
+        sessionReady =
+          accessState === 'confirmed' || accessState === 'anonymous';
     }
   }
   async function refreshRoutes(id?: string) {
@@ -360,10 +407,11 @@
 <div bind:this={chrome}>
   <header>
     <div>
-      <strong>Climbing Lab</strong><span>Gimnasio de demostración</span>
+      <strong>Climbing Lab</strong><span>{gymConfig.name}</span>
     </div>
     <div>
       {#if userEmail}<span>{userEmail}</span><button
+          disabled={viewerWorkspace.locked}
           onclick={() => supabase.auth.signOut()}>Cerrar sesión</button
         >{:else}<button
           onclick={() => {
@@ -376,8 +424,37 @@
   <div class="notice">
     API D1 local · Cuenta Supabase · Capturas y tarjetas 3D en desarrollo.
   </div>
+  {#if accessState === 'checking'}<p role="status" class="connection-status">
+      Verificando sesión y permisos…
+    </p>{:else if accessState === 'offline' || accessState === 'invalid'}<div
+      class="connection-status"
+      role="alert"
+    >
+      <strong
+        >{accessState === 'invalid'
+          ? 'Sesión inválida. Inicia sesión nuevamente.'
+          : 'API no disponible. No se pudieron verificar tus permisos.'}</strong
+      >
+      <p>{accessError}</p>
+      <button
+        onclick={() => {
+          refreshSession();
+          refreshTwin();
+          refreshRoutes();
+        }}>Reintentar</button
+      >
+    </div>{:else if userEmail && accessState === 'confirmed'}<p
+      class="connection-status"
+    >
+      Permisos confirmados · {adminRole
+        ? 'Admin'
+        : staff
+          ? 'Staff'
+          : 'Escalador'}
+    </p>{/if}
   <nav aria-label="Principal">
-    {#each ['Catálogo', 'Bitácora', 'Cuenta', ...(staff ? ['Staff'] : []), ...(adminRole ? ['Capturas'] : [])] as item}<button
+    {#each ['Catálogo', 'Bitácora', 'Productos', 'Cuenta', ...(staff ? ['Staff', 'Recepción'] : []), ...(adminRole ? ['Capturas'] : [])] as item}<button
+        disabled={viewerWorkspace.locked}
         class:active={tab === item}
         onclick={() => {
           tab = item;
@@ -388,12 +465,34 @@
 </div>
 <button
   class="drawer-toggle"
+  disabled={viewerWorkspace.locked}
   aria-expanded={toolsOpen}
   aria-controls="tools-panel"
   onclick={() => (toolsOpen = !toolsOpen)}
   >{toolsOpen ? 'Plegar herramientas' : 'Abrir herramientas'}</button
 >
-<div class="workspace" class:tools-closed={!toolsOpen}>
+<div
+  class="workspace"
+  class:tools-closed={!toolsOpen}
+  onpointerdowncapture={(e) => {
+    if (
+      viewerWorkspace.locked &&
+      !(e.target as HTMLElement).closest('[data-recording-control]')
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }}
+  onkeydowncapture={(e) => {
+    if (
+      viewerWorkspace.locked &&
+      !(e.target as HTMLElement).closest('[data-recording-control]')
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }}
+>
   <div class="scene-backdrop" aria-hidden="true"></div>
   <div bind:this={viewerHome} class="viewer-home">
     <SplatRuntime
@@ -403,6 +502,7 @@
         routeId: 'gym-overview',
         onSave: () => {},
       }}
+      onRecording={(active) => (viewerWorkspace.locked = active)}
       mount={placeViewer}
     />
   </div>
@@ -417,7 +517,10 @@
         routeId="gym-overview"
         onSave={() => {}}
       />{/if}
-    {#if tab === 'Cuenta'}<AuthPanel
+    {#if tab === 'Productos'}<StorePanel
+      />{:else if tab === 'Recepción' && staff && sessionReady}<OperationsPanel
+        admin={adminRole}
+      />{:else if tab === 'Cuenta'}<AuthPanel
       />{:else if tab === 'Capturas' && adminRole}<CaptureManager
         {currentCapture}
         routes={db.routes}
@@ -462,6 +565,11 @@
               {selected.sector} · Revisión {selected.revision} · {selected.status}
             </p>
             {#if !routePreparing}<SplatViewer
+                exportInfo={{
+                  title: selected.name,
+                  grade: selected.grade,
+                  gym: gymConfig.name,
+                }}
                 capture={selectedCapture}
                 section={historicalSection ||
                   sections.find(
@@ -583,6 +691,19 @@
         </section>
       </div>
     {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
+      {#if mediaEntry && userEmail && sessionReady}{#key mediaEntry.id}<HistoricalExport
+            entry={mediaEntry}
+            gym={gymConfig.name}
+            personal={privacy
+              ? {
+                  name,
+                  result: mediaEntry.result,
+                  attempts: mediaEntry.attempts,
+                }
+              : undefined}
+            onClose={() => (mediaEntry = undefined)}
+          />{/key}{/if}
+      {#if userEmail && sessionReady}<ProjectsPanel routes={db.routes} />{/if}
       <button
         disabled={!userEmail || !sessionReady}
         onclick={() => {
@@ -664,6 +785,8 @@
             {#if entry.result === 'ascenso' && !entry.deletedAt}<button
                 onclick={() => exportImage(entry)}
                 >Exportar tarjeta personal</button
+              ><button onclick={() => (mediaEntry = entry)}
+                >Preparar tarjeta histórica 3D</button
               >{/if}
           </article>{/each}
       {:else}<p>Inicia sesión para consultar tu bitácora personal.</p>{/if}

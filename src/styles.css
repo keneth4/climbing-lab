@@ -406,3 +406,18 @@ nav {
     width: 100%;
   }
 }
+
+.connection-status {
+  margin: 0;
+  padding: 8px 20px;
+  background: #e7edf2;
+  font-size: 13px;
+}
+.connection-status p {
+  margin: 4px 0;
+}
+@media (max-width: 750px) {
+  .connection-status {
+    padding: 6px 12px;
+  }
+}

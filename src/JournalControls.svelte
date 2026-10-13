@@ -18,7 +18,9 @@
     error = $state(''),
     exporting = $state(false),
     exportNotice = $state(''),
-    entries = $state<Entry[]>([]);
+    entries = $state<Entry[]>([]),
+    days = $state<any[]>([]),
+    timezone = $state('');
   let applied = $state(''),
     request = 0,
     disposed = false;
@@ -27,6 +29,7 @@
     busy = true;
     error = '';
     summary = undefined;
+    days = [];
     entries = [];
     onEntries([]);
     try {
@@ -38,6 +41,11 @@
       hasMore = !!data.pagination?.hasMore;
       applied = query;
       onEntries(entries);
+      const daily = await api(`/entries?group=day${query}`);
+      if (!disposed && ticket === request) {
+        days = daily.days || [];
+        timezone = daily.timezone || '';
+      }
     } catch (e) {
       if (!disposed && ticket === request) error = (e as Error).message;
     } finally {
@@ -166,6 +174,21 @@
       ? 'registros retirados'
       : 'registros vigentes'} del intervalo aplicado, incluyendo otras páginas.
   </p>{/if}
+{#if days.length}<details>
+    <summary
+      >{applied.includes('state=deleted')
+        ? 'Registros retirados por día del gimnasio'
+        : 'Actividad por día del gimnasio'}</summary
+    >
+    <p>Zona horaria: {timezone}. No representa visitas.</p>
+    {#each days as day}<article>
+        <h3>{day.date}</h3>
+        <p>
+          {day.records} registros · {day.attempts} intentos · {day.ascents} ascensos
+          · {day.routes} rutas
+        </p>
+      </article>{/each}
+  </details>{/if}
 {#if busy}<p role="status">Cargando bitácora…</p>{/if}{#if error}<p
     role="alert"
   >
