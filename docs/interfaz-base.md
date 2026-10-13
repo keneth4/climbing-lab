@@ -30,6 +30,9 @@ La exportación permite decidir si se muestran nombre, fecha, intentos y notas. 
 - Editor: navegar, guardar cámara, marcar agarres, añadir restricciones y beta.
 - Reportes: revisar, resolver o descartar con motivo.
 - Permisos: asignar capacidades por lugar.
+- QR de rutas: previsualizar y descargar tarjetas imprimibles con enlace estable.
+
+En gestión de socios se añadirán emisión/revocación de tarjetas y lectura de QR para confirmar visitas. El registro y el login mediante QR tienen flujos separados, descritos en [QR y LOD](qr-y-lod.md).
 
 ## Video posterior
 

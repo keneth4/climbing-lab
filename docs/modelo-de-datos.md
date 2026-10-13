@@ -20,6 +20,9 @@ Es un modelo conceptual para discutir; no define todavía una base de datos ni c
 | Proyecto personal | Ruta que el escalador desea trabajar |
 | Reporte | Error informado, autor, revisión afectada, estado y resolución |
 | Exportación | Imagen/video, presentación usada y opciones de divulgación |
+| Enlace de ruta | Destino estable para QR y enlaces compartidos |
+| Credencial de visita | Código opaco, revocable y limitado al lugar |
+| Visita | Usuario, lugar, fecha, staff que confirma y correcciones |
 
 ## Reglas de integridad
 
@@ -33,6 +36,8 @@ Es un modelo conceptual para discutir; no define todavía una base de datos ni c
 - Fecha, intentos y resultado de la tarjeta provienen de la bitácora; grado y nombre, de la revisión de ruta.
 - Los reportes no actualizan el catálogo directamente.
 - La autorización se aplica en los servicios, no solo ocultando botones.
+- La presentación puede definir una región de interés espacial, con margen para el recorrido de cámara y vinculada a su captura.
+- Una credencial de visita no es una credencial de login; visitas y registros de bitácora son independientes.
 
 ## Capacidades propuestas
 

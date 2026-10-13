@@ -17,6 +17,8 @@ Ofrecer sitios útiles para los gimnasios de escalada locales y mostrar las capa
 - Primero se desarrolla una interfaz funcional común; después se personaliza el diseño de los sitios.
 - Se contempla ofrecer planes, mensualidades, promociones, pagos, dashboard financiero y tienda.
 - El modelo de cobro del estudio está pendiente. El objetivo inicial es promover sus capacidades.
+- El staff podrá generar QR de rutas y tarjetas de usuario para registro/login o visitas, con flujos distintos por propósito.
+- Se evaluará priorizar detalle en la zona de la ruta seleccionada conservando el contexto del splat completo.
 
 ## Contexto de captura
 

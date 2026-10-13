@@ -16,6 +16,7 @@ Validar el flujo completo: el staff publica una ruta, un escalador la consulta, 
 8. Cuenta del escalador, proyectos pendientes, intentos y ascensos.
 9. Reportes revisados por el staff.
 10. Exportación de imagen de ruta y tarjeta personal.
+11. Tarjetas imprimibles con QR que abre directamente la ruta en el catálogo.
 
 ## Comprobaciones previas
 
@@ -24,6 +25,7 @@ Validar el flujo completo: el staff publica una ruta, un escalador la consulta, 
 - Comprobar detalle de agarres, posición de marcadores y comportamiento de oclusión.
 - Preparar varias rutas sobre el mismo spray wall y medir tiempo de edición.
 - Comprobar que la imagen exportada incluye el modelo y los marcadores.
+- Evaluar carga progresiva y región de interés por ruta según [QR y LOD](qr-y-lod.md).
 
 Los umbrales de aceptación de rendimiento se fijarán después de la medición inicial y antes de evaluar el piloto.
 
@@ -36,6 +38,7 @@ Los umbrales de aceptación de rendimiento se fijarán después de la medición 
 - Un ascenso conserva su referencia histórica al retirar o revisar una ruta.
 - La tarjeta deriva sus datos del registro y permite elegir qué información personal mostrar.
 - El enlace compartido abre la ruta correspondiente; una ruta retirada se identifica como histórica.
+- El QR de ruta abre su ficha sin exigir cuenta y permite desplegar beta o iniciar la vista 3D.
 - Cambiar la captura no reutiliza silenciosamente coordenadas incompatibles.
 - Si el visor falla, siguen disponibles la ficha y una imagen de respaldo.
 

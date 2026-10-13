@@ -7,7 +7,7 @@
 | 0. Validación técnica | Comparación de formatos y prototipo de cámaras/marcadores con el spray wall |
 | 1. Piloto funcional | Catálogo 3D, permisos, bitácora, reportes e imágenes compartibles |
 | 2. Video | Recorridos preparados y exportación de clips |
-| 3. Gestión de socios | Planes, vigencias, entradas, pagos manuales y dashboard de cobros |
+| 3. Gestión de socios | Planes, vigencias, entradas, credenciales QR, visitas, pagos manuales y dashboard de cobros |
 | 4. Pagos en línea | Compras, renovaciones, promociones y conciliación de eventos del proveedor |
 | 5. Tienda | Variantes, inventario y pedidos; recogida en gimnasio como propuesta inicial |
 
@@ -17,6 +17,7 @@ La personalización visual puede comenzar una vez validado el sitio funcional. E
 
 - Motor del visor: evaluar las implementaciones existentes de MenuMaker antes de seleccionar PlayCanvas, Spark u otra alternativa.
 - Formato de publicación: comparar SPZv4, SOG y, si las mediciones lo justifican, niveles de detalle.
+- Evaluar bloques espaciales, carga progresiva y prioridad de detalle por región de ruta; ver [QR y LOD](qr-y-lod.md).
 - Stack de aplicación, autenticación, almacenamiento y despliegue.
 - Límites de archivos, tiempos de procesamiento y política de retención de capturas/exportaciones.
 - Picking y oclusión de marcadores; posible geometría auxiliar para edición.
@@ -36,6 +37,7 @@ La personalización visual puede comenzar una vez validado el sitio funcional. E
 - Proveedor de pagos y esquema de cuentas de cada gimnasio.
 - Alcance del dashboard, gastos e inventario.
 - Modelo comercial de Creativivid, todavía sin definir.
+- Login mediante QR: definir un flujo temporal con prueba de identidad, separado de la tarjeta de visitas.
 
 ## Relación con MenuMaker
 

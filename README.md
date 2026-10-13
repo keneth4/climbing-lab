@@ -11,6 +11,7 @@ Estado: planificación del piloto. No hay aplicación implementada todavía.
 - [Modelo de datos propuesto](docs/modelo-de-datos.md)
 - [Pantallas y flujos](docs/interfaz-base.md)
 - [Etapas y preguntas pendientes](docs/roadmap.md)
+- [QR y detalle por zona](docs/qr-y-lod.md)
 
 Primero se construirá una interfaz base enfocada en funcionalidad. El diseño particular de cada sitio se trabajará después, siguiendo el enfoque de MenuMaker y el sitio de AMPM.
 
