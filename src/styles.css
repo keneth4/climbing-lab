@@ -1,0 +1,265 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #172c3e;
+  background: #f4f6f8;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header {
+  padding: 20px 28px;
+  background: #172c3e;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+header strong {
+  font-size: 22px;
+}
+header span {
+  display: block;
+  font-size: 13px;
+  margin-top: 4px;
+}
+.notice {
+  background: #fff2d6;
+  padding: 12px 28px;
+  font-size: 14px;
+}
+nav {
+  display: flex;
+  gap: 8px;
+  padding: 16px 28px;
+  border-bottom: 1px solid #d9dfe5;
+}
+main {
+  max-width: 1300px;
+  margin: auto;
+  padding: 24px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 32px;
+}
+h1 {
+  font-size: 28px;
+  margin: 0 0 20px;
+}
+h2 {
+  font-size: 22px;
+}
+small {
+  color: #526675;
+}
+label {
+  display: block;
+  margin: 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+input,
+select,
+textarea {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #aab7c2;
+  border-radius: 5px;
+  font: inherit;
+  margin-top: 6px;
+  background: white;
+  color: inherit;
+}
+textarea {
+  min-height: 85px;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toggle input {
+  width: auto;
+  margin: 0;
+}
+button,
+a {
+  font-size: 14px;
+}
+button {
+  padding: 10px 14px;
+  border: 1px solid #aab7c2;
+  border-radius: 5px;
+  background: white;
+  color: #172c3e;
+  cursor: pointer;
+}
+button:hover {
+  background: #e7edf2;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button.active,
+button.selected {
+  background: #172c3e;
+  color: white;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #dc8e25;
+  outline-offset: 3px;
+}
+.route-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+.route-list button {
+  text-align: left;
+}
+.route-list span {
+  display: block;
+  font-size: 12px;
+  margin-top: 5px;
+}
+.wall {
+  position: relative;
+  height: 360px;
+  background: #d9dfe5;
+  border: 1px solid #aab7c2;
+  border-radius: 6px;
+}
+.wall-label {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  font-size: 13px;
+}
+.hold {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #2867ad;
+  border: 3px solid white;
+  display: grid;
+  place-items: center;
+  color: white;
+  font-size: 12px;
+  transform: translate(-50%, -50%);
+}
+.hold.inicio {
+  background: #137a58;
+}
+.hold.final {
+  background: #b34c0b;
+}
+.legend {
+  font-size: 13px;
+}
+details {
+  background: white;
+  padding: 16px;
+  margin: 14px 0;
+  border: 1px solid #d9dfe5;
+  border-radius: 5px;
+}
+summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+details img {
+  display: block;
+  margin: 12px 0;
+}
+.actions {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  margin: 18px 0;
+}
+.forms {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+form,
+article {
+  background: white;
+  padding: 20px;
+  border: 1px solid #d9dfe5;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+form h3 {
+  margin-top: 0;
+}
+.message {
+  padding: 14px;
+  background: #dcf0e7;
+  border-left: 4px solid #137a58;
+}
+a {
+  color: #2867ad;
+}
+img {
+  max-width: 100%;
+}
+@media (max-width: 750px) {
+  header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px;
+  }
+  .notice,
+  nav {
+    padding: 12px 18px;
+  }
+  main {
+    padding: 18px;
+  }
+  .layout,
+  .forms {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .wall {
+    height: 300px;
+  }
+  .actions {
+    flex-wrap: wrap;
+  }
+  .route-list {
+    grid-template-columns: 1fr 1fr;
+  }
+  h1 {
+    font-size: 24px;
+  }
+}
+.layout {
+  grid-template-columns: 280px minmax(0, 1fr);
+}
+section,
+aside,
+form,
+article,
+.splat-viewer {
+  min-width: 0;
+}
+input[type='file'] {
+  max-width: 100%;
+}
+@media (max-width: 750px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

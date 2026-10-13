@@ -2,7 +2,9 @@
 
 Herramienta de Creativivid para publicar sitios de gimnasios y zonas de escalada con catálogos de rutas sobre Gaussian Splatting, bitácoras personales y visuales compartibles.
 
-Estado: planificación del piloto. No hay aplicación implementada todavía.
+Estado: primera base funcional local. El piloto completo está en desarrollo; todavía no hay cuentas ni servicios de producción.
+
+Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](docs/implementacion.md).
 
 ## Documentación
 
