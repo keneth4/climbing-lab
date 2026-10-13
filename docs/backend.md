@@ -1,5 +1,7 @@
 # Backend: comparación y propuesta
 
+Actualización: la propuesta vigente está en [0001 — Backend Cloudflare](decisiones/0001-backend-cloudflare.md), incorporando bases separadas por gimnasio. La comparación siguiente se conserva como antecedente; la base compartida de Supabase ya no es la recomendación actual.
+
 Consulta de precios: 12 de octubre de 2026. Estado: recomendación provisional, pendiente de decisión. No se han creado recursos ni activado facturación.
 
 ## Restricciones
