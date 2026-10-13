@@ -131,7 +131,7 @@ Continúan pendientes fecha explícita de actividad pasada y CSV del intervalo c
 
 - [x] Visor fijo y herramientas en panel plegable, con distribución lateral/escritorio e inferior/móvil.
 - [x] Desplazamiento independiente: editar rutas/secciones no desplaza el muro fuera del viewport.
-- [ ] Compartir renderer entre herramientas para preservar cámara y carga al cambiar de módulo.
+- [x] Compartir renderer entre herramientas para preservar cámara y carga al cambiar de módulo.
 - [ ] Validar ergonomía de selección de puntos con Crux y dispositivos físicos.
 
 Este principio de interfaz aplica a futuras herramientas del clon digital. Fecha de actividad pasada, exportaciones y módulos comerciales mantienen su alcance previo.
@@ -151,3 +151,11 @@ Siguiente entrega personal: CSV del intervalo completo, separado de exportar la 
 - [x] Pruebas de contenido descargado, aislamiento y rechazo de intervalos demasiado grandes.
 
 El bloque de fecha pasada y exportaciones personales queda cerrado para el piloto. Sigue conservar renderer/cámara entre herramientas del espacio de trabajo; después proyectos/sesiones y visuales 3D compartibles.
+
+## Cierre: persistencia del espacio 3D
+
+- [x] Renderer/canvas compartido por catálogo, cuenta, bitácora y editores.
+- [x] Memoria de cámara por ruta/captura y reutilización de asset cuando se conserva la captura.
+- [x] Pruebas de identidad de canvas, valores de cámara y ausencia de descargas repetidas al cambiar de módulo.
+
+Siguiente bloque: proyectos personales y sesiones de escalada; después visuales 3D compartibles. Sigue pendiente validar el editor con Crux/dispositivos físicos y continuidad con dos capturas reales.

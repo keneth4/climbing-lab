@@ -58,4 +58,19 @@ En escritorio el panel se sitúa a la derecha; en móvil ocupa la parte inferior
 - [x] Mantener contexto visual en cuenta, bitácora y staff.
 - [x] Verificación de flujos existentes y capturas de pantalla en escritorio/móvil.
 
-Pruebas: 12 flujos de navegador con auth/API simulados, tipos frontend y build. El splat de pruebas es sintético; falta validación ergonómica con Crux y dispositivos físicos. Se mantiene pendiente compartir una única instancia de render entre cambios de herramienta para evitar recargas: plegar el panel sí conserva la instancia actual. La optimización no altera la región visible ni los snapshots históricos.
+Pruebas: 12 flujos de navegador con auth/API simulados, tipos frontend y build. El splat de pruebas es sintético; falta validación ergonómica con Crux y dispositivos físicos. Se completó la instancia compartida de render descrita abajo. La optimización no altera los snapshots históricos.
+
+## Renderer persistente — 12 de octubre de 2026
+
+- [x] Una instancia de PlayCanvas y un canvas durante la vida del espacio de trabajo.
+- [x] Herramientas conectadas al runtime mediante contexto; sus controles se colocan en el panel activo sin desmontar el motor 3D.
+- [x] Reutilizar el splat si la captura conserva su identidad; actualizar overlays, callbacks y límites para la herramienta activa.
+- [x] Conservar cámara al cambiar de módulo y recordar encuadres por ruta/captura durante la sesión de página.
+- [x] Reemplazar modelo y cancelar descarga obsoleta al seleccionar otra captura; limpiar modelo administrado cuando no hay captura disponible.
+- [x] Una sola instancia, mismos valores de cámara y ninguna nueva descarga al recorrer catálogo/cuenta/bitácora/catálogo en escritorio y móvil.
+
+`SplatViewer` conecta las opciones de una herramienta. `SplatRuntime` posee motor, asset, navegación y memoria de cámaras; `ViewerWorkspace` administra qué herramienta utiliza los controles. El canvas se mueve junto con esos controles en el DOM conservando su identidad y ocupa siempre la región fija del visor. Sólo se conserva un asset cargado: volver a otra captura diferente exige descargarla nuevamente, aunque la instancia de render sobreviva. Los cambios de transformación o cámara inicial administrativa pueden reencuadrar de forma intencional.
+
+La memoria de cámara no es una escritura en base de datos y se pierde al recargar la página. Guardar cámaras de ruta/gimnasio mantiene los flujos explícitos previos. Los paneles todavía pueden reconstruir formularios al cambiar de módulo; esta entrega conserva renderer y encuadre.
+
+Verificación: 12 flujos de navegador escritorio/móvil con auth/API simulados y splat sintético; tipos y build. Se comprueba identidad DOM del canvas, valores numéricos de cámara después de desplazarla y ausencia de solicitudes nuevas al archivo. Una comparación de PNG idénticos no se utiliza como prueba de cámara porque los overlays/render GPU pueden variar. Falta QA ergonómico con Crux y dispositivos físicos.

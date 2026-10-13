@@ -385,3 +385,24 @@ nav {
     height: calc(100dvh - var(--workspace-top)) !important;
   }
 }
+
+.viewer-home {
+  position: fixed;
+  right: 0;
+  top: var(--workspace-top);
+  width: var(--tools-width);
+  bottom: 0;
+  overflow-y: auto;
+}
+.viewer-home:empty {
+  display: none;
+}
+.tools-closed .viewer-home {
+  visibility: hidden;
+}
+@media (max-width: 750px) {
+  .viewer-home {
+    top: calc(var(--workspace-top) + (100dvh - var(--workspace-top)) * 0.48);
+    width: 100%;
+  }
+}

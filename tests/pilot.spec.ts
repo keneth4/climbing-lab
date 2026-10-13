@@ -201,6 +201,43 @@ test('published capture loads automatically without a route file input', async (
     page.getByText('fixture.ply · 0 MB · captura del gimnasio'),
   ).toBeVisible({ timeout: 30000 });
   await expect(page.locator('input[type=file]')).toHaveCount(0);
+  const canvas = page.getByLabel('Visor de Gaussian Splatting');
+  await canvas.evaluate((el) =>
+    el.setAttribute('data-persistent-test', 'original'),
+  );
+  await canvas.press('ArrowRight');
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  const viewBefore = await canvas.getAttribute('data-camera-view');
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/file')) requests.push(request.url());
+  });
+  await page.getByRole('button', { name: 'Cuenta', exact: true }).click();
+  await expect(canvas).toHaveAttribute('data-persistent-test', 'original');
+  await expect(
+    page.getByRole('button', { name: 'Continuar con Google' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Bitácora', exact: true }).click();
+  await expect(canvas).toHaveAttribute('data-persistent-test', 'original');
+  await page.getByRole('button', { name: 'Catálogo', exact: true }).click();
+  await expect(canvas).toHaveAttribute('data-persistent-test', 'original');
+  expect(requests).toEqual([]);
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
+  expect(await canvas.getAttribute('data-camera-view')).toBe(viewBefore);
+  await expect(canvas).toHaveCount(1);
+  await page.screenshot({
+    path: `/tmp/persistent-viewer-${test.info().project.name}.png`,
+  });
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Descargar vista 3D' }).click();
   expect((await download).suggestedFilename()).toBe('captura-3d.png');

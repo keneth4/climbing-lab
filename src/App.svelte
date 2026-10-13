@@ -1,6 +1,17 @@
 <script lang="ts">
   import QRCode from 'qrcode';
-  import { onMount } from 'svelte';
+  import { onMount, setContext } from 'svelte';
+  import SplatRuntime from './SplatRuntime.svelte';
+  import { VIEWER_CONTEXT, ViewerWorkspace } from './viewer-context.svelte';
+  const viewerWorkspace = new ViewerWorkspace();
+  setContext(VIEWER_CONTEXT, viewerWorkspace);
+  let viewerHome: HTMLDivElement;
+  function placeViewer(node: HTMLElement) {
+    $effect(() => {
+      const target = viewerWorkspace.active?.target || viewerHome;
+      if (target && node.parentElement !== target) target.appendChild(node);
+    });
+  }
   import EntryHistory from './EntryHistory.svelte';
   import EntryRetirement from './EntryRetirement.svelte';
   import JournalEntry from './JournalEntry.svelte';
@@ -368,7 +379,10 @@
   <nav aria-label="Principal">
     {#each ['Catálogo', 'Bitácora', 'Cuenta', ...(staff ? ['Staff'] : []), ...(adminRole ? ['Capturas'] : [])] as item}<button
         class:active={tab === item}
-        onclick={() => (tab = item)}>{item}</button
+        onclick={() => {
+          tab = item;
+          toolsOpen = true;
+        }}>{item}</button
       >{/each}
   </nav>
 </div>
@@ -381,6 +395,17 @@
 >
 <div class="workspace" class:tools-closed={!toolsOpen}>
   <div class="scene-backdrop" aria-hidden="true"></div>
+  <div bind:this={viewerHome} class="viewer-home">
+    <SplatRuntime
+      {...viewerWorkspace.active?.options || {
+        capture: currentCapture,
+        staff: false,
+        routeId: 'gym-overview',
+        onSave: () => {},
+      }}
+      mount={placeViewer}
+    />
+  </div>
   <main
     id="tools-panel"
     class="tools-panel"
