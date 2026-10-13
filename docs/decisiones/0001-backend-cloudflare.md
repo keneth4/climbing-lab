@@ -1,6 +1,6 @@
 # 0001 — Backend sobre Cloudflare con separación por gimnasio
 
-Fecha: 12 de octubre de 2026. Estado: arquitectura propuesta para el piloto, pendiente de configuración de autenticación y mediciones. No se han provisionado recursos ni activado facturación.
+Fecha: 12 de octubre de 2026. Estado: infraestructura aprobada por el usuario; autenticación y mediciones pendientes. No se han provisionado recursos ni activado facturación.
 
 ## Contexto y recursos observados
 

@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "climbing-lab-local",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-12",
+  "workers_dev": false,
+  "observability": { "enabled": true, "traces": { "enabled": true } },
+  "vars": {
+    "GYM_ID": "gym-a",
+    "AUTH_ISSUER": "https://auth.invalid",
+    "AUTH_AUDIENCE": "authenticated",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "climbing-lab-local-a",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "env": {
+    "gym-b": {
+      "name": "climbing-lab-local-b",
+      "vars": {
+        "GYM_ID": "gym-b",
+        "AUTH_ISSUER": "https://auth.invalid",
+        "AUTH_AUDIENCE": "authenticated",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "climbing-lab-local-b",
+          "database_id": "00000000-0000-0000-0000-000000000002",
+          "migrations_dir": "migrations",
+        },
+      ],
+    },
+  },
+}

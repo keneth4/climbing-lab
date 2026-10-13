@@ -2,6 +2,8 @@
 
 Fecha: 12 de octubre de 2026. Esta entrega inicia el piloto; no lo completa.
 
+Actualización: ya existe una [API local con D1 y pruebas de aislamiento](api-local.md). La interfaz descrita aquí sigue usando localStorage y todavía no se conecta a esa API.
+
 ## Ejecutar
 
 Requiere Node.js 22.12 o posterior compatible con Vite 7 y npm.

@@ -8,3 +8,6 @@ playwright-report/
 *.sog
 .env
 .env.*
+.wrangler/
+.dev.vars
+.dev.vars.*
