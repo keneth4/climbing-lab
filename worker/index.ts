@@ -439,7 +439,10 @@ export async function handle(
       const b = await body(request);
       if (
         Object.keys(b).some(
-          (k) => !['routeId', 'attempts', 'result', 'notes'].includes(k),
+          (k) =>
+            !['routeId', 'attempts', 'result', 'notes', 'occurredAt'].includes(
+              k,
+            ),
         )
       )
         throw new HttpError(400, 'Campo no permitido.');
@@ -459,6 +462,18 @@ export async function handle(
         throw new HttpError(400, 'Notas inválidas.');
       const entryId = crypto.randomUUID(),
         now = new Date().toISOString();
+      let occurredAt = now;
+      if (b.occurredAt !== undefined) {
+        if (
+          typeof b.occurredAt !== 'string' ||
+          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(b.occurredAt) ||
+          !Number.isFinite(Date.parse(b.occurredAt)) ||
+          new Date(b.occurredAt).toISOString() !== b.occurredAt ||
+          Date.parse(b.occurredAt) > Date.parse(now)
+        )
+          throw new HttpError(400, 'Fecha de actividad inválida o futura.');
+        occurredAt = b.occurredAt;
+      }
       const snapshot = JSON.stringify({
         id: entryId,
         routeId: id,
@@ -466,7 +481,7 @@ export async function handle(
         attempts: b.attempts,
         result: b.result,
         notes: b.notes || '',
-        createdAt: now,
+        createdAt: occurredAt,
         deletedAt: null,
         entryVersion: 1,
       });
@@ -481,7 +496,7 @@ export async function handle(
           b.attempts,
           b.result,
           b.notes || '',
-          now,
+          occurredAt,
         ),
         env.DB.prepare('INSERT INTO entry_history VALUES(?,?,?,?,?,?)').bind(
           entryId,

@@ -121,6 +121,9 @@ test('private journal filters, paginates and exports historical records, then cl
       if (route.request().method() === 'POST') {
         const data = route.request().postDataJSON();
         expect(data.routeId).toBe('active-route');
+        expect(data.occurredAt).toBe(
+          new Date('2020-01-15T12:30').toISOString(),
+        );
         entries.unshift({
           id: 'new-entry',
           entry_version: 1,
@@ -129,7 +132,7 @@ test('private journal filters, paginates and exports historical records, then cl
           revision: 1,
           route_name: 'Ruta actual',
           grade: 'V3',
-          created_at: new Date().toISOString(),
+          created_at: data.occurredAt,
           attempts: data.attempts,
           result: data.result,
           notes: data.notes,
@@ -229,6 +232,7 @@ test('private journal filters, paginates and exports historical records, then cl
     .getByRole('button', { name: 'Añadir registro', exact: true })
     .click();
   await page.getByLabel('Ruta del registro').selectOption('active-route');
+  await page.getByLabel('Fecha y hora de actividad').fill('2020-01-15T12:30');
   await page.getByLabel('Intentos del registro').fill('2');
   await page.getByLabel('Resultado del registro').selectOption('ascenso');
   await page.getByLabel('Notas del registro').fill('Registro nuevo probado');

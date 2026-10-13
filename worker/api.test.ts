@@ -609,3 +609,44 @@ it('lets only the owner correct or retire a record atomically while preserving i
       .first('n'),
   ).toBe(3);
 });
+
+it('stores past activity separately from audit time and rejects invalid or future timestamps', async () => {
+  const owner = 'past-activity';
+  const create = (occurredAt: unknown) =>
+    handle(
+      req('/api/entries', {
+        routeId: 'route-a',
+        attempts: 1,
+        result: 'intento',
+        notes: 'past',
+        occurredAt,
+      }),
+      a,
+      asUser(owner),
+    );
+  for (const value of [
+    'bad',
+    '2026-02-30T12:00:00.000Z',
+    '2999-01-01T00:00:00.000Z',
+    '2026-01-01',
+    123,
+  ])
+    expect((await create(value)).status).toBe(400);
+  const occurredAt = '2020-01-15T18:30:00.000Z';
+  const response = await create(occurredAt);
+  expect(response.status).toBe(201);
+  const { id } = await response.json();
+  const row = await a.DB.prepare('SELECT created_at FROM entries WHERE id=?')
+    .bind(id)
+    .first();
+  expect(row?.created_at).toBe(occurredAt);
+  const history = await a.DB.prepare(
+    'SELECT snapshot,changed_at FROM entry_history WHERE entry_id=?',
+  )
+    .bind(id)
+    .first<{ snapshot: string; changed_at: string }>();
+  expect(JSON.parse(history!.snapshot).createdAt).toBe(occurredAt);
+  expect(Date.parse(history!.changed_at)).toBeGreaterThan(
+    Date.parse(occurredAt),
+  );
+});

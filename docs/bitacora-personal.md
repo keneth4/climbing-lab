@@ -21,7 +21,7 @@
 
 ## Uso
 
-Inicia sesión y abre **Bitácora**. **Añadir registro** abre el formulario para elegir una ruta activa, indicar intentos, resultado y notas. **Guardar registro** confirma la actividad con la fecha actual y la revisión vigente de ruta; cancelar no escribe datos. Tras guardar, se actualizan el listado y el resumen, reiniciando los filtros. El formulario del catálogo sigue disponible. Selecciona Desde/Hasta y resultado, después **Aplicar filtros**. Hasta incluye todo el día elegido; el navegador convierte el calendario local a un intervalo UTC semiabierto. El listado usa la fecha local y el CSV conserva la fecha UTC.
+Inicia sesión y abre **Bitácora**. **Añadir registro** abre el formulario para elegir una ruta activa, indicar fecha/hora de actividad, intentos, resultado y notas. **Guardar registro** confirma la actividad con la fecha elegida y la revisión vigente de ruta; cancelar no escribe datos. Tras guardar, se actualizan el listado y el resumen, reiniciando los filtros. El formulario del catálogo sigue disponible. Selecciona Desde/Hasta y resultado, después **Aplicar filtros**. Hasta incluye todo el día elegido; el navegador convierte el calendario local a un intervalo UTC semiabierto. El listado usa la fecha local y el CSV conserva la fecha UTC.
 
 El resumen cuenta todos los registros que cumplen esos filtros. **Rutas distintas** cuenta IDs de ruta, no sus revisiones. **Registros con ascenso** cuenta declaraciones de ascenso, incluyendo repeticiones. **Intentos registrados** suma el campo de intentos de cada registro, incluidos los que terminaron en ascenso. No constituye control de visitas ni verificación deportiva.
 
@@ -59,4 +59,17 @@ El retiro exige **Confirmar retiro** y conserva el registro y sus versiones. Los
 
 Sólo el propietario puede modificar o consultar el historial, incluso frente a una cuenta administrativa. Registro, historial y evento de auditoría se escriben en una transacción D1. Migración aplicada en ambos gimnasios locales; pendiente aplicar al preparar producción. Las pruebas usan datos aislados, sin corregir ni retirar actividad real del usuario.
 
-Siguiente entrega: definir y habilitar fecha de actividad pasada y exportación completa del intervalo; después proyectos/sesiones y tarjetas 3D.
+Siguiente entrega: exportación completa del intervalo; después proyectos/sesiones y tarjetas 3D.
+
+## Fecha de actividad — 12 de octubre de 2026
+
+- [x] J10 — Fecha y hora local explícita al añadir un registro desde Bitácora, con valor inicial del momento actual.
+- [x] Conversión a UTC, rechazo de fechas inválidas/futuras en frontend y Worker.
+- [x] Separar fecha de actividad de fecha de creación en auditoría/historial.
+- [x] Mantener compatibilidad: clientes sin `occurredAt`, incluido el formulario rápido de catálogo, registran el momento actual.
+
+`occurredAt` es un ISO UTC canónico opcional al crear. La columna existente `created_at` conserva su función de fecha de actividad para filtros, orden y CSV. El evento de auditoría y `entry_history.changed_at` registran el momento real de escritura. No se requiere migración. Las correcciones posteriores conservan la fecha elegida.
+
+La ruta debe estar activa al registrar y se vincula a su revisión vigente. Para una actividad anterior esto no prueba que esa revisión existiera ese día; el formulario advierte esa limitación. La selección de revisiones/armados históricos y la corrección de fechas requieren otro flujo explícito.
+
+Verificación: 31 pruebas de Worker/D1, 12 de dominio y 2 flujos de bitácora en navegador (escritorio/móvil), tipos y build. Datos de QA aislados, sin registros reales.

@@ -135,3 +135,11 @@ Continúan pendientes fecha explícita de actividad pasada y CSV del intervalo c
 - [ ] Validar ergonomía de selección de puntos con Crux y dispositivos físicos.
 
 Este principio de interfaz aplica a futuras herramientas del clon digital. Fecha de actividad pasada, exportaciones y módulos comerciales mantienen su alcance previo.
+
+## Cierre: fecha explícita de actividad
+
+- [x] Registrar actividad pasada con fecha/hora local convertida a UTC.
+- [x] Rechazar futuro/fechas inválidas y conservar fecha real de escritura en auditoría.
+- [x] Explicar que se usa la revisión vigente, sin reconstruir armados históricos.
+
+Siguiente entrega personal: CSV del intervalo completo, separado de exportar la página visible. La persistencia del renderer entre módulos sigue pendiente como mejora del espacio de trabajo.

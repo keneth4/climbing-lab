@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte';
+  import { activityUtc, localActivityTime } from './journal';
   import { api } from './auth';
   import type { Route, Entry } from './domain';
   let {
@@ -18,6 +19,7 @@
     attempts = $state(initial?.attempts || 1),
     result = $state<'intento' | 'ascenso'>(initial?.result || 'intento'),
     notes = $state(initial?.notes || ''),
+    activityTime = $state(localActivityTime()),
     busy = $state(false),
     error = $state('');
   const active = $derived(routes.filter((r) => r.status === 'activa'));
@@ -41,7 +43,13 @@
               result,
               notes,
             }
-          : { routeId, attempts, result, notes },
+          : {
+              routeId,
+              attempts,
+              result,
+              notes,
+              occurredAt: activityUtc(activityTime),
+            },
         entry ? 'PUT' : 'POST',
       );
       if (!disposed) await onSaved();
@@ -74,7 +82,17 @@
             >{/each}</select
         ></label
       >
-    {/if}<label
+    {/if}
+    {#if !entry}<label
+        >Fecha y hora de actividad<input
+          type="datetime-local"
+          bind:value={activityTime}
+          max={localActivityTime()}
+          required
+          disabled={busy}
+        /></label
+      >{/if}
+    <label
       >Intentos del registro<input
         type="number"
         min="1"
@@ -99,7 +117,9 @@
         disabled={busy}></textarea></label
     >
     {#if !entry}<p>
-        Se registrará con la fecha actual y la revisión vigente de la ruta.
+        Se registrará con la fecha elegida y la revisión vigente de la ruta,
+        incluso si la actividad ocurrió antes. No reconstruye armados
+        anteriores.
       </p>{/if}
     <button disabled={busy}
       >{busy
