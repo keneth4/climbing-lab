@@ -1,28 +1,72 @@
+import { gaussianFixture } from './fixtures';
 import { test, expect } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.includes('/file/scene.ply')) {
+      await route.fulfill({
+        body: gaussianFixture(),
+        contentType: 'application/octet-stream',
+      });
+      return;
+    }
     const payload =
-      path === '/api/routes'
+      path === '/api/captures/current'
         ? {
-            routes: [
-              {
-                id: 'route-a',
-                name: 'Ruta A',
-                grade: 'V2',
-                sector: 'Spray wall',
-                beta: 'Beta de prueba',
-                status: 'activa',
+            capture: {
+              id: 'cap-a',
+              filename: 'fixture.ply',
+              size: 100,
+              status: 'published',
+              upload_state: 'ready',
+              version: 1,
+              transform: {
+                scale: 1,
+                rotation: [0, 0, 1, 0],
+                translation: [0, 0, 0],
               },
-            ],
+              alignment: null,
+              fileUrl: '/api/captures/cap-a/file/scene.ply',
+            },
           }
-        : path === '/api/routes/route-a'
-          ? { revision: 1, snapshot: { holds: [] }, status: 'activa' }
-          : path === '/api/me'
-            ? { userId: 'test', staff: null }
-            : path === '/api/entries'
-              ? { entries: [] }
-              : {};
+        : path === '/api/sections'
+          ? {
+              sections: [
+                {
+                  id: 'section-a',
+                  name: 'Spray wall',
+                  bounds: { min: [-2, -2, -1], max: [2, 2, 1] },
+                },
+              ],
+            }
+          : path === '/api/routes'
+            ? {
+                routes: [
+                  {
+                    id: 'route-a',
+                    name: 'Ruta A',
+                    grade: 'V2',
+                    sector: 'Spray wall',
+                    beta: 'Beta de prueba',
+                    status: 'activa',
+                  },
+                ],
+              }
+            : path === '/api/routes/route-a'
+              ? {
+                  revision: 1,
+                  snapshot: {
+                    holds: [],
+                    sectionId: 'section-a',
+                    captureId: 'cap-a',
+                  },
+                  status: 'activa',
+                }
+              : path === '/api/me'
+                ? { userId: 'test', staff: null }
+                : path === '/api/entries'
+                  ? { entries: [] }
+                  : {};
     await route.fulfill({ json: payload });
   });
 });
@@ -127,64 +171,15 @@ test('password login → protected request → logout clears personal data', asy
     page.getByRole('button', { name: 'Iniciar sesión' }),
   ).toBeVisible();
 });
-test('local splat remains usable with the authenticated app shell', async ({
+test('published capture loads automatically without a route file input', async ({
   page,
 }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Ruta A V2' })).toBeVisible();
-  const input = page.getByLabel('Archivo PLY o SOG');
-  await expect(input).toBeEnabled();
-  const props = [
-    'x',
-    'y',
-    'z',
-    'f_dc_0',
-    'f_dc_1',
-    'f_dc_2',
-    'opacity',
-    'scale_0',
-    'scale_1',
-    'scale_2',
-    'rot_0',
-    'rot_1',
-    'rot_2',
-    'rot_3',
-  ];
-  const header = Buffer.from(
-    `ply\nformat binary_little_endian 1.0\nelement vertex 100\n${props.map((p) => `property float ${p}`).join('\n')}\nend_header\n`,
-  );
-  const body = Buffer.alloc(100 * props.length * 4);
-  for (let i = 0; i < 100; i++) {
-    [
-      (i % 10) / 5 - 1,
-      Math.floor(i / 10) / 5 - 1,
-      0,
-      1,
-      0,
-      0,
-      5,
-      -2.5,
-      -2.5,
-      -2.5,
-      1,
-      0,
-      0,
-      0,
-    ].forEach((v, j) => body.writeFloatLE(v, (i * props.length + j) * 4));
-  }
-  await input.setInputFiles({
-    name: 'fixture.ply',
-    mimeType: 'application/octet-stream',
-    buffer: Buffer.concat([header, body]),
-  });
-  await expect(page.getByText('fixture.ply · 0 MB · vista local')).toBeVisible({
-    timeout: 30000,
-  });
-  const orientation = page.getByLabel('Corregir orientación vertical');
-  await expect(orientation).toBeChecked();
-  await orientation.uncheck();
-  await expect(orientation).not.toBeChecked();
-  await orientation.check();
+  await expect(
+    page.getByText('fixture.ply · 0 MB · captura del gimnasio'),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('input[type=file]')).toHaveCount(0);
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Descargar vista 3D' }).click();
   expect((await download).suggestedFilename()).toBe('captura-3d.png');
@@ -230,11 +225,56 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     beta: 'Beta de prueba',
     status: 'activa',
     holds: [],
+    sectionId: 'section-a',
+    captureId: 'cap-a',
   };
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     let json: any = {};
+    if (path.includes('/file/scene.ply')) {
+      await route.fulfill({
+        body: gaussianFixture(),
+        contentType: 'application/octet-stream',
+      });
+      return;
+    }
+    if (path === '/api/captures/current') {
+      await route.fulfill({
+        json: {
+          capture: {
+            id: 'cap-a',
+            filename: 'fixture.ply',
+            size: 100,
+            status: 'published',
+            upload_state: 'ready',
+            version: 1,
+            transform: {
+              scale: 1,
+              rotation: [0, 0, 1, 0],
+              translation: [0, 0, 0],
+            },
+            alignment: null,
+            fileUrl: '/api/captures/cap-a/file/scene.ply',
+          },
+        },
+      });
+      return;
+    }
+    if (path === '/api/sections') {
+      await route.fulfill({
+        json: {
+          sections: [
+            {
+              id: 'section-a',
+              name: 'Spray wall',
+              bounds: { min: [-2, -2, -1], max: [2, 2, 1] },
+            },
+          ],
+        },
+      });
+      return;
+    }
     if (path === '/api/me') json = { userId: 'staff-test', staff: 'editor' };
     else if (path === '/api/entries') json = { entries: [] };
     else if (path === '/api/staff/reports') json = { reports: [] };

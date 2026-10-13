@@ -1,16 +1,31 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { supabase } from './auth';
+  import type { Capture, Section, Fiducial } from './twin';
+  import {
+    applyTransform,
+    type Point,
+    type Transform,
+  } from '../shared/alignment';
   import type { CameraView } from './domain';
   let {
     saved,
     onSave,
     staff,
     routeId,
+    capture,
+    section,
+    onReady,
+    fiducials,
   }: {
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
     routeId: string;
+    capture?: Capture;
+    section?: Section;
+    onReady?: (id: string, version: number) => void;
+    fiducials?: Fiducial[];
   } = $props();
   let canvas: HTMLCanvasElement;
   let status = $state('Carga un PLY o SOG local para explorar la captura.');
@@ -20,7 +35,14 @@
   let correctVertical = $state(true);
   let controller:
     | {
-        load: (file: File) => Promise<void>;
+        load: (file: File, managed?: Capture) => Promise<void>;
+        loadManaged: (capture: Capture) => Promise<void>;
+        section: (section?: Section) => void;
+        markers: (
+          references: Fiducial[],
+          observed: { id: string; observed: Point }[],
+          transform?: Transform,
+        ) => void;
         apply: (view?: CameraView) => void;
         save: () => CameraView;
         reset: () => void;
@@ -31,6 +53,21 @@
     const view = saved;
     void routeId;
     controller?.apply(view);
+  });
+  $effect(() => {
+    const source = capture;
+    const initializedNow = initialized;
+    if (initializedNow && source) controller?.loadManaged(source);
+  });
+  $effect(() => {
+    const selected = section;
+    if (initialized) controller?.section(selected);
+  });
+  $effect(() => {
+    const refs = fiducials || [];
+    const observed = capture?.alignment?.references || [];
+    const transform = capture?.transform;
+    if (initialized) controller?.markers(refs, observed, transform);
   });
   onMount(() => {
     let disposed = false;
@@ -64,9 +101,31 @@
         let entity: InstanceType<typeof pc.Entity> | undefined;
         let asset: InstanceType<typeof pc.Asset> | undefined;
         let fileId = '';
+        let managedModel: Capture | undefined;
+        let requestedId = '';
+        let downloadAbort: AbortController | undefined;
+        let markersRoot: InstanceType<typeof pc.Entity> | undefined;
+        const markerMaterial = (color: InstanceType<typeof pc.Color>) => {
+          const m = new pc.StandardMaterial();
+          m.emissive = color;
+          m.update();
+          return m;
+        };
+        const green = markerMaterial(new pc.Color(0.1, 0.8, 0.4)),
+          red = markerMaterial(new pc.Color(0.95, 0.25, 0.1));
+        let sectionEntity: InstanceType<typeof pc.Entity> | undefined;
         const frame = () => {
           if (!entity || !asset) return;
-          entity.setLocalEulerAngles(0, 0, correctVertical ? 180 : 0);
+          if (managedModel) {
+            entity.setLocalPosition(...managedModel.transform.translation);
+            entity.setLocalScale(
+              managedModel.transform.scale,
+              managedModel.transform.scale,
+              managedModel.transform.scale,
+            );
+            const q = managedModel.transform.rotation;
+            entity.setLocalRotation(q[0], q[1], q[2], q[3]);
+          } else entity.setLocalEulerAngles(0, 0, correctVertical ? 180 : 0);
           const bounds = new pc.BoundingBox();
           bounds.setFromTransformedAabb(
             (asset.resource as InstanceType<typeof pc.GSplatResource>).aabb,
@@ -76,7 +135,8 @@
           distance = Math.max(bounds.halfExtents.length() * 2.5, 0.5);
           yaw = 0;
           pitch = 0;
-          captureId = fileId + (correctVertical ? ':z180' : '');
+          captureId =
+            managedModel?.id || fileId + (correctVertical ? ':z180' : '');
           defaultView = {
             captureId,
             yaw,
@@ -168,6 +228,92 @@
         );
         controller = {
           apply,
+          markers: (references, observed, transform) => {
+            markersRoot?.destroy();
+            markersRoot = new pc.Entity('fiducials');
+            const pin = (
+              position: Point,
+              material: InstanceType<typeof pc.StandardMaterial>,
+            ) => {
+              const node = new pc.Entity('reference');
+              node.addComponent('render', { type: 'sphere' });
+              node.setLocalPosition(...position);
+              node.setLocalScale(0.08, 0.08, 0.08);
+              for (const mesh of node.render!.meshInstances)
+                mesh.material = material;
+              markersRoot!.addChild(node);
+            };
+            for (const f of references) pin(f.position, green);
+            if (transform)
+              for (const f of observed)
+                pin(applyTransform(f.observed, transform), red);
+            app.root.addChild(markersRoot);
+          },
+          section: (selected) => {
+            sectionEntity?.destroy();
+            sectionEntity = undefined;
+            if (!selected) return;
+            const { min, max } = selected.bounds;
+            sectionEntity = new pc.Entity('section');
+            sectionEntity.addComponent('render', { type: 'box' });
+            sectionEntity.setLocalPosition(
+              ...(min.map((n, i) => (n + max[i]) / 2) as [
+                number,
+                number,
+                number,
+              ]),
+            );
+            sectionEntity.setLocalScale(
+              ...(min.map((n, i) => max[i] - n) as [number, number, number]),
+            );
+            const material = new pc.StandardMaterial();
+            material.diffuse = new pc.Color(0.1, 0.8, 0.4);
+            material.emissive = new pc.Color(0.1, 0.8, 0.4);
+            material.opacity = 0.12;
+            material.blendType = pc.BLEND_NORMAL;
+            material.depthWrite = false;
+            material.update();
+            for (const mesh of sectionEntity.render!.meshInstances)
+              mesh.material = material;
+            app.root.addChild(sectionEntity);
+          },
+          loadManaged: async (source) => {
+            if (managedModel?.id === source.id && asset) {
+              managedModel = source;
+              if (entity) entity.enabled = true;
+              ready = true;
+              frame();
+              onReady?.(source.id, source.version);
+              return;
+            }
+            if (requestedId === source.id) return;
+            requestedId = source.id;
+            downloadAbort?.abort();
+            downloadAbort = new AbortController();
+            if (entity) entity.enabled = false;
+            ready = false;
+            loading = true;
+            status = 'Cargando captura del gimnasio…';
+            try {
+              const { data } = await supabase.auth.getSession();
+              const response = await fetch(source.fileUrl, {
+                signal: downloadAbort.signal,
+                headers: data.session
+                  ? { Authorization: `Bearer ${data.session.access_token}` }
+                  : {},
+              });
+              if (!response.ok) throw new Error('Captura no disponible.');
+              const blob = await response.blob();
+              if (disposed || capture?.id !== source.id) return;
+              await controller?.load(new File([blob], source.filename), source);
+            } catch {
+              if (!disposed && capture?.id === source.id)
+                status = 'No se pudo cargar la captura del gimnasio.';
+            } finally {
+              if (requestedId === source.id) requestedId = '';
+              if (!disposed && capture?.id === source.id) loading = false;
+            }
+          },
           orient: frame,
           save: () => ({
             captureId,
@@ -177,7 +323,7 @@
             target: [target.x, target.y, target.z],
           }),
           reset: () => apply(defaultView),
-          load: async (file) => {
+          load: async (file, managed) => {
             const ticket = ++generation;
             ready = false;
             loading = true;
@@ -207,13 +353,15 @@
                 app.assets.remove(asset);
               }
               asset = next;
+              managedModel = managed;
               entity = new pc.Entity('splat');
               entity.addComponent('gsplat', { asset: next });
               app.root.addChild(entity);
               fileId = `${file.name}:${file.size}:${file.lastModified}`;
               frame();
               ready = true;
-              status = `${file.name} · ${Math.round(file.size / 1024 / 1024)} MB · vista local`;
+              if (managed) onReady?.(managed.id, managed.version);
+              status = `${file.name} · ${Math.round(file.size / 1024 / 1024)} MB · ${managed ? 'captura del gimnasio' : 'vista local'}`;
             } catch {
               if (!disposed && ticket === generation)
                 status =
@@ -229,10 +377,13 @@
         initialized = true;
         cleanup = () => {
           generation++;
+          downloadAbort?.abort();
           abort.abort();
           resize.disconnect();
           controller = undefined;
           app.destroy();
+          green.destroy();
+          red.destroy();
         };
       })
       .catch(() => {
@@ -247,29 +398,11 @@
 </script>
 
 <div class="splat-viewer">
-  <h3>Captura 3D local</h3>
-  <label
-    >Archivo PLY o SOG<input
-      type="file"
-      accept=".ply,.sog"
-      disabled={loading || !initialized}
-      onchange={(e) => {
-        const file = e.currentTarget.files?.[0];
-        if (file) controller?.load(file);
-      }}
-    /></label
-  >
-  <label class="toggle"
-    ><input
-      type="checkbox"
-      bind:checked={correctVertical}
-      disabled={loading}
-      onchange={(e) => {
-        correctVertical = e.currentTarget.checked;
-        controller?.orient();
-      }}
-    />Corregir orientación vertical</label
-  >
+  <h3>Captura 3D del gimnasio</h3>
+  {#if !capture}<p>
+      No hay una captura publicada. El administrador debe subirla desde
+      Capturas.
+    </p>{:else}<p>{capture.filename} · Versión del gimnasio</p>{/if}
   <p role="status">{status}</p>
   <canvas
     bind:this={canvas}
@@ -301,8 +434,8 @@
       Cámara guardada. Se aplica al cargar el mismo archivo local.
     </p>{/if}
   <p>
-    El archivo permanece en tu dispositivo. No se sube al servidor. SPZv4,
-    marcadores 3D y LOD por ruta están pendientes.
+    La captura se carga desde el almacenamiento del gimnasio. SPZv4, marcadores
+    3D y LOD por ruta están pendientes.
   </p>
 </div>
 

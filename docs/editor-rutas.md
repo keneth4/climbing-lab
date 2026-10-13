@@ -37,3 +37,7 @@ El propietario puede dar de alta al administrador local con `npm run staff:local
 El visor aplica por defecto una rotación de 180° alrededor de Z para corregir la orientación vertical de capturas con convención Y descendente, siguiendo el ejemplo de PlayCanvas. El control «Corregir orientación vertical» permite volver a la orientación original sin recargar el archivo. El encuadre utiliza la caja transformada, no las coordenadas originales.
 
 La referencia de cámara incluye la orientación; una cámara guardada para la original no se aplica silenciosamente a la corregida. Tras cambiar de orientación hay que volver a guardar la cámara. No se modifica el archivo de captura. El resultado del splat del usuario todavía necesita confirmación visual.
+
+## Capturas administradas
+
+El flujo de carga por ruta queda sustituido por capturas completas del gimnasio. Consulta [clon digital](clon-digital.md): el administrador publica la captura y el staff crea rutas sobre la versión vigente.

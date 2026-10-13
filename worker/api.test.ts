@@ -29,10 +29,16 @@ beforeAll(async () => {
       })),
     }),
   );
-  const migration = await readFile(
+  let migration = await readFile(
     new URL('../migrations/0001_initial.sql', import.meta.url),
     'utf8',
   );
+  migration +=
+    '\n' +
+    (await readFile(
+      new URL('../migrations/0002_digital_twin.sql', import.meta.url),
+      'utf8',
+    ));
   const envs = [];
   for (const id of ['gym-a', 'gym-b']) {
     const db = await mf.getD1Database('DB', id);
@@ -44,12 +50,49 @@ beforeAll(async () => {
       .bind(route, id, 'V2', 'Spray wall')
       .run();
     await db
-      .prepare('INSERT INTO route_revisions VALUES(?,?,?)')
+      .prepare(
+        'INSERT INTO route_revisions(route_id,revision,snapshot) VALUES(?,?,?)',
+      )
       .bind(route, 1, JSON.stringify({ name: id, holds: [] }))
       .run();
     await db
       .prepare('INSERT INTO staff VALUES(?,?)')
       .bind(id === 'gym-a' ? 'alice' : 'bob', 'editor')
+      .run();
+    await db
+      .prepare('INSERT INTO sections VALUES(?,?,?)')
+      .bind(
+        'section-' + id,
+        'Wall',
+        JSON.stringify({ min: [0, 0, 0], max: [1, 1, 1] }),
+      )
+      .run();
+    await db
+      .prepare('UPDATE routes SET section_id=? WHERE id=?')
+      .bind('section-' + id, route)
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO captures(id,filename,size,object_key,upload_id,status,upload_state,transform,created_by,created_at) VALUES(?,?,?,?,?,'published','ready',?,?,?)",
+      )
+      .bind(
+        'cap-' + id,
+        'fixture.ply',
+        100,
+        'fixture-' + id,
+        'fixture',
+        JSON.stringify({
+          scale: 1,
+          rotation: [0, 0, 0, 1],
+          translation: [0, 0, 0],
+        }),
+        'owner',
+        new Date().toISOString(),
+      )
+      .run();
+    await db
+      .prepare('UPDATE gym_state SET active_capture_id=?')
+      .bind('cap-' + id)
       .run();
     envs.push({
       DB: db,
@@ -234,13 +277,14 @@ describe('per-gym D1 isolation', () => {
 it('only local staff can create routes and snapshot the camera', async () => {
   const payload = {
     name: 'Nueva ruta',
+    sectionId: 'section-gym-a',
     grade: 'V4',
     sector: 'Spray wall',
     beta: 'Cruce',
     status: 'activa',
     holds: [],
     camera: {
-      captureId: 'local-test',
+      captureId: 'cap-gym-a',
       yaw: 0,
       pitch: 0,
       distance: 4,

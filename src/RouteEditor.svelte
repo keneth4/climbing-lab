@@ -1,9 +1,20 @@
 <script lang="ts">
   import { api } from './auth';
-  import { untrack } from 'svelte';
+  import { untrack, onMount } from 'svelte';
+  import type { Section } from './twin';
   import type { Route } from './domain';
   let { route, onSaved }: { route?: Route; onSaved: (id: string) => void } =
     $props();
+  let sections = $state<Section[]>([]),
+    sectionId = $state('');
+  onMount(() => {
+    api('/sections')
+      .then((data) => {
+        sections = data.sections;
+        sectionId = route?.sectionId || '';
+      })
+      .catch((e) => (message = e.message));
+  });
   const initial = untrack(() => route);
   let name = $state(initial?.name || ''),
     grade = $state(initial?.grade || 'V1'),
@@ -21,11 +32,13 @@
         {
           name,
           grade,
-          sector,
+          sector: sections.find((s) => s.id === sectionId)?.name || sector,
+          sectionId,
+          ...(route?.captureId ? { captureId: route.captureId } : {}),
           beta,
           status,
           holds: route?.holds || [],
-          ...(route?.camera ? { camera: route.camera } : {}),
+          ...(route?.captureId && route.camera ? { camera: route.camera } : {}),
           ...(route ? { expectedRevision: route.revision } : {}),
         },
         route ? 'PUT' : 'POST',
@@ -50,7 +63,12 @@
     >Nombre de ruta<input bind:value={name} required maxlength="80" /></label
   ><label
     >Grado de ruta<input bind:value={grade} required maxlength="15" /></label
-  ><label>Sector<input bind:value={sector} required maxlength="80" /></label
+  ><label
+    >Sección<select bind:value={sectionId} required
+      ><option value="">Selecciona una sección</option
+      >{#each sections as s}<option value={s.id}>{s.name}</option
+        >{/each}</select
+    ></label
   ><label>Beta<textarea bind:value={beta} maxlength="2000"></textarea></label
   ><label
     >Estado<select bind:value={status}

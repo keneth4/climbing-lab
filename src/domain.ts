@@ -12,6 +12,8 @@ export type CameraView = {
   target: [number, number, number];
 };
 export type Route = {
+  sectionId?: string;
+  captureId?: string;
   id: string;
   revision: number;
   name: string;

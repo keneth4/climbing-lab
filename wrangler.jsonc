@@ -18,9 +18,11 @@
       "migrations_dir": "migrations",
     },
   ],
+  "r2_buckets": [{"binding":"CAPTURES","bucket_name":"climbing-lab-local-a-captures"}],
   "env": {
     "gym-b": {
       "name": "climbing-lab-local-b",
+      "r2_buckets": [{"binding":"CAPTURES","bucket_name":"climbing-lab-local-b-captures"}],
       "vars": {
         "GYM_ID": "gym-b",
         "AUTH_ISSUER": "https://defblrjdwgnqyzzgozdf.supabase.co/auth/v1",

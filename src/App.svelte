@@ -3,6 +3,8 @@
   import { onMount } from 'svelte';
   import AuthPanel from './AuthPanel.svelte';
   import RouteEditor from './RouteEditor.svelte';
+  import CaptureManager from './CaptureManager.svelte';
+  import type { Capture, Section } from './twin';
   import type { CameraView } from './domain';
   import { supabase, api } from './auth';
   import SplatViewer from './SplatViewer.svelte';
@@ -12,6 +14,10 @@
   db.entries = [];
   db.reports = [];
   let userEmail = $state('');
+  let adminRole = $state(false);
+  let currentCapture = $state<Capture | undefined>();
+  let selectedCapture = $state<Capture | undefined>();
+  let sections = $state<Section[]>([]);
   let sessionReady = $state(false);
   let generation = 0;
   async function refreshSession() {
@@ -19,6 +25,7 @@
     db.entries = [];
     db.reports = [];
     staff = false;
+    adminRole = false;
     try {
       const { data } = await supabase.auth.getSession();
       if (ticket !== generation) return;
@@ -27,6 +34,7 @@
       const me = await api('/me');
       if (ticket !== generation) return;
       staff = !!me.staff;
+      adminRole = me.staff === 'admin';
       const dataEntries = await api('/entries');
       if (ticket !== generation) return;
       db.entries = dataEntries.entries.map((e: any) => ({
@@ -103,7 +111,34 @@
       message = (e as Error).message;
     }
   }
+  async function refreshTwin() {
+    try {
+      const [a, b] = await Promise.all([
+        api('/captures/current'),
+        api('/sections'),
+      ]);
+      currentCapture = a.capture || undefined;
+      sections = b.sections;
+    } catch (e) {
+      message = (e as Error).message;
+    }
+  }
+  $effect(() => {
+    const captureId = selected?.captureId;
+    const current = currentCapture;
+    selectedCapture = undefined;
+    if (!captureId || captureId === current?.id) {
+      selectedCapture = current;
+      return;
+    }
+    api(`/captures/${captureId}/metadata`)
+      .then((data) => {
+        if (selected?.captureId === captureId) selectedCapture = data.capture;
+      })
+      .catch((e) => (message = e.message));
+  });
   onMount(() => {
+    refreshTwin();
     refreshRoutes();
     refreshSession();
     const { data } = supabase.auth.onAuthStateChange(() => {
@@ -265,13 +300,20 @@
   API D1 local · Cuenta Supabase · Capturas y tarjetas 3D en desarrollo.
 </div>
 <nav aria-label="Principal">
-  {#each ['Catálogo', 'Bitácora', 'Cuenta', ...(staff ? ['Staff'] : [])] as item}<button
+  {#each ['Catálogo', 'Bitácora', 'Cuenta', ...(staff ? ['Staff'] : []), ...(adminRole ? ['Capturas'] : [])] as item}<button
       class:active={tab === item}
       onclick={() => (tab = item)}>{item}</button
     >{/each}
 </nav>
 <main>
-  {#if tab === 'Cuenta'}<AuthPanel />{:else if tab === 'Catálogo'}
+  {#if tab === 'Cuenta'}<AuthPanel
+    />{:else if tab === 'Capturas' && adminRole}<CaptureManager
+      routes={db.routes}
+      onPublished={async () => {
+        await refreshTwin();
+        await refreshRoutes();
+      }}
+    />{:else if tab === 'Catálogo'}
     <div class="layout">
       <aside>
         <h1>Rutas</h1>
@@ -308,6 +350,8 @@
             {selected.sector} · Revisión {selected.revision} · {selected.status}
           </p>
           <SplatViewer
+            capture={selectedCapture}
+            section={sections.find((s) => s.id === selected.sectionId)}
             routeId={selected.id}
             saved={selected.camera}
             {staff}
@@ -408,7 +452,13 @@
               >
             </form>
           </div>
-        {:else}<h2>Ruta no encontrada</h2>
+        {:else}<SplatViewer
+            capture={currentCapture}
+            staff={false}
+            routeId="gym-overview"
+            onSave={() => {}}
+          />
+          <h2>Selecciona una ruta</h2>
           <p>Selecciona una ruta del catálogo.</p>{/if}
       </section>
     </div>

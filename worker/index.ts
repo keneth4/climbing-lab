@@ -1,3 +1,5 @@
+import { HttpError, json, body, text } from './http';
+import { captureApi } from './captures';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 const keySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 export async function verifyToken(
@@ -16,22 +18,6 @@ export async function verifyToken(
   return payload.sub;
 }
 
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-const json = (value: unknown, status = 200) =>
-  Response.json(value, {
-    status,
-    headers: {
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
 async function identity(request: Request, env: Env): Promise<string> {
   const token = request.headers
     .get('Authorization')
@@ -52,45 +38,6 @@ async function identity(request: Request, env: Env): Promise<string> {
   } catch {
     throw new HttpError(401, 'Sesión inválida o vencida.');
   }
-}
-async function body(request: Request): Promise<Record<string, unknown>> {
-  if (!request.headers.get('Content-Type')?.startsWith('application/json'))
-    throw new HttpError(415, 'Usa application/json.');
-  if (Number(request.headers.get('Content-Length')) > 8192)
-    throw new HttpError(413, 'Solicitud demasiado grande.');
-  const reader = request.body?.getReader();
-  if (!reader) throw new HttpError(400, 'Falta contenido.');
-  let size = 0;
-  const chunks: Uint8Array[] = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > 8192) {
-      await reader.cancel();
-      throw new HttpError(413, 'Solicitud demasiado grande.');
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.length;
-  }
-  try {
-    const value = JSON.parse(new TextDecoder().decode(bytes));
-    if (!value || typeof value !== 'object' || Array.isArray(value))
-      throw new Error();
-    return value;
-  } catch {
-    throw new HttpError(400, 'JSON inválido.');
-  }
-}
-function text(value: unknown, max: number): string {
-  if (typeof value !== 'string' || !value.trim() || value.length > max)
-    throw new HttpError(400, 'Texto inválido.');
-  return value.trim();
 }
 async function editor(env: Env, user: string) {
   if (
@@ -120,6 +67,8 @@ function routePayload(b: Record<string, unknown>) {
     'holds',
     'camera',
     'expectedRevision',
+    'sectionId',
+    'captureId',
   ];
   if (Object.keys(b).some((k) => !allowed.includes(k)))
     throw new HttpError(400, 'Campo no permitido.');
@@ -184,6 +133,8 @@ function routePayload(b: Record<string, unknown>) {
     beta: b.beta,
     status: b.status,
     holds: b.holds,
+    ...(b.sectionId ? { sectionId: text(b.sectionId, 100) } : {}),
+    ...(b.captureId ? { captureId: text(b.captureId, 100) } : {}),
     ...(camera ? { camera } : {}),
   };
 }
@@ -204,6 +155,10 @@ export async function handle(
       throw new HttpError(400, 'Parámetro no permitido.');
     if (path === '/api/health' && request.method === 'GET')
       return json({ gymId: env.GYM_ID, ready: true });
+    const captureResponse = await captureApi(request, env, () =>
+      authenticate(request, env),
+    );
+    if (captureResponse) return captureResponse;
     const limit = Number(url.searchParams.get('limit') || 50),
       offset = Number(url.searchParams.get('offset') || 0);
     if (
@@ -245,6 +200,36 @@ export async function handle(
       await editor(env, user);
       const b = await body(request);
       const payload = routePayload(b);
+      const gym = await env.DB.prepare(
+        'SELECT active_capture_id,generation FROM gym_state WHERE id=1',
+      ).first<{ active_capture_id: string | null; generation: number }>();
+      if (!gym) throw new HttpError(409, 'Faltan migraciones.');
+      const existingSection = routeMatch
+        ? await env.DB.prepare('SELECT section_id FROM routes WHERE id=?')
+            .bind(routeMatch[1])
+            .first<string>('section_id')
+        : null;
+      payload.sectionId = payload.sectionId || existingSection || undefined;
+      if (
+        !payload.sectionId ||
+        !(await env.DB.prepare('SELECT id FROM sections WHERE id=?')
+          .bind(payload.sectionId)
+          .first())
+      )
+        throw new HttpError(400, 'Selecciona una sección del gimnasio.');
+      if (!routeMatch && !gym.active_capture_id)
+        throw new HttpError(409, 'Publica primero una captura del gimnasio.');
+      if (payload.captureId && payload.captureId !== gym.active_capture_id)
+        throw new HttpError(
+          409,
+          'Importa la ruta a la captura vigente antes de editarla.',
+        );
+      if (gym.active_capture_id) payload.captureId = gym.active_capture_id;
+      if (payload.camera && payload.camera.captureId !== payload.captureId)
+        throw new HttpError(
+          400,
+          'La cámara debe pertenecer a la captura de la ruta.',
+        );
       const id = routeMatch ? routeMatch[1] : crypto.randomUUID();
       let next = 1;
       if (routeMatch) {
@@ -262,22 +247,23 @@ export async function handle(
       const statements = routeMatch
         ? [
             env.DB.prepare(
-              'INSERT INTO route_revisions(route_id,revision,snapshot) VALUES(?,?,?)',
-            ).bind(id, next, snapshot),
+              'INSERT INTO route_revisions(route_id,revision,snapshot,capture_id) VALUES(?,?,?,?)',
+            ).bind(id, next, snapshot, payload.captureId || null),
             env.DB.prepare(
-              'UPDATE routes SET name=?,grade=?,sector=?,beta=?,status=? WHERE id=?',
+              'UPDATE routes SET name=?,grade=?,sector=?,beta=?,status=?,section_id=? WHERE id=?',
             ).bind(
               payload.name,
               payload.grade,
               payload.sector,
               payload.beta,
               payload.status,
+              payload.sectionId,
               id,
             ),
           ]
         : [
             env.DB.prepare(
-              'INSERT INTO routes(id,name,grade,sector,beta,status) VALUES(?,?,?,?,?,?)',
+              'INSERT INTO routes(id,name,grade,sector,beta,status,section_id) VALUES(?,?,?,?,?,?,?)',
             ).bind(
               id,
               payload.name,
@@ -285,11 +271,21 @@ export async function handle(
               payload.sector,
               payload.beta,
               payload.status,
+              payload.sectionId,
             ),
             env.DB.prepare(
-              'INSERT INTO route_revisions(route_id,revision,snapshot) VALUES(?,?,?)',
-            ).bind(id, next, snapshot),
+              'INSERT INTO route_revisions(route_id,revision,snapshot,capture_id) VALUES(?,?,?,?)',
+            ).bind(id, next, snapshot, payload.captureId || null),
           ];
+      const guardId = crypto.randomUUID();
+      statements.unshift(
+        env.DB.prepare(
+          'INSERT INTO mutation_guards(id,verified) VALUES(?,(SELECT CASE WHEN generation=? THEN 1 ELSE 0 END FROM gym_state WHERE id=1))',
+        ).bind(guardId, gym.generation),
+      );
+      statements.push(
+        env.DB.prepare('DELETE FROM mutation_guards WHERE id=?').bind(guardId),
+      );
       statements.push(
         env.DB.prepare(
           'INSERT INTO audit_events(id,user_id,action,object_id,created_at) VALUES(?,?,?,?,?)',
@@ -304,7 +300,10 @@ export async function handle(
       try {
         await env.DB.batch(statements);
       } catch (error) {
-        if (String(error).includes('UNIQUE constraint failed: route_revisions'))
+        if (
+          String(error).includes('UNIQUE constraint failed: route_revisions') ||
+          String(error).includes('CHECK constraint failed: verified')
+        )
           throw new HttpError(409, 'La ruta cambió. Recarga antes de guardar.');
         throw error;
       }

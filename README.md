@@ -2,7 +2,7 @@
 
 Herramienta de Creativivid para publicar sitios de gimnasios y zonas de escalada con catálogos de rutas sobre Gaussian Splatting, bitácoras personales y visuales compartibles.
 
-Estado: primera base funcional local. El piloto completo está en desarrollo; todavía no hay cuentas ni servicios de producción.
+Estado: primera base funcional local. El piloto completo está en desarrollo; el acceso usa Supabase Auth y los datos y capturas del gimnasio usan servicios locales de Cloudflare. El gimnasio todavía no está desplegado en producción.
 
 Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](docs/implementacion.md).
 
@@ -19,6 +19,7 @@ Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](d
 - [API local y pruebas de aislamiento](docs/api-local.md)
 - [Login Supabase y conexión a D1](docs/auth-integracion.md)
 - [Editor de rutas y revisiones](docs/editor-rutas.md)
+- [Clon digital: capturas completas, secciones y alineación](docs/clon-digital.md)
 
 Primero se construirá una interfaz base enfocada en funcionalidad. El diseño particular de cada sitio se trabajará después, siguiendo el enfoque de MenuMaker y el sitio de AMPM.
 
