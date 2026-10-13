@@ -175,7 +175,12 @@ export async function handle(
     // No client field can select a different D1 binding or impersonate a user.
     if (
       [...url.searchParams.keys()].some(
-        (k) => !['limit', 'offset', 'status'].includes(k),
+        (k) =>
+          !(
+            path === '/api/entries'
+              ? ['limit', 'offset', 'from', 'until', 'result']
+              : ['limit', 'offset', 'status']
+          ).includes(k),
       )
     )
       throw new HttpError(400, 'Parámetro no permitido.');
@@ -361,12 +366,63 @@ export async function handle(
       });
     }
     if (path === '/api/entries' && request.method === 'GET') {
+      const from = url.searchParams.get('from'),
+        until = url.searchParams.get('until'),
+        result = url.searchParams.get('result');
+      for (const value of [from, until])
+        if (
+          value &&
+          (!Number.isFinite(Date.parse(value)) ||
+            new Date(value).toISOString() !== value)
+        )
+          throw new HttpError(400, 'Intervalo de fechas inválido.');
+      if (from && until && from >= until)
+        throw new HttpError(
+          400,
+          'La fecha inicial debe preceder al final del intervalo.',
+        );
+      if (result && !['intento', 'ascenso'].includes(result))
+        throw new HttpError(400, 'Resultado inválido.');
+      const where = ['e.user_id=?'];
+      const params: (string | number)[] = [user];
+      if (from) {
+        where.push('e.created_at>=?');
+        params.push(from);
+      }
+      if (until) {
+        where.push('e.created_at<?');
+        params.push(until);
+      }
+      if (result) {
+        where.push('e.result=?');
+        params.push(result);
+      }
+      const filter = where.join(' AND ');
       const rows = await env.DB.prepare(
-        "SELECT e.*, rr.snapshot AS route_snapshot, json_extract(rr.snapshot, '$.name') AS route_name, json_extract(rr.snapshot, '$.grade') AS grade FROM entries e JOIN route_revisions rr ON rr.route_id=e.route_id AND rr.revision=e.revision WHERE e.user_id=? ORDER BY e.created_at DESC,e.id LIMIT ? OFFSET ?",
+        `SELECT e.*,rr.snapshot AS route_snapshot,json_extract(rr.snapshot,'$.name') AS route_name,json_extract(rr.snapshot,'$.grade') AS grade FROM entries e JOIN route_revisions rr ON rr.route_id=e.route_id AND rr.revision=e.revision WHERE ${filter} ORDER BY e.created_at DESC,e.id LIMIT ? OFFSET ?`,
       )
-        .bind(user, limit, offset)
+        .bind(...params, limit, offset)
         .all();
-      return json({ entries: rows.results });
+      const summary = await env.DB.prepare(
+        `SELECT COUNT(*) AS records,COALESCE(SUM(e.attempts),0) AS attempts,COALESCE(SUM(CASE WHEN e.result='ascenso' THEN 1 ELSE 0 END),0) AS ascents,COUNT(DISTINCT e.route_id) AS routes FROM entries e WHERE ${filter}`,
+      )
+        .bind(...params)
+        .first<{
+          records: number;
+          attempts: number;
+          ascents: number;
+          routes: number;
+        }>();
+      return json({
+        entries: rows.results,
+        summary,
+        pagination: {
+          limit,
+          offset,
+          total: summary?.records || 0,
+          hasMore: offset + rows.results.length < (summary?.records || 0),
+        },
+      });
     }
     if (path === '/api/entries' && request.method === 'POST') {
       const b = await body(request);

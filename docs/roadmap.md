@@ -99,3 +99,7 @@ La mejora de UX/UI, gizmos y orientación libre de secciones se mantiene pendien
 - [x] Pruebas de publicación inicial y reemplazo con ruta de prueba, conservación de cámara local/snapshot y navegador escritorio/móvil.
 
 Se conserva el control para rutas ya vinculadas a una captura que perdieron su sección. Importar una ruta sin sección exige asignarla primero.
+
+## Área personal del escalador
+
+Se completó la [primera entrega de bitácora personal](bitacora-personal.md): resumen de intervalo completo, filtros locales de fecha/resultado, páginas, CSV de página y tarjetas históricas. Los siguientes candidatos fuera del editor de secciones son proyectos/sesiones de escalada y exportaciones 3D compartibles. Visitas QR, membresías y módulos comerciales siguen en etapas posteriores.

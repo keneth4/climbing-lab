@@ -134,7 +134,7 @@ test('password login → protected request → logout clears personal data', asy
             },
       }),
   );
-  await page.route('**/api/entries', async (route) => {
+  await page.route('**/api/entries*', async (route) => {
     expect(route.request().headers().authorization).toBe(`Bearer ${token}`);
     await route.fulfill({
       json: {

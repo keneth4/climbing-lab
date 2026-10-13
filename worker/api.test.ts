@@ -464,3 +464,56 @@ it('validates 3D markers and preserves their positions in historical ascents', a
   expect(JSON.parse(rows.results[0].snapshot).holds3D).toEqual(payload.holds3D);
   expect((await handle(req('/api/routes/' + created.id), b)).status).toBe(404);
 });
+it('filters and paginates private activity with a complete summary isolated by account and gym', async () => {
+  const values = Array.from({ length: 60 }, (_, i) => ({
+    id: 'journal-' + i,
+    attempts: i + 1,
+    result: i % 2 ? 'intento' : 'ascenso',
+    date: i % 2 ? '2026-01-11T12:00:00.000Z' : '2026-01-10T12:00:00.000Z',
+  }));
+  await a.DB.prepare(
+    "INSERT INTO entries(id,user_id,route_id,revision,attempts,result,notes,created_at) SELECT json_extract(value,'$.id'),'journal-user','route-a',1,json_extract(value,'$.attempts'),json_extract(value,'$.result'),'private',json_extract(value,'$.date') FROM json_each(?)",
+  )
+    .bind(JSON.stringify(values))
+    .run();
+  const get = (path: string, env = a, user = 'journal-user') =>
+    handle(req(path), env, asUser(user));
+  const response = await get('/api/entries?limit=10');
+  expect(response.status).toBe(200);
+  const all = await response.json();
+  expect(all.entries).toHaveLength(10);
+  expect(all.summary).toEqual({
+    records: 60,
+    attempts: 1830,
+    ascents: 30,
+    routes: 1,
+  });
+  expect(all.pagination.hasMore).toBe(true);
+  expect(response.headers.get('Cache-Control')).toBe('no-store');
+  const filtered = await (
+    await get(
+      '/api/entries?from=2026-01-11T00%3A00%3A00.000Z&until=2026-01-12T00%3A00%3A00.000Z&result=intento&limit=10&offset=20',
+    )
+  ).json();
+  expect(filtered.summary).toEqual({
+    records: 30,
+    attempts: 930,
+    ascents: 0,
+    routes: 1,
+  });
+  expect(filtered.entries).toHaveLength(10);
+  expect(filtered.pagination.hasMore).toBe(false);
+  expect(
+    (await (await get('/api/entries', a, 'other-user')).json()).summary.records,
+  ).toBe(0);
+  expect((await (await get('/api/entries', b)).json()).summary.records).toBe(0);
+  expect((await get('/api/entries?result=bad')).status).toBe(400);
+  expect((await get('/api/entries?from=bad')).status).toBe(400);
+  expect(
+    (
+      await get(
+        '/api/entries?from=2026-01-12T00%3A00%3A00.000Z&until=2026-01-11T00%3A00%3A00.000Z',
+      )
+    ).status,
+  ).toBe(400);
+});

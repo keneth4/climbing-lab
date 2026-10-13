@@ -18,6 +18,7 @@ Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](d
 - [Arquitectura en Cloudflare](docs/decisiones/0001-backend-cloudflare.md)
 - [API local y pruebas de aislamiento](docs/api-local.md)
 - [Login Supabase y conexión a D1](docs/auth-integracion.md)
+- [Bitácora personal: filtros, resumen y exportación](docs/bitacora-personal.md)
 - [Agarres 3D y flujo de ruta](docs/rutas-3d.md)
 - [Editor de rutas y revisiones](docs/editor-rutas.md)
 - [Secciones por vértices y cuadrícula](docs/secciones-y-cuadricula.md)

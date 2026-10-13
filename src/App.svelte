@@ -1,6 +1,7 @@
 <script lang="ts">
   import QRCode from 'qrcode';
   import { onMount } from 'svelte';
+  import JournalControls from './JournalControls.svelte';
   import AuthPanel from './AuthPanel.svelte';
   import RouteEditor from './RouteEditor.svelte';
   import CaptureManager from './CaptureManager.svelte';
@@ -42,6 +43,7 @@
   let generation = 0;
   async function refreshSession() {
     const ticket = ++generation;
+    sessionReady = false;
     db.entries = [];
     db.reports = [];
     staff = false;
@@ -49,7 +51,12 @@
     try {
       const { data } = await supabase.auth.getSession();
       if (ticket !== generation) return;
-      userEmail = data.session?.user.email || '';
+      const nextEmail = data.session?.user.email || '';
+      if (nextEmail !== userEmail) {
+        privacy = false;
+        name = '';
+      }
+      userEmail = nextEmail;
       if (!data.session) return;
       const me = await api('/me');
       if (ticket !== generation) return;
@@ -250,7 +257,13 @@
   }
   function exportImage(entry?: Entry) {
     const route = entry
-      ? db.routes.find((r) => r.id === entry.routeId)
+      ? db.routes.find((r) => r.id === entry.routeId) || {
+          id: entry.routeId,
+          revision: entry.revision,
+          name: entry.routeName,
+          grade: entry.grade,
+          holds: entry.holds || [],
+        }
       : selected;
     if (!route) return;
     const canvas = document.createElement('canvas');
@@ -490,24 +503,31 @@
       </section>
     </div>
   {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
-    <label class="toggle"
-      ><input type="checkbox" bind:checked={privacy} /> Incluir nombre e intentos
-      en tarjeta</label
-    >{#if privacy}<label
-        >Nombre para la tarjeta<input bind:value={name} maxlength="35" /></label
-      >{/if}{#each db.entries as entry}<article>
-        <h2>{entry.routeName} · {entry.grade}</h2>
-        <p>
-          {entry.result === 'ascenso' ? 'Ascenso' : 'Intento'} · {entry.attempts}
-          intentos · {new Date(entry.date).toLocaleDateString('es-MX')}
-        </p>
-        <p>{entry.notes}</p>
-        {#if entry.result === 'ascenso'}<button
-            onclick={() => exportImage(entry)}>Exportar tarjeta personal</button
-          >{/if}
-      </article>{/each}{#if !db.entries.length}<p>
-        Aún no tienes actividad. Registra un intento desde el catálogo.
-      </p>{/if}
+    {#if userEmail && sessionReady}{#key userEmail}<JournalControls
+          onEntries={(entries) => (db.entries = entries)}
+        />{/key}
+
+      <label class="toggle"
+        ><input type="checkbox" bind:checked={privacy} /> Incluir nombre e intentos
+        en tarjeta</label
+      >{#if privacy}<label
+          >Nombre para la tarjeta<input
+            bind:value={name}
+            maxlength="35"
+          /></label
+        >{/if}{#each db.entries as entry}<article>
+          <h2>{entry.routeName} · {entry.grade}</h2>
+          <p>
+            {entry.result === 'ascenso' ? 'Ascenso' : 'Intento'} · {entry.attempts}
+            intentos · {new Date(entry.date).toLocaleDateString('es-MX')}
+          </p>
+          <p>{entry.notes}</p>
+          {#if entry.result === 'ascenso'}<button
+              onclick={() => exportImage(entry)}
+              >Exportar tarjeta personal</button
+            >{/if}
+        </article>{/each}
+    {:else}<p>Inicia sesión para consultar tu bitácora personal.</p>{/if}
   {:else if tab === 'Staff' && staff}<h1>Panel del staff</h1>
     <RouteEditor
       onSaved={async (id) => {
