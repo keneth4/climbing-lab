@@ -23,6 +23,7 @@
     "format:api": "prettier --write worker scripts migrations/*.sql tsconfig.worker.json vitest.api.config.ts wrangler.jsonc --ignore-unknown"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.117.3",
     "jose": "^6.2.12",
     "playcanvas": "^2.23.2",
     "qrcode": "^1.5.4",

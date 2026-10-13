@@ -1,12 +1,103 @@
 <script lang="ts">
   import QRCode from 'qrcode';
+  import { onMount } from 'svelte';
+  import AuthPanel from './AuthPanel.svelte';
+  import { supabase, api } from './auth';
   import SplatViewer from './SplatViewer.svelte';
-  import { createEntry, loadState, routeUrl, type Entry } from './domain';
+  import { loadState, routeUrl, type Entry } from './domain';
   let db = $state(loadState());
-  let tab = $state('Catálogo');
+  db.routes = [];
+  db.entries = [];
+  db.reports = [];
+  let userEmail = $state('');
+  let sessionReady = $state(false);
+  let generation = 0;
+  async function refreshSession() {
+    const ticket = ++generation;
+    db.entries = [];
+    db.reports = [];
+    staff = false;
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (ticket !== generation) return;
+      userEmail = data.session?.user.email || '';
+      if (!data.session) return;
+      const me = await api('/me');
+      if (ticket !== generation) return;
+      staff = !!me.staff;
+      const dataEntries = await api('/entries');
+      if (ticket !== generation) return;
+      db.entries = dataEntries.entries.map((e: any) => ({
+        id: e.id,
+        routeId: e.route_id,
+        revision: e.revision,
+        routeName: e.route_name || e.route_id,
+        grade: e.grade || '',
+        date: e.created_at,
+        attempts: e.attempts,
+        result: e.result,
+        notes: e.notes,
+        holds: [],
+      }));
+      if (staff) {
+        const reports = await api('/staff/reports');
+        if (ticket !== generation) return;
+        db.reports = reports.reports.map((r: any) => ({
+          id: r.id,
+          routeId: r.route_id,
+          revision: r.revision,
+          description: r.description,
+          status: r.status,
+        }));
+      }
+    } catch (e) {
+      message = (e as Error).message;
+    } finally {
+      if (ticket === generation) sessionReady = true;
+    }
+  }
+  onMount(() => {
+    api('/routes')
+      .then(async (data) => {
+        const routes = await Promise.all(
+          data.routes.map(async (r: any) => {
+            const detail = await api(`/routes/${r.id}`);
+            return {
+              ...detail.snapshot,
+              id: r.id,
+              revision: detail.revision,
+              name: r.name,
+              grade: r.grade,
+              sector: r.sector,
+              beta: r.beta,
+              status: r.status,
+              holds: detail.snapshot.holds || [],
+            };
+          }),
+        );
+        db.routes = routes;
+        if (
+          !routes.some((r) => r.id === selectedId) &&
+          !new URLSearchParams(location.search).has('ruta')
+        )
+          selectedId = routes[0]?.id || '';
+      })
+      .catch((e) => (message = (e as Error).message));
+    refreshSession();
+    const { data } = supabase.auth.onAuthStateChange(() => {
+      setTimeout(() => refreshSession(), 0);
+    });
+    return () => {
+      generation++;
+      data.subscription.unsubscribe();
+    };
+  });
+  let tab = $state(
+    location.pathname.startsWith('/auth/') ? 'Cuenta' : 'Catálogo',
+  );
   let staff = $state(false);
   let selectedId = $state(
-    new URLSearchParams(location.search).get('ruta') || db.routes[0].id,
+    new URLSearchParams(location.search).get('ruta') || '',
   );
   let selected = $derived(db.routes.find((r) => r.id === selectedId));
   let query = $state('');
@@ -26,17 +117,8 @@
   let report = $state('');
   let message = $state('');
   let qr = $state('');
-  let newName = $state('');
-  let newGrade = $state('V1');
   let privacy = $state(false);
   let name = $state('');
-  $effect(() => {
-    try {
-      localStorage.setItem('climbing-lab:v1', JSON.stringify(db));
-    } catch {
-      message = 'No se pudo guardar en este dispositivo.';
-    }
-  });
   $effect(() => {
     const id = selectedId;
     qr = '';
@@ -53,44 +135,35 @@
     history.replaceState(null, '', routeUrl(id));
     message = '';
   }
-  function record() {
-    if (!selected || selected.status !== 'activa') return;
+  async function record() {
+    if (!selected) return;
     try {
-      db.entries.unshift(createEntry(selected, attempts, result, notes));
+      await api('/entries', { routeId: selected.id, attempts, result, notes });
       notes = '';
-      message = 'Actividad guardada en tu bitácora local.';
+      await refreshSession();
+      message = 'Actividad guardada en D1.';
     } catch (e) {
       message = (e as Error).message;
     }
   }
-  function sendReport() {
-    if (!selected || !report.trim()) return;
-    db.reports.unshift({
-      id: crypto.randomUUID(),
-      routeId: selected.id,
-      revision: selected.revision,
-      description: report.trim(),
-      status: 'pendiente',
-    });
-    report = '';
-    message = 'Reporte enviado a la bandeja de demostración del staff.';
+  async function sendReport() {
+    if (!selected) return;
+    try {
+      await api('/reports', { routeId: selected.id, description: report });
+      report = '';
+      await refreshSession();
+      message = 'Reporte enviado al staff.';
+    } catch (e) {
+      message = (e as Error).message;
+    }
   }
-  function addRoute() {
-    if (!staff || !newName.trim()) return;
-    const id = crypto.randomUUID();
-    db.routes.push({
-      id,
-      revision: 1,
-      name: newName.trim(),
-      grade: newGrade,
-      sector: 'Spray wall',
-      beta: '',
-      status: 'activa',
-      holds: [],
-    });
-    newName = '';
-    select(id);
-    tab = 'Catálogo';
+  async function resolveReport(id: string) {
+    try {
+      await api(`/staff/reports/${id}/resolve`, {});
+      await refreshSession();
+    } catch (e) {
+      message = (e as Error).message;
+    }
   }
   function download(data: string, filename: string) {
     const a = document.createElement('a');
@@ -159,22 +232,24 @@
 
 <header>
   <div><strong>Climbing Lab</strong><span>Gimnasio de demostración</span></div>
-  <label class="toggle"
-    ><input type="checkbox" bind:checked={staff} /> Modo staff de demostración</label
-  >
+  <div>
+    {#if userEmail}<span>{userEmail}</span><button
+        onclick={() => supabase.auth.signOut()}>Cerrar sesión</button
+      >{:else}<button onclick={() => (tab = 'Cuenta')}>Iniciar sesión</button
+      >{/if}
+  </div>
 </header>
 <div class="notice">
-  Prototipo local: los datos se guardan en este navegador. Sin cuentas ni
-  permisos reales todavía.
+  API D1 local · Cuenta Supabase · Capturas y tarjetas 3D en desarrollo.
 </div>
 <nav aria-label="Principal">
-  {#each ['Catálogo', 'Bitácora', ...(staff ? ['Staff'] : [])] as item}<button
+  {#each ['Catálogo', 'Bitácora', 'Cuenta', ...(staff ? ['Staff'] : [])] as item}<button
       class:active={tab === item}
       onclick={() => (tab = item)}>{item}</button
     >{/each}
 </nav>
 <main>
-  {#if tab === 'Catálogo'}
+  {#if tab === 'Cuenta'}<AuthPanel />{:else if tab === 'Catálogo'}
     <div class="layout">
       <aside>
         <h1>Rutas</h1>
@@ -282,8 +357,10 @@
                   ></select
                 ></label
               ><label>Notas<textarea bind:value={notes}></textarea></label
-              ><button disabled={selected.status !== 'activa'}
-                >Guardar actividad</button
+              ><button
+                disabled={selected.status !== 'activa' ||
+                  !userEmail ||
+                  !sessionReady}>Guardar actividad</button
               >
             </form>
             <form
@@ -298,35 +375,16 @@
                   bind:value={report}
                   required
                   maxlength="2000"></textarea></label
-              ><button>Enviar reporte</button>
+              ><button disabled={!userEmail || !sessionReady}
+                >Enviar reporte</button
+              >
             </form>
           </div>
-          {#if staff}<details>
-              <summary>Editar ruta (demo)</summary><label
-                >Nombre<input bind:value={selected.name} /></label
-              ><label
-                >Beta<textarea bind:value={selected.beta}></textarea></label
-              ><button
-                onclick={() => {
-                  if (selected) {
-                    selected.status =
-                      selected.status === 'activa' ? 'retirada' : 'activa';
-                  }
-                }}
-                >{selected.status === 'activa'
-                  ? 'Retirar ruta'
-                  : 'Reactivar ruta'}</button
-              >
-              <p>
-                Edición de cámaras, marcadores y revisiones históricas
-                pendiente.
-              </p>
-            </details>{/if}
         {:else}<h2>Ruta no encontrada</h2>
           <p>Selecciona una ruta del catálogo.</p>{/if}
       </section>
     </div>
-  {:else if tab === 'Bitácora'}<h1>Mi bitácora local</h1>
+  {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
     <label class="toggle"
       ><input type="checkbox" bind:checked={privacy} /> Incluir nombre e intentos
       en tarjeta</label
@@ -345,19 +403,8 @@
       </article>{/each}{#if !db.entries.length}<p>
         Aún no tienes actividad. Registra un intento desde el catálogo.
       </p>{/if}
-  {:else if tab === 'Staff' && staff}<h1>Panel del staff · demo</h1>
-    <form
-      onsubmit={(e) => {
-        e.preventDefault();
-        addRoute();
-      }}
-    >
-      <h2>Crear ruta</h2>
-      <label>Nombre<input bind:value={newName} required maxlength="80" /></label
-      ><label
-        >Grado<input bind:value={newGrade} required maxlength="15" /></label
-      ><button>Crear ruta</button>
-    </form>
+  {:else if tab === 'Staff' && staff}<h1>Panel del staff</h1>
+    <p>El editor del catálogo se conectará en el siguiente incremento.</p>
     <h2>Reportes</h2>
     {#each db.reports as r}<article>
         <strong
@@ -367,9 +414,11 @@
         <p>{r.description}</p>
         <p>{r.status}</p>
         {#if r.status === 'pendiente'}<button
-            onclick={() => (r.status = 'resuelto')}>Marcar resuelto</button
+            onclick={() => resolveReport(r.id)}>Marcar resuelto</button
           >{/if}
       </article>{/each}{#if !db.reports.length}<p>No hay reportes.</p>{/if}
-  {:else}<p>Activa el modo de demostración para consultar el panel.</p>{/if}
+  {:else}<p>
+      Inicia sesión con una cuenta autorizada para consultar el panel.
+    </p>{/if}
   {#if message}<p class="message" role="status">{message}</p>{/if}
 </main>

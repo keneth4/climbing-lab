@@ -169,7 +169,7 @@ export async function handle(
     }
     if (path === '/api/entries' && request.method === 'GET') {
       const rows = await env.DB.prepare(
-        'SELECT * FROM entries WHERE user_id=? ORDER BY created_at DESC,id LIMIT ? OFFSET ?',
+        "SELECT e.*, json_extract(rr.snapshot, '$.name') AS route_name, json_extract(rr.snapshot, '$.grade') AS grade FROM entries e JOIN route_revisions rr ON rr.route_id=e.route_id AND rr.revision=e.revision WHERE e.user_id=? ORDER BY e.created_at DESC,e.id LIMIT ? OFFSET ?",
       )
         .bind(user, limit, offset)
         .all();

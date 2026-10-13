@@ -7,7 +7,7 @@
   "observability": { "enabled": true, "traces": { "enabled": true } },
   "vars": {
     "GYM_ID": "gym-a",
-    "AUTH_ISSUER": "https://auth.invalid",
+    "AUTH_ISSUER": "https://defblrjdwgnqyzzgozdf.supabase.co/auth/v1",
     "AUTH_AUDIENCE": "authenticated",
   },
   "d1_databases": [
@@ -23,7 +23,7 @@
       "name": "climbing-lab-local-b",
       "vars": {
         "GYM_ID": "gym-b",
-        "AUTH_ISSUER": "https://auth.invalid",
+        "AUTH_ISSUER": "https://defblrjdwgnqyzzgozdf.supabase.co/auth/v1",
         "AUTH_AUDIENCE": "authenticated",
       },
       "d1_databases": [

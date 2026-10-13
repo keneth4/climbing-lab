@@ -1,6 +1,6 @@
 # API local y separación de gimnasios
 
-Estado: primera API implementada; sin despliegue remoto. La interfaz Svelte todavía usa su almacenamiento de demostración, no esta API.
+Estado: primera API implementada; sin despliegue remoto. La interfaz Svelte ya conecta catálogo, bitácora y reportes a esta API: ver [integración Auth](auth-integracion.md).
 
 ## Preparación
 
@@ -50,7 +50,7 @@ Errores: 400 validación, 401 sesión, 403 permisos locales, 404 objeto no encon
 
 ## Autenticación
 
-La configuración actual usa auth.invalid: las operaciones privadas fallan de forma cerrada. No existe token demo ni header para suplantar usuarios en el Worker desplegable.
+La configuración actual usa el emisor HTTPS de Climbing Lab en Supabase. Las solicitudes sin tokens válidos fallan de forma cerrada. No existe token demo ni header para suplantar usuarios en el Worker desplegable.
 
 La API verifica tokens RS256/ES256 usando JWKS del emisor HTTPS configurado, audiencia, firma y claims sub/exp/iat. Las claves se cachean mediante jose; los roles vienen de D1, no de headers o claims elegidos por el cliente. La identidad compartida no convierte al staff de un gimnasio en staff de otro.
 
