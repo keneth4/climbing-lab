@@ -180,6 +180,11 @@ test('local splat remains usable with the authenticated app shell', async ({
   await expect(page.getByText('fixture.ply · 0 MB · vista local')).toBeVisible({
     timeout: 30000,
   });
+  const orientation = page.getByLabel('Corregir orientación vertical');
+  await expect(orientation).toBeChecked();
+  await orientation.uncheck();
+  await expect(orientation).not.toBeChecked();
+  await orientation.check();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Descargar vista 3D' }).click();
   expect((await download).suggestedFilename()).toBe('captura-3d.png');

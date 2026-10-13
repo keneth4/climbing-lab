@@ -31,3 +31,9 @@ Tu cuenta autenticada todavía necesita una asignación inicial de staff en la b
 Cámaras: guardadas en D1, pero vinculadas a nombre/tamaño/fecha del archivo local. No se presupone que sean reutilizables con una captura diferente. Los archivos continúan cargándose localmente, sin subida al servidor.
 
 El propietario puede dar de alta al administrador local con `npm run staff:local -- UUID_DE_SUPABASE`, tomando el UUID de Authentication → Users. El comando lleva --local, valida el UUID y registra auditoría. No se ejecutó automáticamente ni modifica Cloudflare remoto.
+
+## Orientación de splats
+
+El visor aplica por defecto una rotación de 180° alrededor de Z para corregir la orientación vertical de capturas con convención Y descendente, siguiendo el ejemplo de PlayCanvas. El control «Corregir orientación vertical» permite volver a la orientación original sin recargar el archivo. El encuadre utiliza la caja transformada, no las coordenadas originales.
+
+La referencia de cámara incluye la orientación; una cámara guardada para la original no se aplica silenciosamente a la corregida. Tras cambiar de orientación hay que volver a guardar la cámara. No se modifica el archivo de captura. El resultado del splat del usuario todavía necesita confirmación visual.

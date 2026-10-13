@@ -17,12 +17,14 @@
   let initialized = $state(false);
   let ready = $state(false);
   let loading = $state(false);
+  let correctVertical = $state(true);
   let controller:
     | {
         load: (file: File) => Promise<void>;
         apply: (view?: CameraView) => void;
         save: () => CameraView;
         reset: () => void;
+        orient: () => void;
       }
     | undefined;
   $effect(() => {
@@ -61,6 +63,30 @@
           generation = 0;
         let entity: InstanceType<typeof pc.Entity> | undefined;
         let asset: InstanceType<typeof pc.Asset> | undefined;
+        let fileId = '';
+        const frame = () => {
+          if (!entity || !asset) return;
+          entity.setLocalEulerAngles(0, 0, correctVertical ? 180 : 0);
+          const bounds = new pc.BoundingBox();
+          bounds.setFromTransformedAabb(
+            (asset.resource as InstanceType<typeof pc.GSplatResource>).aabb,
+            entity.getWorldTransform(),
+          );
+          target.copy(bounds.center);
+          distance = Math.max(bounds.halfExtents.length() * 2.5, 0.5);
+          yaw = 0;
+          pitch = 0;
+          captureId = fileId + (correctVertical ? ':z180' : '');
+          defaultView = {
+            captureId,
+            yaw,
+            pitch,
+            distance,
+            target: [target.x, target.y, target.z],
+          };
+          update();
+          apply(saved);
+        };
         let defaultView = {
           yaw: 0,
           pitch: 0,
@@ -142,6 +168,7 @@
         );
         controller = {
           apply,
+          orient: frame,
           save: () => ({
             captureId,
             yaw,
@@ -183,23 +210,8 @@
               entity = new pc.Entity('splat');
               entity.addComponent('gsplat', { asset: next });
               app.root.addChild(entity);
-              const bounds = (
-                next.resource as InstanceType<typeof pc.GSplatResource>
-              ).aabb;
-              target.copy(bounds.center);
-              distance = Math.max(bounds.halfExtents.length() * 2.5, 0.5);
-              yaw = 0;
-              pitch = 0;
-              captureId = `${file.name}:${file.size}:${file.lastModified}`;
-              defaultView = {
-                captureId,
-                yaw,
-                pitch,
-                distance,
-                target: [target.x, target.y, target.z],
-              };
-              update();
-              apply(saved);
+              fileId = `${file.name}:${file.size}:${file.lastModified}`;
+              frame();
               ready = true;
               status = `${file.name} · ${Math.round(file.size / 1024 / 1024)} MB · vista local`;
             } catch {
@@ -246,6 +258,17 @@
         if (file) controller?.load(file);
       }}
     /></label
+  >
+  <label class="toggle"
+    ><input
+      type="checkbox"
+      bind:checked={correctVertical}
+      disabled={loading}
+      onchange={(e) => {
+        correctVertical = e.currentTarget.checked;
+        controller?.orient();
+      }}
+    />Corregir orientación vertical</label
   >
   <p role="status">{status}</p>
   <canvas
