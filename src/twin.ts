@@ -1,3 +1,4 @@
+import type { CameraView } from './domain';
 import type { Transform, Point } from '../shared/alignment';
 export type Capture = {
   id: string;
@@ -11,6 +12,7 @@ export type Capture = {
     rms: number;
     references: { id: string; observed: Point }[];
   } | null;
+  initialCamera?: CameraView | null;
   fileUrl: string;
 };
 export type Section = {

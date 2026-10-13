@@ -3,7 +3,8 @@
   import { api, supabase } from './auth';
   import SplatViewer from './SplatViewer.svelte';
   import type { Capture, Section, Fiducial } from './twin';
-  import type { Route } from './domain';
+  import type { Point } from '../shared/alignment';
+  import type { Route, CameraView } from './domain';
   let { routes, onPublished }: { routes: Route[]; onPublished: () => void } =
     $props();
   let captures = $state<Capture[]>([]),
@@ -28,6 +29,43 @@
     reviewed = $state<string[]>([]),
     reviewedAlignment = $state(false),
     previewSectionId = $state('');
+  let editingSection = $state(false);
+  let center = $state<Point>([0, 0, 0]);
+  let dimensions = $state<Point>([2, 2, 1]);
+  let sceneBounds = $state<{ min: Point; max: Point } | undefined>();
+  let boundsStamp = '';
+  let picked = $state<{ raw: Point; world: Point } | undefined>();
+  let draftSection = $derived<Section>({
+    id: 'preview',
+    name: sectionName || 'Sección en preparación',
+    bounds: {
+      min: center.map((n, i) => n - dimensions[i] / 2) as Point,
+      max: center.map((n, i) => n + dimensions[i] / 2) as Point,
+    },
+  });
+  function startSection() {
+    if (sceneBounds) {
+      center = sceneBounds.min.map(
+        (n, i) => (n + sceneBounds!.max[i]) / 2,
+      ) as Point;
+      dimensions = sceneBounds.min.map((n, i) =>
+        Math.max((sceneBounds!.max[i] - n) * 0.3, 0.1),
+      ) as Point;
+    }
+    editingSection = true;
+  }
+  async function saveInitial(view: CameraView) {
+    if (!selected) return;
+    const c = selected;
+    await operation(async () => {
+      await api(`/captures/${c.id}/camera`, {
+        expectedVersion: c.version,
+        camera: view,
+      });
+      await refresh();
+      message = 'Cámara inicial guardada. Se restaurará al abrir esta captura.';
+    });
+  }
   const coordinates = (value: string) => {
     const parts = value.split(',');
     if (
@@ -48,6 +86,9 @@
     activeId = a.state.active_capture_id;
     sections = b.sections;
     fiducials = c.fiducials;
+    if (!selectedId)
+      selectedId =
+        activeId || captures.find((c) => c.upload_state === 'ready')?.id || '';
   }
   onMount(() => {
     refresh().catch((e) => (message = e.message));
@@ -98,6 +139,8 @@
       await api(`/captures/${metadata.id}/complete`, {});
       await refresh();
       selectedId = metadata.id;
+      editingSection = false;
+      picked = undefined;
       reviewedAlignment = false;
       progress = 'Captura completa subida como borrador.';
     });
@@ -163,6 +206,8 @@
     bind:value={selectedId}
     onchange={() => {
       reviewedAlignment = false;
+      editingSection = false;
+      picked = undefined;
       reviewed = [];
       imports = [];
     }}
@@ -184,11 +229,46 @@
     capture={selected}
     {fiducials}
     onReady={(id, version) => (readyStamp = id + ':' + version)}
-    section={sections.find((s) => s.id === previewSectionId)}
+    onInitialSave={selected.status === 'draft' ? saveInitial : undefined}
+    onPoint={(raw, world) => {
+      picked = { raw, world };
+    }}
+    onBounds={(bounds) => {
+      sceneBounds = bounds;
+      if (boundsStamp !== selectedId) {
+        boundsStamp = selectedId;
+        center = bounds.min.map((n, i) => (n + bounds.max[i]) / 2) as Point;
+      }
+    }}
+    section={editingSection
+      ? draftSection
+      : sections.find((s) => s.id === previewSectionId)}
     routeId="capture-preview"
     staff={false}
     onSave={() => {}}
-  />{/if}
+  />
+  {#if selected.initialCamera}<p>Cámara inicial del gimnasio guardada.</p>{/if}
+  {#if picked}<section class="point-review">
+      <h2>Confirmar posición seleccionada</h2>
+      <p>Centro gaussiano aproximado. Comprueba el marcador antes de usarlo.</p>
+      <p>
+        Gimnasio: {picked.world.map((n) => n.toFixed(4)).join(', ')} · Captura original:
+        {picked.raw.map((n) => n.toFixed(4)).join(', ')}
+      </p>
+      <div class="actions">
+        <button
+          onclick={() => {
+            center = [...picked!.world];
+            editingSection = true;
+          }}>Centrar sección en este punto</button
+        >
+        <button onclick={() => (referencePosition = picked!.world.join(', '))}
+          >Usar como referencia permanente</button
+        >
+        <button onclick={() => (picked = undefined)}>Descartar posición</button>
+      </div>
+    </section>{/if}
+{/if}
 <div class="forms">
   <form
     onsubmit={(e) => {
@@ -196,34 +276,75 @@
       operation(async () => {
         await api('/sections', {
           name: sectionName,
-          min: coordinates(minimum),
-          max: coordinates(maximum),
+          min: editingSection ? draftSection.bounds.min : coordinates(minimum),
+          max: editingSection ? draftSection.bounds.max : coordinates(maximum),
         });
         await refresh();
         sectionName = '';
+        editingSection = false;
+        message = 'Sección guardada en las coordenadas del gimnasio.';
       });
     }}
   >
     <h2>Definir sección estable</h2>
+    <button
+      type="button"
+      disabled={!selected || !sceneBounds}
+      onclick={startSection}>Preparar sección visual</button
+    >
+    {#if editingSection}<p>
+        El volumen verde muestra la sección en preparación. Ajusta su centro y
+        tamaño; guardar confirma los límites.
+      </p>
+      <div class="spatial-fields">
+        {#each ['X', 'Y', 'Z'] as axis, i}
+          <label
+            >Centro {axis}<input
+              type="number"
+              step="any"
+              required
+              bind:value={center[i]}
+            /></label
+          >
+          <label
+            >Tamaño {axis}<input
+              type="number"
+              min="0.01"
+              step="any"
+              required
+              bind:value={dimensions[i]}
+            /></label
+          >
+        {/each}
+      </div>
+      <p>
+        Límites: {draftSection.bounds.min.map((n) => n.toFixed(3)).join(', ')} → {draftSection.bounds.max
+          .map((n) => n.toFixed(3))
+          .join(', ')}
+      </p>
+      <button type="button" onclick={() => (editingSection = false)}
+        >Cancelar preparación visual</button
+      >
+    {/if}
     <label
       >Nombre de sección<input
         bind:value={sectionName}
         required
         maxlength="80"
       /></label
-    ><label
-      >Límite mínimo X, Y, Z<input
-        bind:value={minimum}
-        placeholder="0, 0, 0"
-        required
-      /></label
-    ><label
-      >Límite máximo X, Y, Z<input
-        bind:value={maximum}
-        placeholder="5, 4, 1"
-        required
-      /></label
-    ><button disabled={busy}>Crear sección</button>
+    >{#if !editingSection}<label
+        >Límite mínimo X, Y, Z<input
+          bind:value={minimum}
+          placeholder="0, 0, 0"
+          required
+        /></label
+      ><label
+        >Límite máximo X, Y, Z<input
+          bind:value={maximum}
+          placeholder="5, 4, 1"
+          required
+        /></label
+      >{/if}<button disabled={busy}>Crear sección</button>
     <p>
       Los límites están en el sistema de coordenadas del gimnasio y permanecen
       entre capturas.
@@ -278,7 +399,13 @@
           bind:value={observations[f.id]}
           placeholder="X, Y, Z de la captura"
         /></label
-      >{/each}<button
+      >
+      {#if picked}<button
+          disabled={busy}
+          onclick={() => (observations[f.id] = picked!.raw.join(', '))}
+          >Usar punto seleccionado para {f.label}</button
+        >{/if}
+    {/each}<button
       disabled={busy || fiducials.length < 3}
       onclick={alignCapture}>Calcular alineación</button
     >{#if selected.alignment}<p>
@@ -325,3 +452,16 @@
     >
   </section>{/if}
 {#if message}<p role="status">{message}</p>{/if}
+
+<style>
+  .spatial-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .point-review {
+    padding: 12px;
+    background: white;
+    border: 1px solid #d9dfe5;
+  }
+</style>

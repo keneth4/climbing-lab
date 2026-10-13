@@ -31,7 +31,11 @@ it('streams binary multipart upload through the actual Worker runtime', async ()
   );
   try {
     const db = await mf.getD1Database('DB');
-    for (const file of ['0001_initial.sql', '0002_digital_twin.sql']) {
+    for (const file of [
+      '0001_initial.sql',
+      '0002_digital_twin.sql',
+      '0003_capture_camera.sql',
+    ]) {
       const sql = await readFile(
         new URL('../migrations/' + file, import.meta.url),
         'utf8',

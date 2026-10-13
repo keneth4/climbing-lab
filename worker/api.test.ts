@@ -39,6 +39,12 @@ beforeAll(async () => {
       new URL('../migrations/0002_digital_twin.sql', import.meta.url),
       'utf8',
     ));
+  migration +=
+    '\n' +
+    (await readFile(
+      new URL('../migrations/0003_capture_camera.sql', import.meta.url),
+      'utf8',
+    ));
   const envs = [];
   for (const id of ['gym-a', 'gym-b']) {
     const db = await mf.getD1Database('DB', id);

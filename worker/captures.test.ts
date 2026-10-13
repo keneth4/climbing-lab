@@ -38,7 +38,11 @@ beforeAll(async () => {
   const envs = [];
   for (const name of ['a', 'b']) {
     const db = await mf.getD1Database('DB', name);
-    for (const file of ['0001_initial.sql', '0002_digital_twin.sql']) {
+    for (const file of [
+      '0001_initial.sql',
+      '0002_digital_twin.sql',
+      '0003_capture_camera.sql',
+    ]) {
       const sql = await readFile(
         new URL('../migrations/' + file, import.meta.url),
         'utf8',
@@ -282,4 +286,70 @@ it('imports a retired route from an older capture without rewriting ascents', as
       'revision',
     ),
   ).toBe(1);
+});
+
+it('persists an initial camera, rejects stale/invalid/unauthorized edits and clears it on alignment', async () => {
+  const id = await upload();
+  const camera = {
+    captureId: id,
+    yaw: 0.2,
+    pitch: 0.1,
+    distance: 3,
+    target: [0, 1, 0],
+  };
+  expect(
+    (
+      await post(
+        `/api/captures/${id}/camera`,
+        { expectedVersion: 1, camera },
+        a,
+        'editor',
+      )
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await post(`/api/captures/${id}/camera`, {
+        expectedVersion: 1,
+        camera: { ...camera, distance: -1 },
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (await post(`/api/captures/${id}/camera`, { expectedVersion: 1, camera }))
+      .status,
+  ).toBe(200);
+  expect(
+    (await (await get(`/api/captures/${id}/metadata`)).json()).capture
+      .initialCamera,
+  ).toEqual(camera);
+  expect(
+    (await post(`/api/captures/${id}/camera`, { expectedVersion: 1, camera }))
+      .status,
+  ).toBe(409);
+  const references = [
+    { id: 'a', observed: [0, 0, 0] },
+    { id: 'b', observed: [1, 0, 0] },
+    { id: 'c', observed: [0, 1, 0] },
+  ];
+  expect(
+    (
+      await post(`/api/captures/${id}/align`, {
+        expectedVersion: 2,
+        references,
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (await (await get(`/api/captures/${id}/metadata`)).json()).capture
+      .initialCamera,
+  ).toBeNull();
+  expect(
+    (
+      await post(`/api/captures/${next}/camera`, {
+        expectedVersion: 2,
+        camera: { ...camera, captureId: next },
+      })
+    ).status,
+  ).toBe(409);
 });

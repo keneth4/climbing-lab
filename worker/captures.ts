@@ -17,6 +17,7 @@ type Capture = {
   transform: string;
   alignment: string | null;
   version: number;
+  initial_camera: string | null;
 };
 async function admin(env: Env, user: string) {
   const role = await env.DB.prepare('SELECT role FROM staff WHERE user_id=?')
@@ -43,6 +44,7 @@ const describe = (c: Capture) => ({
   upload_state: c.upload_state,
   version: c.version,
   transform: JSON.parse(c.transform),
+  initialCamera: c.initial_camera ? JSON.parse(c.initial_camera) : null,
   alignment: c.alignment ? JSON.parse(c.alignment) : null,
   fileUrl: `/api/captures/${c.id}/file/${c.filename.toLowerCase().endsWith('.sog') ? 'scene.sog' : 'scene.ply'}`,
 });
@@ -76,6 +78,12 @@ export async function captureApi(
     return json({
       sections: r.results.map((v) => ({ ...v, bounds: JSON.parse(v.bounds) })),
     });
+  }
+  const metadataMatch = path.match(/^\/api\/captures\/([^/]+)\/metadata$/);
+  if (metadataMatch && request.method === 'GET') {
+    const c = await capture(env, metadataMatch[1]);
+    if (c.status !== 'published') await admin(env, await identity());
+    return json({ capture: describe(c) });
   }
   const fileMatch = path.match(
     /^\/api\/captures\/([^/]+)\/file\/(scene\.(?:ply|sog))$/,
@@ -271,6 +279,49 @@ export async function captureApi(
       );
     }
   }
+  const cameraMatch = path.match(/^\/api\/captures\/([^/]+)\/camera$/);
+  if (cameraMatch && request.method === 'POST') {
+    const c = await capture(env, cameraMatch[1]);
+    const b = await body(request);
+    if (
+      c.status !== 'draft' ||
+      c.upload_state !== 'ready' ||
+      b.expectedVersion !== c.version
+    )
+      throw new HttpError(409, 'Captura modificada o no editable.');
+    const v = b.camera as Record<string, unknown> | undefined;
+    try {
+      if (
+        !v ||
+        v.captureId !== c.id ||
+        !['yaw', 'pitch', 'distance'].every(
+          (k) => typeof v[k] === 'number' && Number.isFinite(v[k]),
+        ) ||
+        Math.abs(Number(v.yaw)) > 1e6 ||
+        Math.abs(Number(v.pitch)) > 1.4 ||
+        Number(v.distance) < 0.05 ||
+        Number(v.distance) > 10000
+      )
+        throw new Error('Cámara inválida.');
+      point(v.target);
+    } catch (e) {
+      throw new HttpError(400, (e as Error).message);
+    }
+    const view = {
+      captureId: c.id,
+      yaw: v!.yaw,
+      pitch: v!.pitch,
+      distance: v!.distance,
+      target: v!.target,
+    };
+    const updated = await env.DB.prepare(
+      "UPDATE captures SET initial_camera=?,version=version+1 WHERE id=? AND status='draft' AND version=?",
+    )
+      .bind(JSON.stringify(view), c.id, c.version)
+      .run();
+    if (!updated.meta.changes) throw new HttpError(409, 'Captura modificada.');
+    return json({ capture: describe(await capture(env, c.id)) });
+  }
   const alignment = path.match(/^\/api\/captures\/([^/]+)\/align$/);
   if (alignment && request.method === 'POST') {
     const c = await capture(env, alignment[1]);
@@ -315,7 +366,7 @@ export async function captureApi(
       throw new HttpError(400, (e as Error).message);
     }
     const updated = await env.DB.prepare(
-      "UPDATE captures SET transform=?,alignment=?,version=version+1 WHERE id=? AND status='draft' AND version=?",
+      "UPDATE captures SET transform=?,alignment=?,initial_camera=NULL,version=version+1 WHERE id=? AND status='draft' AND version=?",
     )
       .bind(
         JSON.stringify(result.transform),

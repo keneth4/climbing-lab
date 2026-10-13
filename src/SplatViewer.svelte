@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { principalBounds, selectCenter } from './spatial';
   import { onMount } from 'svelte';
   import { supabase } from './auth';
   import type { Capture, Section, Fiducial } from './twin';
@@ -17,6 +18,9 @@
     section,
     onReady,
     fiducials,
+    onInitialSave,
+    onPoint,
+    onBounds,
   }: {
     saved?: CameraView;
     onSave: (view: CameraView) => void;
@@ -26,9 +30,15 @@
     section?: Section;
     onReady?: (id: string, version: number) => void;
     fiducials?: Fiducial[];
+    onInitialSave?: (view: CameraView) => void;
+    onPoint?: (raw: Point, world: Point) => void;
+    onBounds?: (bounds: { min: Point; max: Point }) => void;
   } = $props();
   let canvas: HTMLCanvasElement;
-  let status = $state('Carga un PLY o SOG local para explorar la captura.');
+  let status = $state('Selecciona una captura para explorarla.');
+  let navigation = $state<'orbit' | 'pan'>('orbit');
+  let picking = $state(false);
+  let selectedPoint = $state<Point | undefined>();
   let initialized = $state(false);
   let ready = $state(false);
   let loading = $state(false);
@@ -47,6 +57,11 @@
         save: () => CameraView;
         reset: () => void;
         orient: () => void;
+        zoom: (factor: number) => void;
+        move: (x: number, y: number) => void;
+        focus: (point: Point) => void;
+        frameAll: () => void;
+        framePrincipal: () => void;
       }
     | undefined;
   $effect(() => {
@@ -103,6 +118,8 @@
         let fileId = '';
         let managedModel: Capture | undefined;
         let requestedId = '';
+        let mainBounds: { min: Point; max: Point } | undefined;
+        let pickedEntity: InstanceType<typeof pc.Entity> | undefined;
         let downloadAbort: AbortController | undefined;
         let markersRoot: InstanceType<typeof pc.Entity> | undefined;
         const markerMaterial = (color: InstanceType<typeof pc.Color>) => {
@@ -113,7 +130,29 @@
         };
         const green = markerMaterial(new pc.Color(0.1, 0.8, 0.4)),
           red = markerMaterial(new pc.Color(0.95, 0.25, 0.1));
+        let visibleSection: Section | undefined;
+        let pickedWorld: Point | undefined;
         let sectionEntity: InstanceType<typeof pc.Entity> | undefined;
+        const frameBounds = (principal = true) => {
+          if (!asset || !entity) return;
+          const bounds = new pc.BoundingBox();
+          if (principal && mainBounds) {
+            const local = new pc.BoundingBox(
+              new pc.Vec3(
+                ...mainBounds.min.map((n, i) => (n + mainBounds!.max[i]) / 2),
+              ),
+              new pc.Vec3(
+                ...mainBounds.min.map((n, i) => (mainBounds!.max[i] - n) / 2),
+              ),
+            );
+            bounds.setFromTransformedAabb(local, entity.getWorldTransform());
+          } else
+            bounds.setFromTransformedAabb(
+              (asset.resource as InstanceType<typeof pc.GSplatResource>).aabb,
+              entity.getWorldTransform(),
+            );
+          return bounds;
+        };
         const frame = () => {
           if (!entity || !asset) return;
           if (managedModel) {
@@ -126,11 +165,13 @@
             const q = managedModel.transform.rotation;
             entity.setLocalRotation(q[0], q[1], q[2], q[3]);
           } else entity.setLocalEulerAngles(0, 0, correctVertical ? 180 : 0);
-          const bounds = new pc.BoundingBox();
-          bounds.setFromTransformedAabb(
-            (asset.resource as InstanceType<typeof pc.GSplatResource>).aabb,
-            entity.getWorldTransform(),
-          );
+          const bounds = frameBounds()!;
+          const min = bounds.getMin(),
+            max = bounds.getMax();
+          onBounds?.({
+            min: [min.x, min.y, min.z],
+            max: [max.x, max.y, max.z],
+          });
           target.copy(bounds.center);
           distance = Math.max(bounds.halfExtents.length() * 2.5, 0.5);
           yaw = 0;
@@ -145,7 +186,7 @@
             target: [target.x, target.y, target.z],
           };
           update();
-          apply(saved);
+          apply(saved || managedModel?.initialCamera || undefined);
         };
         let defaultView = {
           yaw: 0,
@@ -163,7 +204,8 @@
           camera.lookAt(target);
         };
         const apply = (view?: CameraView) => {
-          if (!view || view.captureId !== captureId) view = defaultView;
+          if (!view || view.captureId !== captureId)
+            view = managedModel?.initialCamera || defaultView;
           yaw = view.yaw;
           pitch = view.pitch;
           distance = view.distance;
@@ -178,10 +220,70 @@
         );
         resize.observe(canvas);
         const abort = new AbortController();
+        const move = (dx: number, dy: number) => {
+          target
+            .add(camera.right.clone().mulScalar(-dx * distance * 0.002))
+            .add(camera.up.clone().mulScalar(dy * distance * 0.002));
+          update();
+        };
+        const zoom = (factor: number) => {
+          distance = Math.max(0.05, Math.min(10000, distance * factor));
+          update();
+        };
+        const choosePoint = (e: PointerEvent) => {
+          if (!asset || !entity) return;
+          const rect = canvas.getBoundingClientRect();
+          const x =
+            ((e.clientX - rect.left) * app.graphicsDevice.width) / rect.width;
+          const y =
+            ((e.clientY - rect.top) * app.graphicsDevice.height) / rect.height;
+          const far = camera.camera!.screenToWorld(x, y, 1);
+          const worldOrigin = camera.getPosition();
+          const inverse = entity.getWorldTransform().clone().invert();
+          const origin = inverse.transformPoint(worldOrigin),
+            next = inverse.transformPoint(far);
+          const direction = next.clone().sub(origin).normalize();
+          const localTarget = inverse.transformPoint(target);
+          const raw = selectCenter(
+            (asset.resource as InstanceType<typeof pc.GSplatResource>).centers,
+            [origin.x, origin.y, origin.z],
+            [direction.x, direction.y, direction.z],
+            localTarget.distance(origin),
+            (Math.tan((camera.camera!.fov * Math.PI) / 360) * 16) / rect.height,
+          );
+          if (!raw) {
+            status =
+              'No se encontró un punto cerca del cursor. Acércate y vuelve a seleccionar.';
+            return;
+          }
+          const world = entity
+            .getWorldTransform()
+            .transformPoint(new pc.Vec3(...raw));
+          selectedPoint = [world.x, world.y, world.z];
+          pickedWorld = selectedPoint;
+          pickedEntity?.destroy();
+          pickedEntity = new pc.Entity('selected-point');
+          pickedEntity.addComponent('render', { type: 'sphere' });
+          pickedEntity.setPosition(world);
+          pickedEntity.setLocalScale(
+            distance * 0.012,
+            distance * 0.012,
+            distance * 0.012,
+          );
+          for (const mesh of pickedEntity.render!.meshInstances)
+            mesh.material = red;
+          app.root.addChild(pickedEntity);
+          picking = false;
+          onPoint?.(raw, selectedPoint);
+        };
         let drag: { x: number; y: number } | undefined;
         canvas.addEventListener(
           'pointerdown',
           (e) => {
+            if (picking) {
+              choosePoint(e);
+              return;
+            }
             drag = { x: e.clientX, y: e.clientY };
             canvas.setPointerCapture(e.pointerId);
           },
@@ -193,12 +295,8 @@
             if (!drag) return;
             const dx = e.clientX - drag.x,
               dy = e.clientY - drag.y;
-            if (e.shiftKey) {
-              const right = camera.right
-                .clone()
-                .mulScalar(-dx * distance * 0.002);
-              const up = camera.up.clone().mulScalar(dy * distance * 0.002);
-              target.add(right).add(up);
+            if (e.shiftKey || navigation === 'pan') {
+              move(dx, dy);
             } else {
               yaw -= dx * 0.008;
               pitch = Math.max(-1.4, Math.min(1.4, pitch + dy * 0.008));
@@ -226,7 +324,52 @@
           },
           { signal: abort.signal, passive: false },
         );
+        canvas.addEventListener(
+          'keydown',
+          (e) => {
+            if (e.key === 'Escape') {
+              picking = false;
+              return;
+            }
+            if (
+              [
+                'ArrowLeft',
+                'ArrowRight',
+                'ArrowUp',
+                'ArrowDown',
+                '+',
+                '-',
+                '=',
+              ].includes(e.key)
+            ) {
+              e.preventDefault();
+              if (e.key === '+' || e.key === '=') zoom(0.8);
+              else if (e.key === '-') zoom(1.25);
+              else
+                move(
+                  e.key === 'ArrowLeft' ? -25 : e.key === 'ArrowRight' ? 25 : 0,
+                  e.key === 'ArrowUp' ? -25 : e.key === 'ArrowDown' ? 25 : 0,
+                );
+            }
+          },
+          { signal: abort.signal },
+        );
         controller = {
+          zoom,
+          move,
+          focus: (p) => {
+            target.set(...p);
+            update();
+          },
+          frameAll: () => {
+            const b = frameBounds(false);
+            if (b) {
+              target.copy(b.center);
+              distance = Math.max(b.halfExtents.length() * 2.5, 0.5);
+              update();
+            }
+          },
+          framePrincipal: () => apply(defaultView),
           apply,
           markers: (references, observed, transform) => {
             markersRoot?.destroy();
@@ -250,6 +393,7 @@
             app.root.addChild(markersRoot);
           },
           section: (selected) => {
+            visibleSection = selected;
             sectionEntity?.destroy();
             sectionEntity = undefined;
             if (!selected) return;
@@ -279,10 +423,14 @@
           },
           loadManaged: async (source) => {
             if (managedModel?.id === source.id && asset) {
+              const changedTransform =
+                JSON.stringify(managedModel.transform) !==
+                JSON.stringify(source.transform);
               managedModel = source;
               if (entity) entity.enabled = true;
               ready = true;
-              frame();
+              if (changedTransform) frame();
+              else if (source.initialCamera) apply(source.initialCamera);
               onReady?.(source.id, source.version);
               return;
             }
@@ -353,6 +501,14 @@
                 app.assets.remove(asset);
               }
               asset = next;
+              selectedPoint = undefined;
+              pickedWorld = undefined;
+              pickedEntity?.destroy();
+              pickedEntity = undefined;
+              mainBounds = principalBounds(
+                (next.resource as InstanceType<typeof pc.GSplatResource>)
+                  .centers,
+              );
               managedModel = managed;
               entity = new pc.Entity('splat');
               entity.addComponent('gsplat', { asset: next });
@@ -372,6 +528,44 @@
             }
           },
         };
+        app.on('update', () => {
+          if (visibleSection) {
+            const { min, max } = visibleSection.bounds;
+            const corners = Array.from(
+              { length: 8 },
+              (_, i) =>
+                new pc.Vec3(
+                  i & 1 ? max[0] : min[0],
+                  i & 2 ? max[1] : min[1],
+                  i & 4 ? max[2] : min[2],
+                ),
+            );
+            for (let i = 0; i < 8; i++)
+              for (const bit of [1, 2, 4])
+                if (!(i & bit))
+                  app.drawLine(
+                    corners[i],
+                    corners[i | bit],
+                    new pc.Color(0.1, 1, 0.4),
+                    false,
+                  );
+          }
+          if (pickedWorld) {
+            const p = new pc.Vec3(...pickedWorld),
+              r = Math.max(distance * 0.01, 0.01);
+            for (const offset of [
+              new pc.Vec3(r, 0, 0),
+              new pc.Vec3(0, r, 0),
+              new pc.Vec3(0, 0, r),
+            ])
+              app.drawLine(
+                p.clone().sub(offset),
+                p.clone().add(offset),
+                new pc.Color(1, 0.3, 0.1),
+                false,
+              );
+          }
+        });
         app.start();
         update();
         initialized = true;
@@ -410,8 +604,61 @@
     tabindex="0"
   ></canvas>
   <p>
-    Arrastra para orbitar · Rueda para acercar · Shift y arrastre para desplazar
+    Arrastra para {navigation === 'orbit' ? 'orbitar' : 'desplazar'} · Rueda para
+    acercar · Flechas para desplazar · + / − para zoom
   </p>
+  <div class="actions">
+    <button
+      disabled={!ready}
+      aria-pressed={navigation === 'orbit'}
+      onclick={() => (navigation = 'orbit')}>Orbitar</button
+    >
+    <button
+      disabled={!ready}
+      aria-pressed={navigation === 'pan'}
+      onclick={() => (navigation = 'pan')}>Desplazar</button
+    >
+    <button disabled={!ready} onclick={() => controller?.zoom(0.8)}
+      >Acercar</button
+    >
+    <button disabled={!ready} onclick={() => controller?.zoom(1.25)}
+      >Alejar</button
+    >
+    <button disabled={!ready} onclick={() => controller?.framePrincipal()}
+      >Enfocar contenido principal</button
+    >
+    <button disabled={!ready} onclick={() => controller?.frameAll()}
+      >Ver límites completos</button
+    >
+    {#if section}<button
+        disabled={!ready}
+        onclick={() => {
+          const { min, max } = section.bounds;
+          controller?.focus(min.map((n, i) => (n + max[i]) / 2) as Point);
+        }}>Enfocar sección</button
+      >{/if}
+    {#if onPoint}<button
+        disabled={!ready}
+        aria-pressed={picking}
+        onclick={() => (picking = !picking)}
+        >{picking ? 'Cancelar selección' : 'Seleccionar punto'}</button
+      >{/if}
+    {#if onInitialSave}<button
+        disabled={!ready || capture?.status !== 'draft'}
+        onclick={() => {
+          if (controller) onInitialSave(controller.save());
+        }}>Guardar cámara inicial del gimnasio</button
+      >{/if}
+  </div>
+  {#if picking}<p role="status">
+      Haz clic o toca sobre la pared para seleccionar un centro gaussiano
+      aproximado. Escape cancela.
+    </p>{/if}
+  {#if selectedPoint}<p>
+      Punto aproximado del gimnasio: {selectedPoint
+        .map((n) => n.toFixed(3))
+        .join(', ')}. Confirma su posición antes de guardarlo.
+    </p>{/if}
   <div class="actions">
     <button disabled={!ready} onclick={() => controller?.reset()}
       >Vista general</button
@@ -430,12 +677,11 @@
       }}>Descargar vista 3D</button
     >
   </div>
-  {#if saved}<p>
-      Cámara guardada. Se aplica al cargar el mismo archivo local.
-    </p>{/if}
+  {#if saved}<p>Cámara de ruta guardada para esta captura.</p>{/if}
   <p>
-    La captura se carga desde el almacenamiento del gimnasio. SPZv4, marcadores
-    3D y LOD por ruta están pendientes.
+    La captura completa permanece intacta. El encuadre principal usa una
+    estimación del contenido central; puedes revisar todos los límites. SPZv4 y
+    LOD por ruta están pendientes.
   </p>
 </div>
 

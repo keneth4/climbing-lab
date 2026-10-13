@@ -19,6 +19,7 @@ Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](d
 - [API local y pruebas de aislamiento](docs/api-local.md)
 - [Login Supabase y conexión a D1](docs/auth-integracion.md)
 - [Editor de rutas y revisiones](docs/editor-rutas.md)
+- [Preparación de capturas: requisitos, tareas y logros](docs/preparacion-capturas.md)
 - [Clon digital: capturas completas, secciones y alineación](docs/clon-digital.md)
 
 Primero se construirá una interfaz base enfocada en funcionalidad. El diseño particular de cada sitio se trabajará después, siguiendo el enfoque de MenuMaker y el sitio de AMPM.
