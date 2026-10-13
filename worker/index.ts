@@ -1,3 +1,4 @@
+import { entryApi } from './entries';
 import { point } from '../shared/alignment';
 import { HttpError, json, body, text } from './http';
 import { captureApi } from './captures';
@@ -178,7 +179,7 @@ export async function handle(
         (k) =>
           !(
             path === '/api/entries'
-              ? ['limit', 'offset', 'from', 'until', 'result']
+              ? ['limit', 'offset', 'from', 'until', 'result', 'state']
               : ['limit', 'offset', 'status']
           ).includes(k),
       )
@@ -224,6 +225,8 @@ export async function handle(
       });
     }
     const user = await authenticate(request, env);
+    const entryResponse = await entryApi(request, env, user);
+    if (entryResponse) return entryResponse;
     if (
       (path === '/api/routes' && request.method === 'POST') ||
       (routeMatch && request.method === 'PUT')
@@ -383,7 +386,15 @@ export async function handle(
         );
       if (result && !['intento', 'ascenso'].includes(result))
         throw new HttpError(400, 'Resultado inválido.');
-      const where = ['e.user_id=?'];
+      const state = url.searchParams.get('state') || 'active';
+      if (!['active', 'deleted'].includes(state))
+        throw new HttpError(400, 'Estado de registro inválido.');
+      const where = [
+        'e.user_id=?',
+        state === 'deleted'
+          ? 'e.deleted_at IS NOT NULL'
+          : 'e.deleted_at IS NULL',
+      ];
       const params: (string | number)[] = [user];
       if (from) {
         where.push('e.created_at>=?');
@@ -446,11 +457,23 @@ export async function handle(
         (typeof b.notes !== 'string' || b.notes.length > 2000)
       )
         throw new HttpError(400, 'Notas inválidas.');
-      const entryId = crypto.randomUUID();
-      await env.DB.prepare(
-        'INSERT INTO entries (id,user_id,route_id,revision,attempts,result,notes,created_at) VALUES (?,?,?,?,?,?,?,?)',
-      )
-        .bind(
+      const entryId = crypto.randomUUID(),
+        now = new Date().toISOString();
+      const snapshot = JSON.stringify({
+        id: entryId,
+        routeId: id,
+        routeRevision: r.revision,
+        attempts: b.attempts,
+        result: b.result,
+        notes: b.notes || '',
+        createdAt: now,
+        deletedAt: null,
+        entryVersion: 1,
+      });
+      await env.DB.batch([
+        env.DB.prepare(
+          'INSERT INTO entries(id,user_id,route_id,revision,attempts,result,notes,created_at) VALUES(?,?,?,?,?,?,?,?)',
+        ).bind(
           entryId,
           user,
           id,
@@ -458,9 +481,24 @@ export async function handle(
           b.attempts,
           b.result,
           b.notes || '',
-          new Date().toISOString(),
-        )
-        .run();
+          now,
+        ),
+        env.DB.prepare('INSERT INTO entry_history VALUES(?,?,?,?,?,?)').bind(
+          entryId,
+          1,
+          snapshot,
+          'created',
+          user,
+          now,
+        ),
+        env.DB.prepare('INSERT INTO audit_events VALUES(?,?,?,?,?)').bind(
+          crypto.randomUUID(),
+          user,
+          'entry.created',
+          entryId,
+          now,
+        ),
+      ]);
       return json({ id: entryId }, 201);
     }
     if (path === '/api/reports' && request.method === 'POST') {

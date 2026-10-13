@@ -27,6 +27,8 @@ export function journalCsv(entries: Entry[]): string {
       'Resultado',
       'Intentos',
       'Notas',
+      'Estado registro',
+      'Versión registro',
     ],
     ...entries.map((e) => [
       e.date,
@@ -36,6 +38,8 @@ export function journalCsv(entries: Entry[]): string {
       e.result,
       e.attempts,
       e.notes,
+      e.deletedAt ? 'retirado' : 'vigente',
+      e.entryVersion || 1,
     ]),
   ];
   return '\uFEFF' + rows.map((r) => r.map(cell).join(',')).join('\r\n');

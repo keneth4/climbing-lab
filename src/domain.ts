@@ -32,6 +32,8 @@ export type Route = {
   camera?: CameraView;
 };
 export type Entry = {
+  entryVersion?: number;
+  deletedAt?: string | null;
   id: string;
   routeId: string;
   revision: number;

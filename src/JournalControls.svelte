@@ -6,7 +6,8 @@
   let { onEntries }: { onEntries: (entries: Entry[]) => void } = $props();
   let from = $state(''),
     to = $state(''),
-    result = $state('');
+    result = $state(''),
+    recordState = $state('active');
   let summary = $state<
     | { records: number; attempts: number; ascents: number; routes: number }
     | undefined
@@ -31,6 +32,8 @@
       if (disposed || ticket !== request) return;
       entries = data.entries.map((e: any) => ({
         id: e.id,
+        entryVersion: e.entry_version || 1,
+        deletedAt: e.deleted_at || null,
         routeId: e.route_id,
         revision: e.revision,
         routeName: e.route_name || e.route_id,
@@ -60,6 +63,7 @@
       if (from) q.set('from', localBoundary(from));
       if (to) q.set('until', localBoundary(to, true));
       if (result) q.set('result', result);
+      q.set('state', recordState);
       load(0, q.size ? '&' + q.toString() : '');
     } catch (e) {
       error = (e as Error).message;
@@ -104,6 +108,13 @@
       ></label
     >
   </div>
+  <label
+    >Estado de registros<select bind:value={recordState}
+      ><option value="active">Vigentes</option><option value="deleted"
+        >Retirados</option
+      ></select
+    ></label
+  >
   <button disabled={busy}>Aplicar filtros</button><button
     type="button"
     disabled={busy}
@@ -134,8 +145,9 @@
     </div>
   </dl>
   <p>
-    Resumen de todos los registros del intervalo aplicado, incluyendo otras
-    páginas.
+    Resumen de {applied.includes('state=deleted')
+      ? 'registros retirados'
+      : 'registros vigentes'} del intervalo aplicado, incluyendo otras páginas.
   </p>{/if}
 {#if busy}<p role="status">Cargando bitácora…</p>{/if}{#if error}<p
     role="alert"

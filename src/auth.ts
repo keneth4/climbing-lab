@@ -7,7 +7,7 @@ export const supabase = createClient(
 export async function api(
   path: string,
   body?: unknown,
-  method?: 'POST' | 'PUT',
+  method?: 'POST' | 'PUT' | 'DELETE',
 ) {
   const { data } = await supabase.auth.getSession();
   const response = await fetch(`/api${path}`, {

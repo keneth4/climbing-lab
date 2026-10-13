@@ -32,6 +32,8 @@ test('private journal filters, paginates and exports historical records, then cl
   );
   const entries = Array.from({ length: 55 }, (_, i) => ({
     id: 'entry-' + i,
+    entry_version: 1,
+    deleted_at: null as string | null,
     route_id: 'old-route',
     revision: 1,
     route_name: 'Ruta histórica',
@@ -42,6 +44,23 @@ test('private journal filters, paginates and exports historical records, then cl
     notes: 'Nota privada ' + i,
     route_snapshot: JSON.stringify({ holds: [] }),
   }));
+  const snap = (e: any) => ({
+    attempts: e.attempts,
+    result: e.result,
+    notes: e.notes,
+    routeRevision: e.revision,
+    createdAt: e.created_at,
+  });
+  const histories: Record<string, any[]> = {};
+  for (const e of entries)
+    histories[e.id] = [
+      {
+        version: 1,
+        action: 'baseline',
+        changedAt: e.created_at,
+        snapshot: snap(e),
+      },
+    ];
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('**/api/**', async (route) => {
@@ -72,13 +91,40 @@ test('private journal filters, paginates and exports historical records, then cl
       };
     else if (path === '/api/captures/current') json = { capture: null };
     else if (path === '/api/sections') json = { sections: [] };
-    else if (path === '/api/entries') {
+    else if (/^\/api\/entries\/[^/]+/.test(path)) {
+      const id = path.split('/')[3],
+        e = entries.find((e) => e.id === id)!;
+      expect(route.request().headers().authorization).toBe('Bearer ' + token);
+      if (path.endsWith('/history')) json = { history: histories[id] };
+      else {
+        const value = route.request().postDataJSON();
+        expect(value.expectedVersion).toBe(e.entry_version);
+        const deleting = route.request().method() === 'DELETE';
+        if (deleting) e.deleted_at = new Date().toISOString();
+        else
+          Object.assign(e, {
+            attempts: value.attempts,
+            result: value.result,
+            notes: value.notes,
+          });
+        e.entry_version++;
+        histories[id].unshift({
+          version: e.entry_version,
+          action: deleting ? 'deleted' : 'updated',
+          changedAt: new Date().toISOString(),
+          snapshot: snap(e),
+        });
+        json = { entry: snap(e) };
+      }
+    } else if (path === '/api/entries') {
       expect(route.request().headers().authorization).toBe('Bearer ' + token);
       if (route.request().method() === 'POST') {
         const data = route.request().postDataJSON();
         expect(data.routeId).toBe('active-route');
         entries.unshift({
           id: 'new-entry',
+          entry_version: 1,
+          deleted_at: null,
           route_id: data.routeId,
           revision: 1,
           route_name: 'Ruta actual',
@@ -89,14 +135,24 @@ test('private journal filters, paginates and exports historical records, then cl
           notes: data.notes,
           route_snapshot: JSON.stringify({ holds: [] }),
         });
+        histories['new-entry'] = [
+          {
+            version: 1,
+            action: 'created',
+            changedAt: new Date().toISOString(),
+            snapshot: snap(entries[0]),
+          },
+        ];
         await route.fulfill({ json: { id: 'new-entry' }, status: 201 });
         return;
       }
       const from = url.searchParams.get('from'),
         until = url.searchParams.get('until'),
         result = url.searchParams.get('result');
+      const state = url.searchParams.get('state') || 'active';
       const rows = entries.filter(
         (e) =>
+          (state === 'deleted' ? !!e.deleted_at : !e.deleted_at) &&
           (!from || e.created_at >= from) &&
           (!until || e.created_at < until) &&
           (!result || e.result === result),
@@ -189,6 +245,70 @@ test('private journal filters, paginates and exports historical records, then cl
     page.getByText('Registro nuevo probado', { exact: true }),
   ).toBeVisible();
   expect(entries).toHaveLength(56);
+  await page
+    .getByRole('button', { name: 'Corregir registro', exact: true })
+    .first()
+    .click();
+  await page.getByLabel('Notas del registro').fill('Cancelled edit');
+  await page.getByRole('button', { name: 'Cancelar corrección' }).click();
+  expect(entries[0].notes).toBe('Registro nuevo probado');
+  await page
+    .getByRole('button', { name: 'Corregir registro', exact: true })
+    .first()
+    .click();
+  await page.getByLabel('Intentos del registro').fill('3');
+  await page.getByLabel('Resultado del registro').selectOption('intento');
+  await page.getByLabel('Notas del registro').fill('Corrección probada');
+  await page
+    .getByRole('button', { name: 'Guardar corrección', exact: true })
+    .click();
+  await expect(
+    page.getByText('Registro corregido; historial conservado.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(entries[0].entry_version).toBe(2);
+  expect(entries[0].revision).toBe(1);
+  await page
+    .getByRole('button', { name: 'Ver historial del registro' })
+    .first()
+    .click();
+  await expect(
+    page.getByText('Versión 2 · Registro corregido', { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: `/tmp/journal-history-${test.info().project.name}.png`,
+    fullPage: false,
+  });
+  await page
+    .getByRole('button', { name: 'Retirar registro', exact: true })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Cancelar retiro' }).click();
+  expect(entries[0].deleted_at).toBeNull();
+  await page
+    .getByRole('button', { name: 'Retirar registro', exact: true })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Confirmar retiro' }).click();
+  await expect(
+    page.getByText('Registro retirado de tu actividad vigente.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByLabel('Estado de registros').selectOption('deleted');
+  await page.getByRole('button', { name: 'Aplicar filtros' }).click();
+  await expect(
+    page.getByText('Registro retirado · versión 3', { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Ver historial del registro' })
+    .first()
+    .click();
+  await expect(
+    page.getByText('Versión 3 · Registro retirado', { exact: true }),
+  ).toBeVisible();
+
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

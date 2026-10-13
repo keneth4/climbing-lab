@@ -116,3 +116,13 @@ Se completó la [primera entrega de bitácora personal](bitacora-personal.md): r
 Las mejoras del UX/UI de secciones, gizmos y orientación libre siguen registradas y diferidas por preferencia del usuario. La prioridad inmediata es cerrar flujos cotidianos del piloto, no ampliar módulos comerciales antes de validarlo.
 
 - [x] Acceso visible **Añadir registro** en bitácora y prueba de guardar/cancelar en escritorio y móvil.
+
+## Cierre: corrección y retiro de actividad personal
+
+- [x] Historial privado y versión independiente de la revisión de ruta.
+- [x] Corrección de intentos, resultado y notas sin alterar ruta ni fecha.
+- [x] Retiro confirmado y filtro de retirados, con exclusión del resumen vigente.
+- [x] Transacciones, conflictos concurrentes, aislamiento de propietario/gimnasio y cancelación.
+- [x] Flujo de navegador escritorio/móvil y limpieza del historial al refrescar sesión.
+
+Continúan pendientes fecha explícita de actividad pasada y CSV del intervalo completo. Luego: proyectos/sesiones, visuales 3D compartibles, piloto remoto y gestión comercial en el orden anterior.

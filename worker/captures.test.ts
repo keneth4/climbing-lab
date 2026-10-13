@@ -44,6 +44,7 @@ beforeAll(async () => {
       '0003_capture_camera.sql',
       '0004_section_geometry.sql',
       '0005_section_revisions.sql',
+      '0006_entry_history.sql',
     ]) {
       const sql = await readFile(
         new URL('../migrations/' + file, import.meta.url),
@@ -199,7 +200,7 @@ it('stores a complete draft privately and publishes the initial capture', async 
       .run();
   }
   await a.DB.prepare(
-    "INSERT INTO entries VALUES('ascent','visitor','old-left',1,2,'ascenso','','2026-10-12')",
+    "INSERT INTO entries(id,user_id,route_id,revision,attempts,result,notes,created_at) VALUES('ascent','visitor','old-left',1,2,'ascenso','','2026-10-12')",
   ).run();
 });
 it('aligns a replacement from fiducials and updates only selected sections', async () => {

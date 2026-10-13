@@ -57,6 +57,12 @@ beforeAll(async () => {
       new URL('../migrations/0005_section_revisions.sql', import.meta.url),
       'utf8',
     ));
+  migration +=
+    '\n' +
+    (await readFile(
+      new URL('../migrations/0006_entry_history.sql', import.meta.url),
+      'utf8',
+    ));
   const envs = [];
   for (const id of ['gym-a', 'gym-b']) {
     const db = await mf.getD1Database('DB', id);
@@ -246,7 +252,9 @@ describe('per-gym D1 isolation', () => {
       ).status,
     ).toBe(200);
     expect(
-      await a.DB.prepare('SELECT COUNT(*) AS n FROM audit_events').first('n'),
+      await a.DB.prepare(
+        "SELECT COUNT(*) AS n FROM audit_events WHERE action='report.resolve'",
+      ).first('n'),
     ).toBe(1);
   });
   it('rejects invalid inputs and oversized streamed bodies', async () => {
@@ -516,4 +524,88 @@ it('filters and paginates private activity with a complete summary isolated by a
       )
     ).status,
   ).toBe(400);
+});
+it('lets only the owner correct or retire a record atomically while preserving its route and history', async () => {
+  const owner = 'entry-owner';
+  const created = await (
+    await handle(
+      req('/api/entries', {
+        routeId: 'route-a',
+        attempts: 2,
+        result: 'ascenso',
+        notes: 'original',
+      }),
+      a,
+      asUser(owner),
+    )
+  ).json();
+  const id = created.id;
+  const call = (method: string, value: unknown, user = owner, env = a) =>
+    handle(
+      new Request('https://local.test/api/entries/' + id, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(value),
+      }),
+      env,
+      asUser(user),
+    );
+  const history = (user = owner, env = a) =>
+    handle(req(`/api/entries/${id}/history`), env, asUser(user));
+  const first = await (await history()).json();
+  expect(first.history).toHaveLength(1);
+  expect(first.history[0].action).toBe('created');
+  expect((await history('alice')).status).toBe(404);
+  expect((await history(owner, b)).status).toBe(404);
+  const edit = {
+    expectedVersion: 1,
+    attempts: 3,
+    result: 'intento',
+    notes: 'corrected',
+  };
+  expect((await call('PUT', edit, 'alice')).status).toBe(404);
+  expect((await call('PUT', { ...edit, routeId: 'other-route' })).status).toBe(
+    400,
+  );
+  expect((await call('PUT', { ...edit, attempts: 0 })).status).toBe(400);
+  const concurrent = await Promise.all([
+    call('PUT', edit),
+    call('PUT', { ...edit, notes: 'another edit' }),
+  ]);
+  expect(concurrent.map((r) => r.status).sort()).toEqual([200, 409]);
+  const second = await (await history()).json();
+  expect(second.history).toHaveLength(2);
+  expect(second.history[0].snapshot.routeRevision).toBe(
+    first.history[0].snapshot.routeRevision,
+  );
+  expect(second.history[0].snapshot.createdAt).toBe(
+    first.history[0].snapshot.createdAt,
+  );
+  expect(second.history[1].snapshot.notes).toBe('original');
+  expect((await call('PUT', edit)).status).toBe(409);
+  expect((await call('DELETE', { expectedVersion: 2 })).status).toBe(200);
+  expect((await call('DELETE', { expectedVersion: 3 })).status).toBe(409);
+  const current = await (
+    await handle(req('/api/entries'), a, asUser(owner))
+  ).json();
+  expect(current.entries).toEqual([]);
+  expect(current.summary.records).toBe(0);
+  const retired = await (
+    await handle(req('/api/entries?state=deleted'), a, asUser(owner))
+  ).json();
+  expect(retired.entries).toHaveLength(1);
+  expect(retired.entries[0].entry_version).toBe(3);
+  const final = await (await history()).json();
+  expect(final.history.map((r: { action: string }) => r.action)).toEqual([
+    'deleted',
+    'updated',
+    'created',
+  ]);
+  expect(
+    await a.DB.prepare(
+      'SELECT COUNT(*) AS n FROM audit_events WHERE object_id=?',
+    )
+      .bind(id)
+      .first('n'),
+  ).toBe(3);
 });

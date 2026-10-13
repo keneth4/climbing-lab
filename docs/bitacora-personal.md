@@ -31,13 +31,14 @@ El resumen cuenta todos los registros que cumplen esos filtros. **Rutas distinta
 
 El Worker deriva la cuenta del JWT; no acepta elegir otro usuario mediante parámetros. Todos los cálculos se limitan a `user_id` y la base del gimnasio. Las respuestas privadas usan `Cache-Control: no-store`. La consulta utiliza el índice existente de propietario/fecha, parámetros preparados y límites de paginación.
 
-No se agregan tablas ni se modifican ascensos anteriores. Nombre/grado y representación histórica proceden del snapshot de ruta asociado al registro. Cerrar/cambiar sesión elimina datos del panel y preferencias de identidad de tarjeta. La renovación/revalidación de sesión remonta el panel, reiniciando los filtros para evitar mezclar resultados anteriores.
+La migración 0006 agrega versión de registro, retiro lógico e historial inmutable. Los registros existentes reciben una versión inicial; no se pueden reconstruir cambios anteriores. Nombre/grado y representación histórica proceden del snapshot de ruta asociado al registro. Cerrar/cambiar sesión elimina datos del panel y preferencias de identidad de tarjeta. La renovación/revalidación de sesión remonta el panel, reiniciando los filtros para evitar mezclar resultados anteriores.
 
 ## Límites y pendientes
 
 - [ ] Exportación completa de un intervalo mediante un flujo separado de la exportación de página.
 - [ ] Agrupar intentos por sesiones de escalada y definir proyectos personales.
-- [ ] Corregir/eliminar registros propios con auditoría y reglas de producto.
+- [x] J8 — Corregir intentos, resultado y notas propios con versión esperada e historial.
+- [x] J9 — Retirar registros con confirmación, excluirlos de actividad vigente y consultar los retirados.
 - [ ] Consultar cámara/captura histórica desde un registro.
 - [ ] Incorporar vistas 3D en tarjetas compartibles; las tarjetas actuales usan el esquema 2D histórico cuando existe.
 - [ ] Validar flujo con usuarios y dispositivos físicos.
@@ -46,6 +47,16 @@ La paginación actual conserva el límite de offset 10 000 del API; filtros más
 
 ## Verificación — 12 de octubre de 2026
 
-29 pruebas backend, 11 de dominio/geometría/CSV y 12 de navegador pasaron; tipos frontend/backend y build pasaron. Pruebas con más de 50 registros verifican resumen completo, página siguiente, filtros, descarga de CSV, tarjeta de ruta ausente del catálogo y desaparición de notas privadas al cerrar sesión. D1 local prueba aislamiento por cuenta y gimnasio. Auth/API de navegador se simulan; no se cargan ni exportan registros reales de usuarios durante QA.
+30 pruebas backend, 11 de dominio/geometría/CSV y 12 de navegador pasaron; tipos frontend/backend y build pasaron. Pruebas con más de 50 registros verifican resumen completo, página siguiente, filtros, descarga de CSV, tarjeta de ruta ausente del catálogo y desaparición de notas privadas al cerrar sesión. D1 local prueba aislamiento por cuenta y gimnasio. Auth/API de navegador se simulan; no se cargan ni exportan registros reales de usuarios durante QA.
 
 Escritorio 1440 × 1000 y viewport móvil 390 × 844, sin errores de aplicación ni desbordamiento en los flujos probados. Persiste la advertencia conocida de tamaño del paquete PlayCanvas.
+
+## Correcciones y retiro — 12 de octubre de 2026
+
+En cada registro vigente aparecen **Corregir registro**, **Retirar registro** y **Ver historial del registro**. La corrección permite cambiar intentos, resultado y notas; conserva fecha, ruta y revisión histórica. Cancelar no escribe datos. Guardar incrementa la versión y conserva el contenido anterior. Una edición concurrente obsoleta se rechaza para evitar sobrescribir otra corrección.
+
+El retiro exige **Confirmar retiro** y conserva el registro y sus versiones. Los registros retirados quedan fuera del listado y resumen vigentes; se consultan con **Estado de registros → Retirados → Aplicar filtros**. Su resumen cuenta únicamente retirados y no representa actividad vigente. El CSV incluye estado y versión. No existe restauración ni borrado definitivo en esta entrega. El historial muestra las últimas 100 versiones.
+
+Sólo el propietario puede modificar o consultar el historial, incluso frente a una cuenta administrativa. Registro, historial y evento de auditoría se escriben en una transacción D1. Migración aplicada en ambos gimnasios locales; pendiente aplicar al preparar producción. Las pruebas usan datos aislados, sin corregir ni retirar actividad real del usuario.
+
+Siguiente entrega: definir y habilitar fecha de actividad pasada y exportación completa del intervalo; después proyectos/sesiones y tarjetas 3D.

@@ -37,6 +37,7 @@ it('streams binary multipart upload through the actual Worker runtime', async ()
       '0003_capture_camera.sql',
       '0004_section_geometry.sql',
       '0005_section_revisions.sql',
+      '0006_entry_history.sql',
     ]) {
       const sql = await readFile(
         new URL('../migrations/' + file, import.meta.url),

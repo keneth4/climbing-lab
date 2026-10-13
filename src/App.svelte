@@ -1,6 +1,8 @@
 <script lang="ts">
   import QRCode from 'qrcode';
   import { onMount } from 'svelte';
+  import EntryHistory from './EntryHistory.svelte';
+  import EntryRetirement from './EntryRetirement.svelte';
   import JournalEntry from './JournalEntry.svelte';
   import JournalControls from './JournalControls.svelte';
   import AuthPanel from './AuthPanel.svelte';
@@ -17,6 +19,9 @@
   db.reports = [];
   let userEmail = $state('');
   let adminRole = $state(false);
+  let editingEntry = $state<Entry | undefined>(),
+    retiringEntry = $state<Entry | undefined>(),
+    historyEntryId = $state('');
   let journalEntryOpen = $state(false),
     journalNotice = $state('');
   let routePreparing = $state(false);
@@ -47,6 +52,7 @@
   async function refreshSession() {
     const ticket = ++generation;
     sessionReady = false;
+    historyEntryId = '';
     db.entries = [];
     db.reports = [];
     staff = false;
@@ -57,6 +63,9 @@
       const nextEmail = data.session?.user.email || '';
       if (nextEmail !== userEmail) {
         journalEntryOpen = false;
+        editingEntry = undefined;
+        retiringEntry = undefined;
+        historyEntryId = '';
         journalNotice = '';
         privacy = false;
         name = '';
@@ -511,21 +520,36 @@
     <button
       disabled={!userEmail || !sessionReady}
       onclick={() => {
-        journalEntryOpen = !journalEntryOpen;
+        journalEntryOpen = true;
+        editingEntry = undefined;
+        retiringEntry = undefined;
         journalNotice = '';
       }}>Añadir registro</button
     >
     {#if journalNotice}<p role="status">{journalNotice}</p>{/if}
-    {#if journalEntryOpen && userEmail && sessionReady}<JournalEntry
-        routes={db.routes}
-        onCancel={() => (journalEntryOpen = false)}
-        onSaved={async () => {
+    {#if journalEntryOpen && userEmail && sessionReady}{#key editingEntry?.id || 'new-entry'}<JournalEntry
+          entry={editingEntry}
+          routes={db.routes}
+          onCancel={() => (journalEntryOpen = false)}
+          onSaved={async () => {
+            const edited = !!editingEntry;
+            await refreshSession();
+            journalEntryOpen = false;
+            editingEntry = undefined;
+            journalNotice = edited
+              ? 'Registro corregido; historial conservado.'
+              : 'Registro añadido a tu bitácora.';
+          }}
+        />{/key}{/if}
+    {#if retiringEntry && userEmail && sessionReady}<EntryRetirement
+        entry={retiringEntry}
+        onCancel={() => (retiringEntry = undefined)}
+        onDone={async () => {
           await refreshSession();
-          journalEntryOpen = false;
-          journalNotice = 'Registro añadido a tu bitácora.';
+          retiringEntry = undefined;
+          journalNotice = 'Registro retirado de tu actividad vigente.';
         }}
       />{/if}
-
     {#if userEmail && sessionReady}{#key userEmail}<JournalControls
           onEntries={(entries) => (db.entries = entries)}
         />{/key}
@@ -538,14 +562,40 @@
             bind:value={name}
             maxlength="35"
           /></label
-        >{/if}{#each db.entries as entry}<article>
+        >{/if}{#each db.entries as entry (entry.id)}<article>
           <h2>{entry.routeName} · {entry.grade}</h2>
           <p>
             {entry.result === 'ascenso' ? 'Ascenso' : 'Intento'} · {entry.attempts}
             intentos · {new Date(entry.date).toLocaleDateString('es-MX')}
           </p>
           <p>{entry.notes}</p>
-          {#if entry.result === 'ascenso'}<button
+          {#if entry.deletedAt}<p>
+              Registro retirado · versión {entry.entryVersion || 1}
+            </p>{:else}<div class="actions">
+              <button
+                onclick={() => {
+                  editingEntry = entry;
+                  journalEntryOpen = true;
+                  retiringEntry = undefined;
+                  journalNotice = '';
+                }}>Corregir registro</button
+              ><button
+                onclick={() => {
+                  retiringEntry = entry;
+                  journalEntryOpen = false;
+                  journalNotice = '';
+                }}>Retirar registro</button
+              >
+            </div>{/if}
+          <button
+            onclick={() =>
+              (historyEntryId = historyEntryId === entry.id ? '' : entry.id)}
+            >Ver historial del registro</button
+          >
+          {#if historyEntryId === entry.id}{#key entry.id}<EntryHistory
+                entryId={entry.id}
+              />{/key}{/if}
+          {#if entry.result === 'ascenso' && !entry.deletedAt}<button
               onclick={() => exportImage(entry)}
               >Exportar tarjeta personal</button
             >{/if}
