@@ -49,11 +49,49 @@ test('private journal filters, paginates and exports historical records, then cl
       path = url.pathname;
     let json: any = {};
     if (path === '/api/me') json = { userId: 'journal-test', staff: null };
-    else if (path === '/api/routes') json = { routes: [] };
+    else if (path === '/api/routes')
+      json = {
+        routes:
+          url.searchParams.get('status') === 'retirada'
+            ? []
+            : [
+                {
+                  id: 'active-route',
+                  name: 'Ruta actual',
+                  grade: 'V3',
+                  sector: 'Spray wall',
+                  status: 'activa',
+                },
+              ],
+      };
+    else if (path === '/api/routes/active-route')
+      json = {
+        revision: 1,
+        status: 'activa',
+        snapshot: { name: 'Ruta actual', grade: 'V3', holds: [] },
+      };
     else if (path === '/api/captures/current') json = { capture: null };
     else if (path === '/api/sections') json = { sections: [] };
     else if (path === '/api/entries') {
       expect(route.request().headers().authorization).toBe('Bearer ' + token);
+      if (route.request().method() === 'POST') {
+        const data = route.request().postDataJSON();
+        expect(data.routeId).toBe('active-route');
+        entries.unshift({
+          id: 'new-entry',
+          route_id: data.routeId,
+          revision: 1,
+          route_name: 'Ruta actual',
+          grade: 'V3',
+          created_at: new Date().toISOString(),
+          attempts: data.attempts,
+          result: data.result,
+          notes: data.notes,
+          route_snapshot: JSON.stringify({ holds: [] }),
+        });
+        await route.fulfill({ json: { id: 'new-entry' }, status: 201 });
+        return;
+      }
       const from = url.searchParams.get('from'),
         until = url.searchParams.get('until'),
         result = url.searchParams.get('result');
@@ -69,9 +107,9 @@ test('private journal filters, paginates and exports historical records, then cl
         entries: rows.slice(offset, offset + limit),
         summary: {
           records: rows.length,
-          attempts: rows.length,
+          attempts: rows.reduce((n, e) => n + e.attempts, 0),
           ascents: rows.filter((e) => e.result === 'ascenso').length,
-          routes: rows.length ? 1 : 0,
+          routes: new Set(rows.map((e) => e.route_id)).size,
         },
         pagination: {
           total: rows.length,
@@ -124,6 +162,33 @@ test('private journal filters, paginates and exports historical records, then cl
     .first()
     .click();
   expect((await cardDownload).suggestedFilename()).toMatch(/\.png$/);
+  await page
+    .getByRole('button', { name: 'Añadir registro', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Cancelar registro', exact: true })
+    .click();
+  expect(entries).toHaveLength(55);
+  await page
+    .getByRole('button', { name: 'Añadir registro', exact: true })
+    .click();
+  await page.getByLabel('Ruta del registro').selectOption('active-route');
+  await page.getByLabel('Intentos del registro').fill('2');
+  await page.getByLabel('Resultado del registro').selectOption('ascenso');
+  await page.getByLabel('Notas del registro').fill('Registro nuevo probado');
+  await page
+    .getByRole('form', { name: 'Nuevo registro de bitácora' })
+    .screenshot({ path: `/tmp/journal-add-${test.info().project.name}.png` });
+  await page
+    .getByRole('button', { name: 'Guardar registro', exact: true })
+    .click();
+  await expect(
+    page.getByText('Registro añadido a tu bitácora.', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Registro nuevo probado', { exact: true }),
+  ).toBeVisible();
+  expect(entries).toHaveLength(56);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

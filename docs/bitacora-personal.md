@@ -17,10 +17,11 @@
 - [x] J4 — CSV de página visible, con comillas y protección de celdas que parecen fórmulas.
 - [x] J5 — Tarjeta histórica sin depender de que la ruta siga cargada en catálogo.
 - [x] J6 — Privacidad de sesión, pruebas de aislamiento y regresiones en escritorio/móvil.
+- [x] J7 — Acceso directo Añadir registro desde la bitácora, cancelación y actualización después de guardar.
 
 ## Uso
 
-Inicia sesión y abre **Bitácora**. Selecciona Desde/Hasta y resultado, después **Aplicar filtros**. Hasta incluye todo el día elegido; el navegador convierte el calendario local a un intervalo UTC semiabierto. El listado usa la fecha local y el CSV conserva la fecha UTC.
+Inicia sesión y abre **Bitácora**. **Añadir registro** abre el formulario para elegir una ruta activa, indicar intentos, resultado y notas. **Guardar registro** confirma la actividad con la fecha actual y la revisión vigente de ruta; cancelar no escribe datos. Tras guardar, se actualizan el listado y el resumen, reiniciando los filtros. El formulario del catálogo sigue disponible. Selecciona Desde/Hasta y resultado, después **Aplicar filtros**. Hasta incluye todo el día elegido; el navegador convierte el calendario local a un intervalo UTC semiabierto. El listado usa la fecha local y el CSV conserva la fecha UTC.
 
 El resumen cuenta todos los registros que cumplen esos filtros. **Rutas distintas** cuenta IDs de ruta, no sus revisiones. **Registros con ascenso** cuenta declaraciones de ascenso, incluyendo repeticiones. **Intentos registrados** suma el campo de intentos de cada registro, incluidos los que terminaron en ascenso. No constituye control de visitas ni verificación deportiva.
 

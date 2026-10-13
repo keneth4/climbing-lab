@@ -103,3 +103,16 @@ Se conserva el control para rutas ya vinculadas a una captura que perdieron su s
 ## Área personal del escalador
 
 Se completó la [primera entrega de bitácora personal](bitacora-personal.md): resumen de intervalo completo, filtros locales de fecha/resultado, páginas, CSV de página y tarjetas históricas. Los siguientes candidatos fuera del editor de secciones son proyectos/sesiones de escalada y exportaciones 3D compartibles. Visitas QR, membresías y módulos comerciales siguen en etapas posteriores.
+
+## Prioridades tras habilitar registro directo en bitácora
+
+1. **Completar la actividad personal**: corrección/eliminación de registros propios con auditoría, fecha explícita para actividad pasada y exportación del intervalo completo. Definir estas reglas antes de implementar cambios sobre registros históricos.
+2. **Proyectos y sesiones de escalada**: agrupar intentos, marcar rutas en proyecto y consultar progreso sin confundirlo con visitas del gimnasio.
+3. **Visuales compartibles**: tarjetas con vista 3D y datos elegidos por el usuario; después recorridos de cámara/video. Mejorar secuencia de beta por agarre en paralelo cuando las rutas reales lo requieran.
+4. **Validación y piloto remoto**: continuidad con dos capturas completas reales, dispositivos físicos, formato/rendimiento, dominio, backups/restauración y pruebas del servicio sin mocks.
+5. **Gestión del gimnasio**: credenciales QR revocables y registro de visitas por staff, planes/vigencias y registro de cobros manuales.
+6. **Comercial**: pagos en línea/conciliación y catálogo de ventas/inventario; definir alcance de gastos y contabilidad como módulo propio.
+
+Las mejoras del UX/UI de secciones, gizmos y orientación libre siguen registradas y diferidas por preferencia del usuario. La prioridad inmediata es cerrar flujos cotidianos del piloto, no ampliar módulos comerciales antes de validarlo.
+
+- [x] Acceso visible **Añadir registro** en bitácora y prueba de guardar/cancelar en escritorio y móvil.

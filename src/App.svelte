@@ -1,6 +1,7 @@
 <script lang="ts">
   import QRCode from 'qrcode';
   import { onMount } from 'svelte';
+  import JournalEntry from './JournalEntry.svelte';
   import JournalControls from './JournalControls.svelte';
   import AuthPanel from './AuthPanel.svelte';
   import RouteEditor from './RouteEditor.svelte';
@@ -16,6 +17,8 @@
   db.reports = [];
   let userEmail = $state('');
   let adminRole = $state(false);
+  let journalEntryOpen = $state(false),
+    journalNotice = $state('');
   let routePreparing = $state(false);
   let historicalSection = $state<Section | undefined>();
   let sectionTicket = 0;
@@ -53,6 +56,8 @@
       if (ticket !== generation) return;
       const nextEmail = data.session?.user.email || '';
       if (nextEmail !== userEmail) {
+        journalEntryOpen = false;
+        journalNotice = '';
         privacy = false;
         name = '';
       }
@@ -503,6 +508,24 @@
       </section>
     </div>
   {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
+    <button
+      disabled={!userEmail || !sessionReady}
+      onclick={() => {
+        journalEntryOpen = !journalEntryOpen;
+        journalNotice = '';
+      }}>Añadir registro</button
+    >
+    {#if journalNotice}<p role="status">{journalNotice}</p>{/if}
+    {#if journalEntryOpen && userEmail && sessionReady}<JournalEntry
+        routes={db.routes}
+        onCancel={() => (journalEntryOpen = false)}
+        onSaved={async () => {
+          await refreshSession();
+          journalEntryOpen = false;
+          journalNotice = 'Registro añadido a tu bitácora.';
+        }}
+      />{/if}
+
     {#if userEmail && sessionReady}{#key userEmail}<JournalControls
           onEntries={(entries) => (db.entries = entries)}
         />{/key}
