@@ -1,6 +1,6 @@
 import { beforeAll, expect, it } from 'vitest';
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from 'jose';
-import { verifyToken } from './index';
+import { verifyToken, authFailure } from './index';
 let pair: Awaited<ReturnType<typeof generateKeyPair>>;
 let keys: ReturnType<typeof createLocalJWKSet>;
 beforeAll(async () => {
@@ -61,4 +61,13 @@ it('rejects a modified signature and unsigned token', async () => {
     await expect(
       verifyToken(value, 'https://identity.test', 'authenticated', keys),
     ).rejects.toThrow();
+});
+
+it('distinguishes invalid JWTs from an unavailable identity provider without relaxing authorization', () => {
+  expect(authFailure({ code: 'ERR_JWT_EXPIRED' }).status).toBe(401);
+  expect(
+    authFailure({ code: 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' }).status,
+  ).toBe(401);
+  expect(authFailure({ code: 'ERR_JWKS_TIMEOUT' }).status).toBe(503);
+  expect(authFailure(new TypeError('fetch failed')).status).toBe(503);
 });

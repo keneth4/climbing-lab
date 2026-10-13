@@ -1,3 +1,5 @@
+import { operationsApi } from './operations';
+import { projectApi } from './projects';
 import { journalCsv } from '../shared/journal-csv';
 import { entryApi } from './entries';
 import { point } from '../shared/alignment';
@@ -21,11 +23,35 @@ export async function verifyToken(
   return payload.sub;
 }
 
+export function authFailure(error: unknown): HttpError {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String(error.code)
+      : '';
+  const invalid = [
+    'ERR_JOSE_ALG_NOT_ALLOWED',
+    'ERR_JOSE_NOT_SUPPORTED',
+    'ERR_JWS_INVALID',
+    'ERR_JWS_SIGNATURE_VERIFICATION_FAILED',
+    'ERR_JWT_CLAIM_VALIDATION_FAILED',
+    'ERR_JWT_EXPIRED',
+    'ERR_JWT_INVALID',
+    'ERR_JWKS_NO_MATCHING_KEY',
+  ];
+  return invalid.includes(code)
+    ? new HttpError(401, 'Sesión inválida o vencida.')
+    : new HttpError(
+        503,
+        'No se pudo verificar la sesión: proveedor de identidad no disponible. Reintenta.',
+      );
+}
 async function identity(request: Request, env: Env): Promise<string> {
   const token = request.headers
     .get('Authorization')
     ?.match(/^Bearer (\S+)$/)?.[1];
   if (!token) throw new HttpError(401, 'Inicia sesión.');
+  if (token.split('.').length !== 3)
+    throw new HttpError(401, 'Sesión inválida o vencida.');
   try {
     const issuer = new URL(env.AUTH_ISSUER);
     if (issuer.protocol !== 'https:' || issuer.hostname === 'auth.invalid')
@@ -38,8 +64,8 @@ async function identity(request: Request, env: Env): Promise<string> {
       keySets.set(env.AUTH_ISSUER, keys);
     }
     return await verifyToken(token, env.AUTH_ISSUER, env.AUTH_AUDIENCE, keys);
-  } catch {
-    throw new HttpError(401, 'Sesión inválida o vencida.');
+  } catch (error) {
+    throw authFailure(error);
   }
 }
 async function editor(env: Env, user: string) {
@@ -174,6 +200,10 @@ export async function handle(
   try {
     const url = new URL(request.url);
     const path = url.pathname;
+    const operationResponse = await operationsApi(request, env, () =>
+      authenticate(request, env),
+    );
+    if (operationResponse) return operationResponse;
     // No client field can select a different D1 binding or impersonate a user.
     if (
       [...url.searchParams.keys()].some(
@@ -188,6 +218,7 @@ export async function handle(
                   'result',
                   'state',
                   'export',
+                  'group',
                 ]
               : ['limit', 'offset', 'status']
           ).includes(k),
@@ -234,6 +265,8 @@ export async function handle(
       });
     }
     const user = await authenticate(request, env);
+    const projectResponse = await projectApi(request, env, user);
+    if (projectResponse) return projectResponse;
     const entryResponse = await entryApi(request, env, user);
     if (entryResponse) return entryResponse;
     if (
@@ -418,6 +451,69 @@ export async function handle(
         params.push(result);
       }
       const filter = where.join(' AND ');
+      if (url.searchParams.has('group')) {
+        if (url.searchParams.get('group') !== 'day')
+          throw new HttpError(400, 'Agrupación inválida.');
+        const config = await env.DB.prepare(
+          'SELECT timezone FROM gym_config WHERE id=1',
+        ).first<{ timezone: string }>();
+        const timezone = config?.timezone || 'America/Mexico_City';
+        const rows = await env.DB.prepare(
+          `SELECT e.created_at,e.attempts,e.result,e.route_id FROM entries e WHERE ${filter} ORDER BY e.created_at DESC LIMIT 10001`,
+        )
+          .bind(...params)
+          .all<{
+            created_at: string;
+            attempts: number;
+            result: string;
+            route_id: string;
+          }>();
+        if (rows.results.length > 10000)
+          throw new HttpError(
+            400,
+            'Acota el intervalo a 10000 registros para agrupar días.',
+          );
+        const formatter = new Intl.DateTimeFormat('sv-SE', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        });
+        const days = new Map<
+          string,
+          {
+            date: string;
+            records: number;
+            attempts: number;
+            ascents: number;
+            routes: Set<string>;
+          }
+        >();
+        for (const e of rows.results) {
+          const date = formatter.format(new Date(e.created_at));
+          let day = days.get(date);
+          if (!day) {
+            day = {
+              date,
+              records: 0,
+              attempts: 0,
+              ascents: 0,
+              routes: new Set(),
+            };
+            days.set(date, day);
+          }
+          day.records++;
+          day.attempts += e.attempts;
+          day.ascents += e.result === 'ascenso' ? 1 : 0;
+          day.routes.add(e.route_id);
+        }
+        return json({
+          timezone,
+          days: [...days.values()]
+            .map((d) => ({ ...d, routes: d.routes.size }))
+            .sort((a, b) => b.date.localeCompare(a.date)),
+        });
+      }
       const exporting = url.searchParams.get('export');
       if (exporting && exporting !== 'csv')
         throw new HttpError(400, 'Formato de exportación inválido.');

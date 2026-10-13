@@ -28,7 +28,9 @@ export async function entryApi(
   user: string,
 ): Promise<Response | undefined> {
   const path = new URL(request.url).pathname,
-    match = path.match(/^\/api\/entries\/([^/]+)(\/history)?$/);
+    match = path.match(
+      /^\/api\/entries\/([^/]+)(\/(?:history|presentation))?$/,
+    );
   if (!match) return;
   const row = await env.DB.prepare(
     'SELECT * FROM entries WHERE id=? AND user_id=?',
@@ -36,6 +38,20 @@ export async function entryApi(
     .bind(match[1], user)
     .first<EntryRow>();
   if (!row) throw new HttpError(404, 'Registro no encontrado.');
+  if (match[2] === '/presentation' && request.method === 'GET') {
+    const revision = await env.DB.prepare(
+      'SELECT snapshot FROM route_revisions WHERE route_id=? AND revision=?',
+    )
+      .bind(row.route_id, row.revision)
+      .first<{ snapshot: string }>();
+    if (!revision)
+      throw new HttpError(404, 'Revisión histórica no disponible.');
+    return json({
+      snapshot: JSON.parse(revision.snapshot),
+      routeId: row.route_id,
+      revision: row.revision,
+    });
+  }
   if (match[2] && request.method === 'GET') {
     const rows = await env.DB.prepare(
       'SELECT version,snapshot,action,changed_at FROM entry_history WHERE entry_id=? ORDER BY version DESC LIMIT 100',

@@ -63,6 +63,18 @@ beforeAll(async () => {
       new URL('../migrations/0006_entry_history.sql', import.meta.url),
       'utf8',
     ));
+  migration +=
+    '\n' +
+    (await readFile(
+      new URL('../migrations/0007_projects.sql', import.meta.url),
+      'utf8',
+    ));
+  migration +=
+    '\n' +
+    (await readFile(
+      new URL('../migrations/0008_operations.sql', import.meta.url),
+      'utf8',
+    ));
   const envs = [];
   for (const id of ['gym-a', 'gym-b']) {
     const db = await mf.getD1Database('DB', id);
@@ -680,4 +692,417 @@ it('exports the complete private interval without pagination or silent truncatio
   expect(
     (await (await get('&until=2021-01-01T00%3A00%3A00.000Z')).json()).records,
   ).toBe(55);
+});
+
+it('projects are private, versioned and do not automatically complete after ascents', async () => {
+  const call = (
+    path: string,
+    value?: unknown,
+    user = 'project-user',
+    env = a,
+    method = 'POST',
+  ) =>
+    handle(
+      value === undefined
+        ? req(path)
+        : new Request('https://local.test' + path, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(value),
+          }),
+      env,
+      asUser(user),
+    );
+  const response = await call('/api/projects', {
+    routeId: 'route-a',
+    notes: 'Goal',
+  });
+  expect(response.status).toBe(201);
+  const { project } = await response.json();
+  expect(
+    (await (await call('/api/projects', undefined, 'other')).json()).projects,
+  ).toHaveLength(0);
+  expect(
+    (
+      await call(
+        '/api/projects/' + project.id,
+        { expectedVersion: 1, status: 'completado', notes: 'x' },
+        'other',
+        a,
+        'PUT',
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await call(
+        '/api/projects',
+        { routeId: 'route-a', notes: '' },
+        'project-user',
+        b,
+      )
+    ).status,
+  ).toBe(404);
+  const edits = await Promise.all([
+    call(
+      '/api/projects/' + project.id,
+      { expectedVersion: 1, status: 'completado', notes: 'Done' },
+      'project-user',
+      a,
+      'PUT',
+    ),
+    call(
+      '/api/projects/' + project.id,
+      { expectedVersion: 1, status: 'archivado', notes: 'Archived' },
+      'project-user',
+      a,
+      'PUT',
+    ),
+  ]);
+  expect(edits.map((r) => r.status).sort()).toEqual([200, 409]);
+  const history = await (
+    await call('/api/projects/' + project.id, undefined)
+  ).json();
+  expect(history.history).toHaveLength(2);
+});
+it('daily activity uses the gym timezone and includes the complete interval excluding retired entries', async () => {
+  await a.DB.prepare(
+    "INSERT INTO entries(id,user_id,route_id,revision,attempts,result,notes,created_at) SELECT 'day-'||value,'daily-user','route-a',1,2,'ascenso','','2026-01-12T03:00:00.000Z' FROM json_each(?)",
+  )
+    .bind(JSON.stringify(Array.from({ length: 55 }, (_, i) => i)))
+    .run();
+  const get = (user = 'daily-user', env = a) =>
+    handle(req('/api/entries?group=day'), env, asUser(user));
+  const d = await (await get()).json();
+  expect(d.days).toEqual([
+    { date: '2026-01-11', records: 55, attempts: 110, ascents: 55, routes: 1 },
+  ]);
+  await a.DB.prepare(
+    "UPDATE entries SET deleted_at='2026-01-13T00:00:00.000Z' WHERE id='day-0'",
+  ).run();
+  expect((await (await get()).json()).days[0].records).toBe(54);
+  expect((await (await get('other')).json()).days).toHaveLength(0);
+  expect((await (await get('daily-user', b)).json()).days).toHaveLength(0);
+});
+it('reception, memberships, payments and inventory enforce permissions and atomic reversals', async () => {
+  await a.DB.prepare(
+    "INSERT INTO staff(user_id,role) VALUES('ops-admin','admin')",
+  ).run();
+  const post = (path: string, value: unknown, user = 'ops-admin', env = a) =>
+    handle(req(path, value), env, asUser(user));
+  const get = (path: string, user = 'ops-admin', env = a) =>
+    handle(req(path), env, asUser(user));
+  const created = await post('/api/members', { name: 'Pilot member' });
+  expect(created.status).toBe(201);
+  const memberId = (await created.json()).id;
+  expect(
+    (
+      await post(
+        '/api/plans',
+        { name: 'x', kind: 'entries', quantity: 1, price: 100 },
+        'alice',
+      )
+    ).status,
+  ).toBe(403);
+  expect((await get('/api/members', 'visitor')).status).toBe(403);
+  const plan = await post('/api/plans', {
+    name: 'Pass',
+    kind: 'entries',
+    quantity: 1,
+    price: 10000,
+  });
+  expect(plan.status).toBe(201);
+  const planId = (await plan.json()).id;
+  const pay = await post('/api/payments', {
+    memberId,
+    planId,
+    startDay: '2020-01-01',
+    endDay: '2999-01-01',
+    method: 'transfer',
+    reference: 'bank',
+  });
+  expect(pay.status).toBe(201);
+  const { id: paymentId, membershipId } = await pay.json();
+  const credential = await post('/api/credentials', { memberId }, 'alice');
+  expect(credential.status).toBe(201);
+  const { id: credentialId, token } = await credential.json();
+  let resolve = await post('/api/reception/resolve', { token }, 'alice');
+  expect((await resolve.json()).memberships).toHaveLength(0);
+  const confirmations = await Promise.all([
+    post('/api/payments/' + paymentId + '/confirm', { expectedVersion: 1 }),
+    post('/api/payments/' + paymentId + '/confirm', { expectedVersion: 1 }),
+  ]);
+  expect(confirmations.map((r) => r.status).sort()).toEqual([200, 409]);
+  resolve = await post('/api/reception/resolve', { token }, 'alice');
+  expect((await resolve.json()).memberships[0].remaining).toBe(1);
+  expect(
+    (await post('/api/reception/resolve', { token }, 'bob', b)).status,
+  ).toBe(404);
+  const visits = await Promise.all([
+    post('/api/visits', { credentialId, membershipId, consume: true }, 'alice'),
+    post('/api/visits', { credentialId, membershipId, consume: true }, 'alice'),
+  ]);
+  expect(visits.filter((r) => r.status === 201)).toHaveLength(1);
+  expect(
+    await a.DB.prepare('SELECT remaining FROM memberships WHERE id=?')
+      .bind(membershipId)
+      .first('remaining'),
+  ).toBe(0);
+  const repeat = await post(
+    '/api/visits',
+    { credentialId, membershipId, consume: true },
+    'alice',
+  );
+  expect(repeat.status).toBe(200);
+  const repeated = await repeat.json();
+  expect(repeated.duplicate).toBe(true);
+  expect(
+    (
+      await post(
+        `/api/visits/${repeated.visit.id}/void`,
+        { expectedVersion: 1, reason: 'Wrong visit' },
+        'alice',
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await post(
+        `/api/visits/${repeated.visit.id}/void`,
+        { expectedVersion: 1, reason: 'Repeat' },
+        'alice',
+      )
+    ).status,
+  ).toBe(409);
+  expect(
+    await a.DB.prepare('SELECT remaining FROM memberships WHERE id=?')
+      .bind(membershipId)
+      .first('remaining'),
+  ).toBe(1);
+  await post('/api/credentials', { memberId }, 'alice');
+  expect(
+    (await post('/api/reception/resolve', { token }, 'alice')).status,
+  ).toBe(404);
+  const product = await post('/api/products', {
+    name: 'Chalk',
+    variant: 'Bag',
+    sku: 'chalk-test',
+    price: 2000,
+    stock: 1,
+  });
+  expect(product.status).toBe(201);
+  const variantId = (await product.json()).variantId;
+  expect((await get('/api/products', 'visitor')).status).toBe(200);
+  const s1 = await post('/api/sales', {
+      lines: [{ variantId, quantity: 1 }],
+      method: 'cash',
+      reference: 'x',
+    }),
+    s2 = await post('/api/sales', {
+      lines: [{ variantId, quantity: 1 }],
+      method: 'cash',
+      reference: 'y',
+    });
+  const sale1 = await s1.json(),
+    sale2 = await s2.json();
+  const sold = await Promise.all([
+    post(`/api/payments/${sale1.paymentId}/confirm`, { expectedVersion: 1 }),
+    post(`/api/payments/${sale2.paymentId}/confirm`, { expectedVersion: 1 }),
+  ]);
+  expect(sold.map((r) => r.status).sort()).toEqual([200, 409]);
+  const winner = sold[0].status === 200 ? sale1 : sale2;
+  expect(
+    await a.DB.prepare('SELECT stock FROM variants WHERE id=?')
+      .bind(variantId)
+      .first('stock'),
+  ).toBe(0);
+  expect(
+    (
+      await post(`/api/payments/${winner.paymentId}/void`, {
+        expectedVersion: 2,
+        reason: 'Return',
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    await a.DB.prepare('SELECT stock FROM variants WHERE id=?')
+      .bind(variantId)
+      .first('stock'),
+  ).toBe(1);
+  expect(
+    (
+      await post(`/api/payments/${winner.paymentId}/void`, {
+        expectedVersion: 2,
+        reason: 'Again',
+      })
+    ).status,
+  ).toBe(409);
+  const report = await (await get('/api/finance')).json();
+  expect(report.totals.confirmed).toBe(10000);
+  expect(report.totals.sales).toBe(0);
+  expect((await get('/api/finance', 'alice')).status).toBe(403);
+  expect((await get('/api/payments', 'visitor')).status).toBe(403);
+  expect((await (await get('/api/finance?export=csv')).json()).csv).toContain(
+    'Importe centavos',
+  );
+});
+it('pending and expired memberships cannot consume entries and business histories remain private', async () => {
+  const post = (path: string, value: unknown, user = 'ops-admin') =>
+    handle(req(path, value), a, asUser(user));
+  const memberId = (
+    await (await post('/api/members', { name: 'Expired member' })).json()
+  ).id;
+  const planId = (
+    await (
+      await post('/api/plans', {
+        name: 'Old period',
+        kind: 'period',
+        quantity: 1,
+        price: 500,
+      })
+    ).json()
+  ).id;
+  const pending = await (
+    await post('/api/payments', {
+      memberId,
+      planId,
+      startDay: '2020-01-01',
+      method: 'transfer',
+      reference: '',
+    })
+  ).json();
+  const c = await (
+    await post('/api/credentials', { memberId }, 'alice')
+  ).json();
+  expect(
+    (
+      await post(
+        '/api/visits',
+        {
+          credentialId: c.id,
+          membershipId: pending.membershipId,
+          consume: false,
+        },
+        'alice',
+      )
+    ).status,
+  ).toBe(400);
+  await post(`/api/payments/${pending.id}/confirm`, { expectedVersion: 1 });
+  expect(
+    (
+      await post(
+        '/api/visits',
+        {
+          credentialId: c.id,
+          membershipId: pending.membershipId,
+          consume: false,
+        },
+        'alice',
+      )
+    ).status,
+  ).toBe(400);
+  const ownerHistory = await handle(
+    req(`/api/payments/${pending.id}/history`),
+    a,
+    asUser('ops-admin'),
+  );
+  expect(ownerHistory.status).toBe(200);
+  expect((await ownerHistory.json()).history).toHaveLength(2);
+  expect(
+    (
+      await handle(
+        req(`/api/payments/${pending.id}/history`),
+        a,
+        asUser('alice'),
+      )
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await post(`/api/payments/${pending.id}/void`, {
+        expectedVersion: 2,
+        reason: 'Old membership',
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    await a.DB.prepare('SELECT status FROM memberships WHERE id=?')
+      .bind(pending.membershipId)
+      .first('status'),
+  ).toBe('revoked');
+  const entry = await (
+    await post(
+      '/api/entries',
+      { routeId: 'route-a', attempts: 1, result: 'ascenso', notes: '' },
+      'presentation-owner',
+    )
+  ).json();
+  expect(
+    (
+      await handle(
+        req(`/api/entries/${entry.id}/presentation`),
+        a,
+        asUser('other-user'),
+      )
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await handle(
+        req(`/api/entries/${entry.id}/presentation`),
+        a,
+        asUser('presentation-owner'),
+      )
+    ).status,
+  ).toBe(200);
+});
+
+it('a multi-line sale rolls back all stock when one line is unavailable', async () => {
+  const post = (path: string, value: unknown) =>
+    handle(req(path, value), a, asUser('ops-admin'));
+  const first = await (
+    await post('/api/products', {
+      name: 'Available',
+      variant: 'One',
+      sku: 'multi-available',
+      price: 100,
+      stock: 1,
+    })
+  ).json();
+  const second = await (
+    await post('/api/products', {
+      name: 'Unavailable',
+      variant: 'Zero',
+      sku: 'multi-empty',
+      price: 100,
+      stock: 0,
+    })
+  ).json();
+  const sale = await (
+    await post('/api/sales', {
+      lines: [
+        { variantId: first.variantId, quantity: 1 },
+        { variantId: second.variantId, quantity: 1 },
+      ],
+      method: 'cash',
+      reference: '',
+    })
+  ).json();
+  expect(
+    (
+      await post(`/api/payments/${sale.paymentId}/confirm`, {
+        expectedVersion: 1,
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    await a.DB.prepare('SELECT stock FROM variants WHERE id=?')
+      .bind(first.variantId)
+      .first('stock'),
+  ).toBe(1);
+  expect(
+    await a.DB.prepare('SELECT status FROM payments WHERE id=?')
+      .bind(sale.paymentId)
+      .first('status'),
+  ).toBe('pending');
 });
