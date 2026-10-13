@@ -143,3 +143,11 @@ Este principio de interfaz aplica a futuras herramientas del clon digital. Fecha
 - [x] Explicar que se usa la revisión vigente, sin reconstruir armados históricos.
 
 Siguiente entrega personal: CSV del intervalo completo, separado de exportar la página visible. La persistencia del renderer entre módulos sigue pendiente como mejora del espacio de trabajo.
+
+## Cierre: exportación completa de bitácora
+
+- [x] CSV de intervalo completo con filtros aplicados, independiente de página.
+- [x] Consulta única privada, protección de fórmulas y límite explícito de 2000 registros.
+- [x] Pruebas de contenido descargado, aislamiento y rechazo de intervalos demasiado grandes.
+
+El bloque de fecha pasada y exportaciones personales queda cerrado para el piloto. Sigue conservar renderer/cámara entre herramientas del espacio de trabajo; después proyectos/sesiones y visuales 3D compartibles.

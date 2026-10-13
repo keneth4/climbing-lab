@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { api } from './auth';
   import type { Entry } from './domain';
-  import { localBoundary, journalCsv } from './journal';
+  import { localBoundary, journalCsv, journalEntry } from './journal';
   let { onEntries }: { onEntries: (entries: Entry[]) => void } = $props();
   let from = $state(''),
     to = $state(''),
@@ -16,6 +16,8 @@
     hasMore = $state(false),
     busy = $state(false),
     error = $state(''),
+    exporting = $state(false),
+    exportNotice = $state(''),
     entries = $state<Entry[]>([]);
   let applied = $state(''),
     request = 0,
@@ -30,20 +32,7 @@
     try {
       const data = await api(`/entries?limit=50&offset=${next}${query}`);
       if (disposed || ticket !== request) return;
-      entries = data.entries.map((e: any) => ({
-        id: e.id,
-        entryVersion: e.entry_version || 1,
-        deletedAt: e.deleted_at || null,
-        routeId: e.route_id,
-        revision: e.revision,
-        routeName: e.route_name || e.route_id,
-        grade: e.grade || '',
-        date: e.created_at,
-        attempts: e.attempts,
-        result: e.result,
-        notes: e.notes,
-        holds: e.route_snapshot ? JSON.parse(e.route_snapshot).holds || [] : [],
-      }));
+      entries = data.entries.map(journalEntry);
       summary = data.summary || undefined;
       offset = next;
       hasMore = !!data.pagination?.hasMore;
@@ -76,6 +65,33 @@
       request++;
     };
   });
+  function downloadCsv(content: string, filename: string) {
+    const url = URL.createObjectURL(
+      new Blob([content], { type: 'text/csv;charset=utf-8;' }),
+    );
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function exportAll() {
+    if (exporting || busy) return;
+    exporting = true;
+    error = '';
+    exportNotice = '';
+    const ticket = request;
+    try {
+      const data = await api(`/entries?export=csv${applied}`);
+      if (disposed || ticket !== request) return;
+      downloadCsv(data.csv, 'bitacora-intervalo.csv');
+      exportNotice = `${data.records} registros exportados del intervalo aplicado.`;
+    } catch (e) {
+      if (!disposed && ticket === request) error = (e as Error).message;
+    } finally {
+      if (!disposed) exporting = false;
+    }
+  }
   function csv() {
     const url = URL.createObjectURL(
       new Blob([journalCsv(entries)], { type: 'text/csv;charset=utf-8;' }),
@@ -115,10 +131,11 @@
       ></select
     ></label
   >
-  <button disabled={busy}>Aplicar filtros</button><button
+  <button disabled={busy || exporting}>Aplicar filtros</button><button
     type="button"
-    disabled={busy}
+    disabled={busy || exporting}
     onclick={() => {
+      recordState = 'active';
       from = '';
       to = '';
       result = '';
@@ -165,8 +182,20 @@
     onclick={() => load(offset + 50)}>Página siguiente</button
   ><button type="button" disabled={busy || !entries.length} onclick={csv}
     >Exportar esta página (CSV)</button
+  ><button
+    type="button"
+    disabled={busy || exporting || !summary?.records}
+    onclick={exportAll}
+    >{exporting
+      ? 'Preparando exportación…'
+      : 'Exportar intervalo completo (CSV)'}</button
   >
 </div>
+<p>
+  La exportación completa usa los filtros aplicados, hasta 2000 registros. Si
+  cambias los campos, aplica los filtros primero.
+</p>
+{#if exportNotice}<p role="status">{exportNotice}</p>{/if}
 {#if !busy && !error && !entries.length}<p>
     No hay registros con estos filtros. Puedes registrar actividad desde el
     catálogo.

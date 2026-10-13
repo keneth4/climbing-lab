@@ -35,7 +35,7 @@ La migración 0006 agrega versión de registro, retiro lógico e historial inmut
 
 ## Límites y pendientes
 
-- [ ] Exportación completa de un intervalo mediante un flujo separado de la exportación de página.
+- [x] J11 — Exportación completa de un intervalo mediante un flujo separado de la exportación de página.
 - [ ] Agrupar intentos por sesiones de escalada y definir proyectos personales.
 - [x] J8 — Corregir intentos, resultado y notas propios con versión esperada e historial.
 - [x] J9 — Retirar registros con confirmación, excluirlos de actividad vigente y consultar los retirados.
@@ -59,7 +59,7 @@ El retiro exige **Confirmar retiro** y conserva el registro y sus versiones. Los
 
 Sólo el propietario puede modificar o consultar el historial, incluso frente a una cuenta administrativa. Registro, historial y evento de auditoría se escriben en una transacción D1. Migración aplicada en ambos gimnasios locales; pendiente aplicar al preparar producción. Las pruebas usan datos aislados, sin corregir ni retirar actividad real del usuario.
 
-Siguiente entrega: exportación completa del intervalo; después proyectos/sesiones y tarjetas 3D.
+Siguientes entregas: proyectos/sesiones y tarjetas 3D.
 
 ## Fecha de actividad — 12 de octubre de 2026
 
@@ -73,3 +73,18 @@ Siguiente entrega: exportación completa del intervalo; después proyectos/sesio
 La ruta debe estar activa al registrar y se vincula a su revisión vigente. Para una actividad anterior esto no prueba que esa revisión existiera ese día; el formulario advierte esa limitación. La selección de revisiones/armados históricos y la corrección de fechas requieren otro flujo explícito.
 
 Verificación: 31 pruebas de Worker/D1, 12 de dominio y 2 flujos de bitácora en navegador (escritorio/móvil), tipos y build. Datos de QA aislados, sin registros reales.
+
+## CSV del intervalo completo — 12 de octubre de 2026
+
+**Exportar intervalo completo (CSV)** descarga los registros propios de ese gimnasio según los filtros ya aplicados (fechas, resultado y estado vigente/retirado), independientemente de la página visible. Si se modifican los campos, hay que aplicar filtros primero. Sin fechas se incluye toda la actividad del estado seleccionado. El botón de página conserva su alcance anterior.
+
+- [x] J11 — Consulta única ordenada por fecha/ID, sin recorrer páginas ni mezclar respuestas sucesivas.
+- [x] Aislamiento por cuenta/gimnasio, autenticación y respuestas sin caché.
+- [x] CSV compartido con escape de comillas, BOM y neutralización de fórmulas; incluye versión y estado.
+- [x] Rechazo explícito si se superan 2000 registros; no se descarga una parte silenciosamente.
+- [x] Bloqueo de doble exportación y descarte de respuesta tras desmontar/cambiar sesión.
+- [x] Pruebas de descarga >50 registros y filtros en escritorio/móvil.
+
+API: `GET /api/entries?export=csv` acepta los mismos filtros, pero rechaza limit/offset. Devuelve `{csv, records}`; el navegador genera el archivo local. La consulta solicita hasta 2001 filas y rechaza el resultado si excede el límite. Es un límite deliberado de tamaño/memoria para el piloto; exportaciones mayores requieren acotar fechas. La exportación refleja el estado al ejecutar su consulta, que puede diferir del resumen si hubo cambios entre ambas consultas.
+
+Verificación: 32 pruebas de backend/D1, 12 de dominio y 2 flujos de navegador; tipos y build. QA usa datos aislados y auth/API simulados en navegador; no descarga datos reales. Persiste la advertencia de tamaño del bundle PlayCanvas.

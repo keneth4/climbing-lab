@@ -1,3 +1,4 @@
+import { journalCsv } from '../shared/journal-csv';
 import { entryApi } from './entries';
 import { point } from '../shared/alignment';
 import { HttpError, json, body, text } from './http';
@@ -179,7 +180,15 @@ export async function handle(
         (k) =>
           !(
             path === '/api/entries'
-              ? ['limit', 'offset', 'from', 'until', 'result', 'state']
+              ? [
+                  'limit',
+                  'offset',
+                  'from',
+                  'until',
+                  'result',
+                  'state',
+                  'export',
+                ]
               : ['limit', 'offset', 'status']
           ).includes(k),
       )
@@ -409,6 +418,43 @@ export async function handle(
         params.push(result);
       }
       const filter = where.join(' AND ');
+      const exporting = url.searchParams.get('export');
+      if (exporting && exporting !== 'csv')
+        throw new HttpError(400, 'Formato de exportación inválido.');
+      if (exporting) {
+        if (url.searchParams.has('limit') || url.searchParams.has('offset'))
+          throw new HttpError(
+            400,
+            'La exportación completa no acepta paginación.',
+          );
+        const all = await env.DB.prepare(
+          `SELECT e.*,rr.snapshot AS route_snapshot,json_extract(rr.snapshot,'$.name') AS route_name,json_extract(rr.snapshot,'$.grade') AS grade FROM entries e JOIN route_revisions rr ON rr.route_id=e.route_id AND rr.revision=e.revision WHERE ${filter} ORDER BY e.created_at DESC,e.id LIMIT 2001`,
+        )
+          .bind(...params)
+          .all();
+        if (all.results.length > 2000)
+          throw new HttpError(
+            400,
+            'El intervalo supera 2000 registros. Acota las fechas; no se exportaron datos parciales.',
+          );
+        return json({
+          csv: journalCsv(
+            all.results.map((e: any) => ({
+              date: e.created_at,
+              routeName: e.route_name || e.route_id,
+              grade: e.grade || '',
+              revision: e.revision,
+              result: e.result,
+              attempts: e.attempts,
+              notes: e.notes,
+              deletedAt: e.deleted_at,
+              entryVersion: e.entry_version,
+            })),
+          ),
+          records: all.results.length,
+        });
+      }
+
       const rows = await env.DB.prepare(
         `SELECT e.*,rr.snapshot AS route_snapshot,json_extract(rr.snapshot,'$.name') AS route_name,json_extract(rr.snapshot,'$.grade') AS grade FROM entries e JOIN route_revisions rr ON rr.route_id=e.route_id AND rr.revision=e.revision WHERE ${filter} ORDER BY e.created_at DESC,e.id LIMIT ? OFFSET ?`,
       )

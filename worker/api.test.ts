@@ -650,3 +650,34 @@ it('stores past activity separately from audit time and rejects invalid or futur
     Date.parse(occurredAt),
   );
 });
+
+it('exports the complete private interval without pagination or silent truncation', async () => {
+  const owner = 'export-owner';
+  await a.DB.prepare(
+    "INSERT INTO entries(id,user_id,route_id,revision,attempts,result,notes,created_at) SELECT 'export-'||value,?,'route-a',1,1,'ascenso','=private','2020-01-01T00:00:00.000Z' FROM json_each(?)",
+  )
+    .bind(owner, JSON.stringify(Array.from({ length: 55 }, (_, i) => i)))
+    .run();
+  const get = (q = '', user = owner, env = a) =>
+    handle(req('/api/entries?export=csv' + q), env, asUser(user));
+  const response = await get();
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toContain('no-store');
+  const csv = await response.json();
+  expect(csv.records).toBe(55);
+  expect(csv.csv.split('\r\n')).toHaveLength(56);
+  expect(csv.csv).toContain("'=private");
+  expect((await (await get('', 'another')).json()).records).toBe(0);
+  expect((await (await get('', owner, b)).json()).records).toBe(0);
+  expect((await (await get('&result=intento')).json()).records).toBe(0);
+  expect((await get('&offset=0')).status).toBe(400);
+  await a.DB.prepare(
+    "INSERT INTO entries(id,user_id,route_id,revision,attempts,result,notes,created_at) SELECT 'large-export-'||value,?,'route-a',1,1,'intento','','2021-01-01T00:00:00.000Z' FROM json_each(?)",
+  )
+    .bind(owner, JSON.stringify(Array.from({ length: 2001 }, (_, i) => i)))
+    .run();
+  expect((await get()).status).toBe(400);
+  expect(
+    (await (await get('&until=2021-01-01T00%3A00%3A00.000Z')).json()).records,
+  ).toBe(55);
+});

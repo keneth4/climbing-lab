@@ -1,3 +1,4 @@
+import { journalCsv, journalEntry } from '../src/journal';
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 test('private journal filters, paginates and exports historical records, then clears on logout', async ({
@@ -160,6 +161,15 @@ test('private journal filters, paginates and exports historical records, then cl
           (!until || e.created_at < until) &&
           (!result || e.result === result),
       );
+      if (url.searchParams.get('export') === 'csv') {
+        await route.fulfill({
+          json: {
+            csv: journalCsv(rows.map(journalEntry)),
+            records: rows.length,
+          },
+        });
+        return;
+      }
       const offset = Number(url.searchParams.get('offset') || 0),
         limit = Number(url.searchParams.get('limit') || 50);
       json = {
@@ -207,6 +217,18 @@ test('private journal filters, paginates and exports historical records, then cl
   const csv = await readFile((await file.path())!, 'utf8');
   expect(csv).toContain('Nota privada 50');
   expect(csv).not.toContain('Nota privada 0');
+  const allDownload = page.waitForEvent('download');
+  await page
+    .getByRole('button', { name: 'Exportar intervalo completo (CSV)' })
+    .click();
+  const allFile = await allDownload;
+  const allCsv = await readFile((await allFile.path())!, 'utf8');
+  expect(allCsv.split('\r\n')).toHaveLength(56);
+  expect(allCsv).toContain('Nota privada 0');
+  expect(allCsv).toContain('Nota privada 54');
+  await page.screenshot({
+    path: `/tmp/journal-export-${test.info().project.name}.png`,
+  });
   await page.getByLabel('Resultado de bitácora').selectOption('ascenso');
   await page.getByLabel('Desde', { exact: true }).fill('2026-10-11');
   await page.getByLabel('Hasta', { exact: true }).fill('2026-10-11');
@@ -215,6 +237,18 @@ test('private journal filters, paginates and exports historical records, then cl
     page.getByRole('heading', { name: 'Ruta histórica · V2' }),
   ).toHaveCount(28);
   await expect(page.getByText('Página 1', { exact: true })).toBeVisible();
+  const fullDownload = page.waitForEvent('download');
+  await page
+    .getByRole('button', { name: 'Exportar intervalo completo (CSV)' })
+    .click();
+  expect((await fullDownload).suggestedFilename()).toBe(
+    'bitacora-intervalo.csv',
+  );
+  await expect(
+    page.getByText('28 registros exportados del intervalo aplicado.', {
+      exact: true,
+    }),
+  ).toBeVisible();
   const cardDownload = page.waitForEvent('download');
   await page
     .getByRole('button', { name: 'Exportar tarjeta personal' })
