@@ -180,9 +180,10 @@ test('password login → protected request → logout clears personal data', asy
   await page.goto('/?vista=Catálogo');
   await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
   await page.getByLabel('Correo', { exact: true }).fill('test@example.com');
-  await page
-    .getByLabel('Contraseña', { exact: true })
-    .fill('Test-password-123');
+  await page.getByLabel('Contraseña', { exact: true }).fill('short');
+  await expect(
+    page.getByRole('button', { name: 'Crear cuenta', exact: true }),
+  ).toBeDisabled();
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Cerrar sesión' }),

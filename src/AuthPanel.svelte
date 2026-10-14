@@ -85,7 +85,7 @@
         aria-describedby={message ? 'auth-result' : undefined}
         type="password"
         bind:value={password}
-        minlength="8"
+        minlength={recovery ? 8 : undefined}
         autocomplete={recovery ? 'new-password' : 'current-password'}
         required
       /></label
