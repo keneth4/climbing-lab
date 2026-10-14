@@ -39,3 +39,11 @@ El propietario detuvo después la selección por problemas de usabilidad. Se pri
 El [plan UX-P0](../ux/01-editor-espacial-y-tour-3d.md#12-entrega-ux-p0--14-de-octubre-de-2026) registra pruebas y límites por separado. Firefox con Crux permitió revisar una selección temporal con ancla pequeña y etiqueta desplazada, y descartarla sin guardar la ruta. Se conservaron captura publicada local, sección y borrador revisión 2. No se ejecutó reset ni se publicaron assets remotos.
 
 Pendientes concretos: selección humana de agarres y cámara de ruta, respaldo anotado y revisión desde dos ángulos; publicación de ruta; cuenta escaladora distinta, actividad persistente, privacidad e historial mediante API real. Las pruebas del editor con sesiones simuladas no cierran esos criterios.
+
+## Plan de continuación aprobado — 14 de octubre de 2026
+
+El propietario probó manualmente UX-P0 y reportó que el punto se percibe sobre la superficie del splat desde el primer intento. Es evidencia favorable de su escena; no sustituye la revisión de todos los agarres desde dos ángulos. No dispone todavía de una segunda cuenta.
+
+Reutilizar Firefox, captura/sección y borrador sin sobrescribir ediciones posteriores. Completar con selección humana 3–8 agarres, cámara, inicio/final, grado y reglas; comprobar Aplicar/Cancelar y undo/redo, preparar PNG y publicar solo tras confirmación humana de la ruta. Preparar smoke privado opt-in con dos perfiles reales, roles comprobados por /api/me, destino gym-demo y datos identificados como pruebas; nunca ejecutarlo sin ambos perfiles. Verificar proyecto sin ascenso, persistencia de actividad, exportación privada, rechazo de acceso ajeno, reporte, revisión y retiro con historia intacta.
+
+Añadir Firefox al helper de login manual, sesiones privadas excluidas de Git y limpieza explícita. Ejecutar regresiones y smoke público reutilizando el demo; sin setup/reset, migraciones, despliegue ni merge. D04 permanecerá abierto por la segunda cuenta y cualquier criterio humano pendiente.
