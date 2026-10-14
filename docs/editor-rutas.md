@@ -41,3 +41,11 @@ La referencia de cámara incluye la orientación; una cámara guardada para la o
 ## Capturas administradas
 
 El flujo de carga por ruta queda sustituido por capturas completas del gimnasio. Consulta [clon digital](clon-digital.md): el administrador publica la captura y el staff crea rutas sobre la versión vigente.
+
+## Preparación espacial UX-P0 (14 de octubre de 2026)
+
+Sobre una captura administrada, abre preparación 3D y selecciona un punto. Revisa el candidato antes de confirmarlo; puedes descartarlo o ajustar su posición con pulsaciones de 0,01/0,001 unidades del clon (no metros). XYZ permanece plegado. La referencia visual usa un ancla pequeña, línea y etiqueta desplazada; si no cabe la etiqueta, selecciona desde la lista.
+
+Seleccionar un agarre abre una copia temporal: **Aplicar** confirma posición/rol y **Cancelar** conserva el original. Aplicar valores idénticos conserva el respaldo y la verificación. Cambios confirmados, deshacer y rehacer requieren preparar nuevamente respaldo y revisión cuando corresponda. Escape cancela la herramienta activa. Cambiar captura o sección cancela la preparación temporal.
+
+El selector de etiquetas ofrece Todos, Inicio y final u Ocultar etiquetas; la edición activa permanece visible. El PNG utiliza el mismo layout que el visor. Guardar/publicar siguen usando los permisos, revisiones y validaciones existentes.

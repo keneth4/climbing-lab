@@ -158,3 +158,7 @@ Crear fixtures, scripts, documentación de instalación, tests con API/D1/R2 loc
 ## Entrega local integral — 13 de octubre de 2026
 
 D01–D03 y preparación D05 implementados en `codex/demo-integral-canonico`: dataset aislado, bootstrap/reset y lectura pública real D1/R2. [Runbook y evidencias](demo-local.md). D04 sigue pendiente de cuentas autorizadas y captura para publicación completa; L1–L3 siguen pendientes. No reiniciar módulos existentes ni afirmar despliegue/validación física.
+
+### Continuación UX-P0 — 14 de octubre de 2026
+
+UX-P0 implementado y probado localmente en el PR #3: marcadores legibles y edición reversible, sin cambiar API ni geometría de secciones. [Evidencia por nivel](planes/ux/01-editor-espacial-y-tour-3d.md#12-entrega-ux-p0--14-de-octubre-de-2026). Crux está publicada solo en el demo local y la ruta D04 sigue como borrador: revisión humana de agarres y recorridos privados entre cuentas pendientes. D04 y L1–L3 no se consideran completos; UX-P1/P2 se mantienen separados.

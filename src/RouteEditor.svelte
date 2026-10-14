@@ -72,7 +72,20 @@
   function cancelTool() {
     interaction = { mode: 'explore' };
     requestAnimationFrame(() => {
-      if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+      if (returnFocus?.isConnected) {
+        const panel = returnFocus.closest<HTMLElement>('#tools-panel');
+        if (
+          preparing3D &&
+          panel &&
+          !returnFocus.closest('.route-marker-overlay')
+        ) {
+          const n = returnFocus.getBoundingClientRect(),
+            p = panel.getBoundingClientRect();
+          if (n.top < p.top || n.bottom > p.bottom)
+            panel.scrollTop += n.top - p.top - 12;
+        }
+        returnFocus.focus({ preventScroll: true });
+      }
     });
   }
   function beginEditHold(id: string) {

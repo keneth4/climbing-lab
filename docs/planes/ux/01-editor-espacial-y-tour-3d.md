@@ -350,3 +350,20 @@ Realizar **solo UX-P0** para destrabar D04. Usar este Markdown como **commit de 
 No publicar rutas sin verificación humana, no crear tres marcas visuales, no trasladar coordenadas entre capturas automáticamente, no reconstruir el editor desde cero, no implementar detección perfecta de presas, no alterar pagos/miembros/tienda, no añadir un segundo runtime, no meter tour y geometría V2 en D04, no desplegar recursos remotos ni borrar los datos locales de Crux.
 
 **Definición de listo para comenzar:** el paquete P0 describe estados, archivos, pruebas y no-regresiones; Codex puede iniciar cambios de forma incremental en esta rama, sin pedir un nuevo diseño conceptual. **La calidad final del gesto, la oclusión y la exactitud se confirman con equipos y escenas reales, no por el documento.**
+
+## 12. Entrega UX-P0 — 14 de octubre de 2026
+
+Implementado en `codex/demo-integral-canonico`, PR #3: layout puro determinista de ocho posiciones, ancla pequeña/líder/etiqueta y blanco táctil de 48 px; fallback a la lista cuando falta espacio. Visibilidad Todos / Inicio y final / Ocultar etiquetas, manteniendo la edición activa. Visor y PNG comparten proyección y dibujo con coordenadas CSS y escala al framebuffer. No hay segunda instancia de PlayCanvas ni cambios de contratos o geometría de secciones.
+
+La preparación usa modos explícitos y candidatos vinculados a captura/sección. Editar utiliza copia temporal con Aplicar/Cancelar; inspeccionar, cancelar o aplicar valores idénticos conserva respaldo y verificación. Cambios confirmados y undo/redo dejan dependencias pendientes. Ajuste fino 0,01/0,001 unidades del clon, XYZ plegado, enfoque al punto, Escape y devolución de foco; solo se desplaza el inspector durante preparación.
+
+| Nivel de evidencia | Resultado |
+| --- | --- |
+| Implementación | Funciones puras, overlay/exportación y edición transaccional en commits separados; QA/documentación al cierre |
+| Automatización de dominio/API | 27 frontend y 50 API; tipos frontend/backend, formato y build aprobados |
+| Navegador con fixtures | 56 e2e aprobados; 12 del editor repetidos tras los ajustes finales. Matriz 320/390/768/1440 px, dos temas, DPR 1/2/3, resize, teclado, zoom CSS 200 %, cancelación/contexto, undo/redo y pixel del PNG correspondiente al ancla DOM |
+| Integración pública real | 6 smoke Vite → Worker → D1/R2 aprobados mediante `DEMO_REUSE_SERVER=1 npx playwright test --config playwright.demo.config.ts`; sin setup ni reset del demo |
+| QA local Crux | Firefox autenticado: selección temporal, ancla/líder/etiqueta visibles, inspector y cámara conservados; candidato descartado, sin guardar ni publicar ruta |
+| Validación humana/física | Pendiente: agarres reales desde dos ángulos, ruta completa, segunda cuenta y recorrido privado; teléfonos, lector de pantalla, precisión/oclusión y rendimiento físico |
+
+Las capturas automatizadas de fixtures quedan en `/tmp/p0-dpr{1,2,3}-{320,390,768,1440}-{first,second}-{desktop,mobile}.png`; no son fotografías ni evidencias físicas de Crux. El build conserva el aviso de bundle PlayCanvas mayor de 500 kB; no se declara mejora de rendimiento. D04 sigue abierto; UX-P1/P2, tour, migraciones y despliegues no forman parte de esta entrega.

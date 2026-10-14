@@ -33,3 +33,9 @@ Después, el propietario confirmó expresamente la revisión completa y autoriz�
 Se guardó «Prueba D04 · Crux local» como borrador con grado provisional V1 y reglas que indican su finalidad de prueba; revisión 2 vinculada a «Spray Wall Completo». Preparación 3D abierta para selección humana de agarres, cámara de ruta y respaldo. La confirmación de la captura no sustituye la revisión de agarres de esta ruta desde dos ángulos. Publicación de ruta y recorridos entre cuentas siguen pendientes. Regresiones adicionales: 44 e2e simulados y 6 smoke públicos con API/D1/R2 reales aprobados, manteniendo el demo abierto.
 
 El propietario detuvo después la selección por problemas de usabilidad. Se priorizó la [corrección del editor de rutas](../../ux/editor-rutas-d04.md): referencia provisional visible, etiquetas numeradas seleccionables, controles agrupados y corrección de coordenadas CSS/framebuffer. La prueba manual de interacción en Firefox se realizó con un marcador temporal, retirado sin guardar la ruta. No se confirmó geometría ni se publicó una ruta durante esta corrección; D04 continúa pendiente.
+
+## UX-P0 implementado; D04 abierto
+
+El [plan UX-P0](../ux/01-editor-espacial-y-tour-3d.md#12-entrega-ux-p0--14-de-octubre-de-2026) registra pruebas y límites por separado. Firefox con Crux permitió revisar una selección temporal con ancla pequeña y etiqueta desplazada, y descartarla sin guardar la ruta. Se conservaron captura publicada local, sección y borrador revisión 2. No se ejecutó reset ni se publicaron assets remotos.
+
+Pendientes concretos: selección humana de agarres y cámara de ruta, respaldo anotado y revisión desde dos ángulos; publicación de ruta; cuenta escaladora distinta, actividad persistente, privacidad e historial mediante API real. Las pruebas del editor con sesiones simuladas no cierran esos criterios.
