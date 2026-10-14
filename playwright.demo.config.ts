@@ -8,7 +8,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run demo:run',
     url: 'http://127.0.0.1:5174',
-    reuseExistingServer: false,
+    // Explicit opt-in for the already running D04 demo; tests verify gym-demo.
+    reuseExistingServer: process.env.DEMO_REUSE_SERVER === '1',
     timeout: 60000,
   },
   projects: [

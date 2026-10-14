@@ -62,6 +62,8 @@ Destino fijo demo y cambio/auditoría atómicos; no modifica Supabase ni A/B. Re
 
 No ejecutar reset durante D04: eliminaría la captura, permisos y datos de prueba locales.
 
+Para comprobar el catálogo público mientras el demo está abierto, sin reiniciarlo: `DEMO_REUSE_SERVER=1 npx playwright test --config playwright.demo.config.ts`. La reutilización es explícita y las pruebas comprueban gym-demo; el comando normal conserva el rechazo de un puerto ocupado.
+
 ## Resultado verificado y siguientes puertas
 
 - 19 pruebas frontend/dominio, 47 Worker/API y 44 e2e existentes aprobadas; seis smoke integrado reales desktop/mobile. Tipos, formato y build aprobados. El aviso de tamaño de PlayCanvas permanece; no equivale a medición móvil.
