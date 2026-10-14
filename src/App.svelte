@@ -1086,8 +1086,11 @@
                 <p>{selected.beta || 'El staff aún no ha añadido una beta.'}</p>
               </details>
               <details>
-                <summary>Compartir</summary><button
-                  onclick={() => exportImage()}>Preparar imagen de ruta</button
+                <summary>Compartir</summary
+                >{#if ['localhost', '127.0.0.1'].includes(location.hostname)}<p>
+                    Enlace y QR locales: no accesibles desde internet.
+                  </p>{/if}<button onclick={() => exportImage()}
+                  >Preparar imagen de ruta</button
                 ><a href={routeUrl(selected.id)}>Enlace de ruta</a>
                 <details>
                   <summary>QR de la ruta</summary>{#if qr}<img

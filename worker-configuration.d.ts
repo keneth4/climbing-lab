@@ -4,7 +4,7 @@
 interface __BaseEnv_Env {
 	CAPTURES: R2Bucket;
 	DB: D1Database;
-	GYM_ID: "gym-b" | "gym-a";
+	GYM_ID: "gym-b" | "gym-a" | "gym-demo";
 	AUTH_ISSUER: "https://defblrjdwgnqyzzgozdf.supabase.co/auth/v1";
 	AUTH_AUDIENCE: "authenticated";
 }

@@ -17,6 +17,7 @@ export type CameraView = {
   target: [number, number, number];
 };
 export type Route = {
+  illustrationId?: string;
   gradeScale?: string;
   rules?: string;
   imageId?: string;

@@ -78,7 +78,7 @@ function start(command, args) {
   const child = spawn(command, args, {
     cwd: root,
     stdio: 'inherit',
-    detached: true,
+    detached: false,
   });
   children.add(child);
   child.once('error', (e) => {
@@ -90,7 +90,7 @@ function start(command, args) {
 function stop() {
   for (const child of children) {
     try {
-      process.kill(-child.pid, 'SIGTERM');
+      child.kill('SIGTERM');
     } catch {}
   }
   children.clear();
@@ -104,8 +104,8 @@ process.on('SIGTERM', () => {
   process.exit(143);
 });
 const worker = () =>
-  start('npx', [
-    'wrangler',
+  start(process.execPath, [
+    join(root, 'node_modules/wrangler/wrangler-dist/cli.js'),
     'dev',
     '--local',
     '--ip',
@@ -194,8 +194,8 @@ try {
     await assertSafePath();
     const api = worker();
     await waitForHealth();
-    const web = start('npx', [
-      'vite',
+    const web = start(process.execPath, [
+      join(root, 'node_modules/vite/bin/vite.js'),
       '--mode',
       'demo',
       '--host',

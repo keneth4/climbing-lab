@@ -48,7 +48,7 @@
       >Sector<select bind:value={sectorFilter}
         ><option value="">Todos</option
         >{#each [...new Set(routes.map((r) => r.sector))] as sector}<option
-            >{sector}</option
+            value={sector}>{sector}</option
           >{/each}</select
       ></label
     >
@@ -68,7 +68,8 @@
       >Grado<select bind:value={grade}
         ><option value="">Todos</option>{#each [...new Set(routes
               .filter((r) => !scaleFilter || (r.gradeScale || gradeScale(r.grade)) === scaleFilter)
-              .map((r) => r.grade))] as g}<option>{g}</option>{/each}</select
+              .map((r) => r.grade))] as g}<option value={g}>{g}</option
+          >{/each}</select
       ></label
     >
     {#if scaleFilter === 'V' || scaleFilter === 'Font'}{#each ['desde', 'hasta'] as limit}<label
@@ -81,7 +82,7 @@
             ><option value="">Sin límite</option>{#each [...new Set(routes
                   .filter((r) => (r.gradeScale || gradeScale(r.grade)) === scaleFilter)
                   .map((r) => r.grade))].sort((a, b) => (gradeRank(a, scaleFilter) || 0) - (gradeRank(b, scaleFilter) || 0)) as g}<option
-                >{g}</option
+                value={g}>{g}</option
               >{/each}</select
           ></label
         >{/each}{/if}
@@ -120,7 +121,9 @@
   <div class="route-list site-route-list">
     {#each filtered as r}<button class="route-card" onclick={() => select(r.id)}
         ><RouteThumbnail route={r} /><span
-          ><strong>{r.name}</strong><span>{r.grade} · {r.sector}</span><span
+          ><strong>{r.name}</strong>{#if r.illustrationId && !r.imageId}<span
+              >Ilustración de ejemplo; no fotografía del muro</span
+            >{/if}<span>{r.grade} · {r.sector}</span><span
             >{r.status === 'retirada' ? 'Retirada' : 'Activa'} · Revisión {r.revision}</span
           ></span
         ></button

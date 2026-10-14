@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { illustrationUrl, illustrationLabel } from './illustrations';
   import type { Route } from './domain';
   import { supabase } from './auth';
   let { route, imageUrl }: { route: Route; imageUrl?: string } = $props();
@@ -9,7 +10,9 @@
       preview = imageUrl,
       draft = route.status === 'borrador';
     failed = false;
-    photo = preview || (id && !draft ? `/api/route-images/${id}` : '');
+    photo =
+      preview ||
+      (id && !draft ? `/api/route-images/${id}` : illustrationUrl(route) || '');
     let disposed = false,
       objectUrl = '';
     if (id && draft && !preview)
@@ -41,7 +44,9 @@
   {#if photo && !failed}
     <img
       src={photo}
-      alt={`Imagen anotada de ${route.name}, revisión ${route.revision}. Inicio I y final F.`}
+      alt={route.illustrationId && !route.imageId
+        ? `${illustrationLabel}: ${route.name}`
+        : `Imagen anotada de ${route.name}, revisión ${route.revision}. Inicio I y final F.`}
       onerror={() => (failed = true)}
     />
   {:else}
@@ -55,6 +60,9 @@
     </div>
   {/if}
   <figcaption>
+    {#if route.illustrationId && !route.imageId}<p>
+        {illustrationLabel}. Sin captura 3D verificada.
+      </p>{/if}
     {route.sector} · Revisión {route.revision} · Inicio I · Final F
   </figcaption>
 </figure>
