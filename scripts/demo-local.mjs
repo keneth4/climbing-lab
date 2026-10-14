@@ -5,6 +5,7 @@ export const demoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const demoPersist = join(demoRoot, '.wrangler', 'demo');
 export const authDirectory = join(demoRoot, '.playwright', 'demo-auth');
 export const demoOrigin = 'http://127.0.0.1:5174';
+export const demoOrigins = [demoOrigin, 'http://localhost:5174'];
 export const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function assertDemoTarget() {

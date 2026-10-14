@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sesión privada D04 · demo local</title>
+  <style>
+    body {
+      font: 16px system-ui;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      max-width: 64ch;
+    }
+    button,
+    select {
+      min-height: 44px;
+      padding: 0.5rem;
+      margin: 0.25rem;
+    }
+    #result {
+      overflow-wrap: anywhere;
+    }
+  </style>
+  <body>
+    <main>
+      <h1>Preparar sesión privada D04</h1>
+      <p>Herramienta local de pruebas. No crea cuentas ni concede permisos.</p>
+      <label
+        >Perfil
+        <select id="profile">
+          <option value="escalador">Escalador</option>
+          <option value="staff">Staff</option>
+        </select></label
+      >
+      <button id="inspect">Comprobar cuenta</button>
+      <button id="login">Iniciar otra cuenta sin revocar la anterior</button>
+      <button id="save" disabled>Descargar sesión privada</button>
+      <p>
+        El archivo contiene tu sesión: úsalo solo con demo:auth import. No lo
+        compartas ni lo añadas a Git. Se eliminará tras las pruebas.
+      </p>
+      <p id="result" role="status"></p>
+      <section id="auth"></section>
+    </main>
+    <script type="module" src="/src/demo-auth-page.ts"></script>
+  </body>
+</html>

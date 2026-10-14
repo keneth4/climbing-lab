@@ -1,5 +1,14 @@
 import { chromium, firefox } from '@playwright/test';
-import { writeFile, rm, lstat, chmod } from 'node:fs/promises';
+import { privateSessionState } from './demo-private-guards.mjs';
+import { isAbsolute } from 'node:path';
+import {
+  writeFile,
+  rm,
+  lstat,
+  chmod,
+  readFile,
+  realpath,
+} from 'node:fs/promises';
 import {
   assertDemoTarget,
   privateDirectory,
@@ -7,9 +16,10 @@ import {
   profilePath,
   requireDemoServer,
   demoOrigin,
+  demoOrigins,
 } from './demo-local.mjs';
 const profile = process.argv[2];
-const browserName = process.argv[3] || 'firefox';
+const browserName = process.argv[3] || 'internal';
 let browser;
 try {
   await assertDemoTarget();
@@ -21,9 +31,64 @@ try {
     console.log(
       'Sesiones privadas locales eliminadas. No revoca sesiones remotas ni permisos D1.',
     );
+  } else if (profile === 'import') {
+    const role = process.argv[3],
+      source = process.argv[4];
+    if (
+      process.argv.length !== 6 ||
+      process.argv[5] !== '--confirm=gym-demo' ||
+      !isAbsolute(source)
+    )
+      throw new Error(
+        'Importación requiere perfil, archivo absoluto y confirmación gym-demo.',
+      );
+    const destination = profilePath(role);
+    const stat = await lstat(source);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      (await realpath(source)) !== source ||
+      stat.size > 65536
+    )
+      throw new Error('Archivo de sesión no seguro.');
+    await chmod(source, 0o600);
+    const state = JSON.parse(await readFile(source, 'utf8'));
+    privateSessionState(state);
+    const session = JSON.parse(state.origins[0].localStorage[0].value);
+    await requireDemoServer();
+    const response = await fetch(`${demoOrigin}/api/me`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!response.ok) throw new Error('Sesión no válida.');
+    const me = await response.json();
+    if (
+      me.gymId !== 'gym-demo' ||
+      me.userId !== session.user?.id ||
+      (role === 'escalador'
+        ? !!me.staff
+        : !['admin', 'editor'].includes(me.staff))
+    )
+      throw new Error('Identidad o rol incorrectos.');
+    const previous = await lstat(destination).catch((e) => {
+      if (e.code !== 'ENOENT') throw e;
+    });
+    if (previous?.isSymbolicLink()) throw new Error('Destino enlazado.');
+    await writeFile(destination, JSON.stringify(state), { mode: 0o600 });
+    await chmod(destination, 0o600);
+    console.log(
+      JSON.stringify({
+        profile: role,
+        userId: me.userId,
+        role: me.staff,
+        sessionSaved: true,
+      }),
+    );
   } else {
-    if (process.argv.length > 4 || !['firefox', 'chrome'].includes(browserName))
-      throw new Error('Usa staff|escalador [firefox|chrome].');
+    if (
+      process.argv.length > 4 ||
+      !['internal', 'firefox', 'chrome'].includes(browserName)
+    )
+      throw new Error('Usa staff|escalador [internal|firefox|chrome].');
     const destination = profilePath(profile);
     await lstat(destination).then(
       (s) => {
@@ -35,6 +100,12 @@ try {
       },
     );
     await requireDemoServer();
+    if (browserName === 'internal') {
+      console.log(
+        `Abre ${demoOrigin}/demo-auth.html?profile=${profile} en el navegador interno. Descarga la sesión e impórtala con demo:auth import; este comando no abre un navegador externo.`,
+      );
+      process.exit(0);
+    }
     browser = await (browserName === 'firefox'
       ? firefox.launch({ headless: false })
       : chromium.launch({ channel: 'chrome', headless: false }));
@@ -104,7 +175,7 @@ try {
   }
 } catch {
   console.error(
-    'Perfil no guardado: revisa destino demo, argumentos o completa el login manual. Firefox requiere npx playwright install firefox.',
+    'Perfil no guardado: revisa destino demo, argumentos, sesión descargada o completa el login manual. Los navegadores externos solo se usan con opción explícita.',
   );
   process.exitCode = 1;
 } finally {

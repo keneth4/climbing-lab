@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  privateSessionState,
   privateArguments,
   privateIdentities,
   verifiedPresentation,
@@ -61,4 +62,32 @@ test('never clone unverified draft or mismatched presentation', () => {
     { ...route, snapshot: { ...route.snapshot, holds3D: [] } },
   ])
     assert.throws(() => verifiedPresentation(bad));
+});
+
+test('session exports accept only the two fixed loopback demo origins and no provider cookies', () => {
+  const state = (origin) => ({
+    cookies: [],
+    origins: [
+      {
+        origin,
+        localStorage: [
+          { name: 'sb-defblrjdwgnqyzzgozdf-auth-token', value: '{}' },
+        ],
+      },
+    ],
+  });
+  for (const origin of ['http://localhost:5174', 'http://127.0.0.1:5174'])
+    privateSessionState(state(origin));
+  for (const origin of [
+    'https://example.com',
+    'http://127.0.0.1:5173',
+    'http://localhost:8789',
+  ])
+    assert.throws(() => privateSessionState(state(origin)));
+  assert.throws(() =>
+    privateSessionState({ ...state('http://localhost:5174'), cookies: [{}] }),
+  );
+  assert.throws(() =>
+    privateSessionState({ ...state('http://localhost:5174'), origins: [] }),
+  );
 });

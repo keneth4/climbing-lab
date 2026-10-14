@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { uuidPattern } from './demo-local.mjs';
+import { uuidPattern, demoOrigins } from './demo-local.mjs';
 export function privateArguments(args) {
   assert(
     args.length === 2 &&
@@ -48,4 +48,15 @@ export function verifiedPresentation(route) {
   return Object.fromEntries(
     keys.filter((k) => s[k] !== undefined).map((k) => [k, s[k]]),
   );
+}
+
+export function privateSessionState(state) {
+  assert(state.cookies?.length === 0 && state.origins?.length === 1);
+  const origin = state.origins[0];
+  assert(demoOrigins.includes(origin.origin));
+  assert(
+    origin.localStorage?.length === 1 &&
+      origin.localStorage[0].name === 'sb-defblrjdwgnqyzzgozdf-auth-token',
+  );
+  return state;
 }
