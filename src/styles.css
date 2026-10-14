@@ -865,3 +865,13 @@ header > div:last-child {
 body {
   width: var(--viewport-width, 100%);
 }
+
+@media (max-width: 750px) {
+  .workspace:not(.reading)
+    .tools-panel:not([data-editor-sheet]):has(details[open] > .route-editor) {
+    top: calc(
+      var(--workspace-top) +
+        (var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.28
+    );
+  }
+}

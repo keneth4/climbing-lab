@@ -74,9 +74,11 @@
       if (node && panel) {
         const n = node.getBoundingClientRect(),
           p = panel.getBoundingClientRect();
+        const nav = node.closest('.route-editor')?.querySelector('nav');
         const navHeight =
-          document.querySelector('.route-editor nav')?.getBoundingClientRect()
-            .height || 0;
+          nav && getComputedStyle(nav).position === 'sticky'
+            ? nav.getBoundingClientRect().height
+            : 0;
         if (preparing3D && (n.top < p.top + navHeight || n.bottom > p.bottom))
           panel.scrollTop += n.top - p.top - navHeight - 12;
         else if (!preparing3D && documentNavigation)
@@ -314,12 +316,14 @@
     changeReason: '',
   }));
   const changed = $derived(differences(values(), baseline));
-  const states = $derived(
-    stepStates(
+  const states = $derived.by(() => {
+    const result = stepStates(
       { ...values(), captureId: initial?.captureId || currentCapture?.id },
       baseline,
-    ),
-  );
+    );
+    if (serverProblem) result[serverProblem - 1] = 'Pendiente';
+    return result;
+  });
   let lastGeometry = untrack(() =>
     geometryKey({ ...values(), captureId: initial?.captureId }),
   );
@@ -335,6 +339,7 @@
         markersVerified = false;
         firstAngle = false;
         secondAngle = false;
+        serverProblem = undefined;
       });
     }
   });
@@ -386,6 +391,7 @@
   }
   async function save(target: Route['status'] = status) {
     if (busy || imageBusy || toolBusy || conflict) return;
+    if (target !== 'borrador' && serverProblem) return;
     if (target === 'activa' && pending.length) {
       message = 'Completa los pasos pendientes antes de publicar.';
       return;
@@ -400,6 +406,7 @@
     }
     busy = true;
     message = '';
+    const rejectedImage = serverProblem === 5;
     serverProblem = undefined;
     try {
       const result = await api(
@@ -409,7 +416,7 @@
           grade,
           gradeScale,
           rules,
-          imageId,
+          imageId: target === 'borrador' && rejectedImage ? '' : imageId,
           markersVerified,
           changeReason,
           sector: sections.find((s) => s.id === sectionId)?.name || sector,
@@ -506,6 +513,7 @@
           'La preparación cambió durante la carga. Genera un respaldo nuevo.',
         );
       imageId = result.id;
+      if (serverProblem === 5) serverProblem = undefined;
       if (imagePreview) URL.revokeObjectURL(imagePreview);
       imagePreview = URL.createObjectURL(blob);
       message =
@@ -635,7 +643,11 @@
       : ''}
   </p>
   <nav aria-label="Pasos del editor">
-    <div class="sheet-controls" aria-label="Altura del inspector">
+    <div
+      class="sheet-controls"
+      hidden={!preparing3D}
+      aria-label="Altura del inspector"
+    >
       {#each [['compact', 'Compacto'], ['medium', 'Medio'], ['expanded', 'Ampliado']] as [value, label]}<button
           type="button"
           aria-pressed={sheetHeight === value}
@@ -1147,6 +1159,8 @@
             imageBusy ||
             toolBusy ||
             conflict ||
+            !!serverProblem ||
+            (initial?.status === 'retirada' && !changeReason.trim()) ||
             pending.length > 0}
           onclick={() => save('activa')}
           >{initial?.status === 'activa'
@@ -1161,6 +1175,7 @@
               imageBusy ||
               toolBusy ||
               conflict ||
+              !!serverProblem ||
               pending.length > 0 ||
               !changeReason.trim()}
             onclick={() => save('retirada')}>Confirmar retiro</button
@@ -1198,9 +1213,7 @@
           ? 'Conservar preparación local'
           : 'Guardar borrador'}</button
     >
-    {#if published}<small
-        >Solo durante esta sesión; no se guarda en servidor y recargar puede
-        perderla.</small
+    {#if published}<small>Local, sin servidor. Recargar puede perderla.</small
       >{/if}
   </div>
 </div>
@@ -1238,12 +1251,16 @@
     position: sticky;
     top: 0;
     z-index: 5;
+    display: block;
     background: var(--surface);
   }
   .compact-step-nav {
     display: none;
   }
   @container (max-width:280px) {
+    nav {
+      position: static;
+    }
     .compact-step-nav {
       display: block;
     }
@@ -1276,6 +1293,12 @@
     display: none;
   }
   @media (max-width: 750px) {
+    .editor-steps {
+      display: none;
+    }
+    .compact-step-nav {
+      display: block;
+    }
     .sheet-controls {
       display: flex;
       flex-wrap: wrap;

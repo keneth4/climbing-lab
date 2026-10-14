@@ -1,4 +1,4 @@
-import { gaussianFixture } from './fixtures';
+import { gaussianFixture, editorStep as go } from './fixtures';
 import { test, expect } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/**', async (route) => {
@@ -381,6 +381,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await page
     .getByLabel('Nombre de ruta', { exact: true })
     .fill('Ruta revisada');
+  await go(page, 3);
   const markerEditor = page.locator('.route-markers');
   await markerEditor
     .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
@@ -428,6 +429,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     .click();
   expect(current.revision).toBe(1);
   expect(current.holds3D).toEqual([]);
+  await go(page, 2);
   await markerEditor
     .getByRole('button', { name: 'Guardar cámara para esta ruta' })
     .click();
@@ -435,11 +437,15 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await markerEditor
     .locator('canvas')
     .screenshot({ path: `/tmp/route-markers-${test.info().project.name}.png` });
+  await go(page, 4);
+  await page.getByLabel('Revisé la vista frontal').check();
+  await page.getByLabel('Revisé la vista lateral y la profundidad').check();
   await markerEditor
     .getByLabel(
       'Confirmé todos los agarres desde dos ángulos y el inicio/final son legibles',
     )
     .check();
+  await go(page, 5);
   await markerEditor
     .getByRole('button', { name: 'Usar vista anotada como respaldo' })
     .click();
@@ -448,11 +454,12 @@ test('staff editor saves a version and keeps retired routes accessible', async (
       'Imagen preparada para esta revisión. Guarda el borrador o publica.',
     ),
   ).toHaveCount(0);
+  await go(page, 6);
   await expect(
-    page.getByRole('button', { name: 'Publicar ruta', exact: true }),
+    page.getByRole('button', { name: 'Actualizar ruta', exact: true }),
   ).toBeEnabled();
   await page
-    .getByRole('button', { name: 'Publicar ruta', exact: true })
+    .getByRole('button', { name: 'Actualizar ruta', exact: true })
     .click();
   await expect(
     page.getByRole('heading', { name: 'Ruta revisada V2' }),
@@ -477,9 +484,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     page.getByRole('img', { name: 'Agarre I1 · inicio', exact: true }),
   ).toBeVisible();
   await page.locator('summary').filter({ hasText: 'Editar ruta' }).click();
-  await page
-    .getByRole('combobox', { name: 'Estado', exact: true })
-    .selectOption('retirada');
+  await go(page, 6);
   await page.getByLabel('Motivo del cambio').fill('Armado retirado');
   await page.getByRole('button', { name: 'Confirmar retiro' }).click();
   await expect(

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { gaussianFixture } from './fixtures';
+import { gaussianFixture, editorStep as go } from './fixtures';
 const original = {
   id: 'route-spatial',
   revision: 1,
@@ -27,7 +27,7 @@ const original = {
     target: [0, 0, 0],
   },
 };
-async function setup(page: Page) {
+async function setup(page: Page, published = false) {
   const exp = Math.floor(Date.now() / 1000) + 3600;
   const token =
     'eyJhbGciOiJIUzI1NiJ9.' +
@@ -58,7 +58,14 @@ async function setup(page: Page) {
     { token, exp },
   );
   const state = {
-    route: structuredClone(original),
+    route: {
+      ...structuredClone(original),
+      status: published ? 'activa' : 'borrador',
+    },
+    errorStatus: 0,
+    errorMessage: '',
+    failAsset: false,
+    delay: 0,
     writes: [] as any[],
     images: [] as any[],
     imageBuffers: [] as Buffer[],
@@ -68,6 +75,10 @@ async function setup(page: Page) {
       path = url.pathname,
       method = handler.request().method();
     if (path.includes('/file/scene.ply')) {
+      if (state.failAsset) {
+        await handler.fulfill({ status: 503, body: 'Asset unavailable' });
+        return;
+      }
       await handler.fulfill({
         body: gaussianFixture(),
         contentType: 'application/octet-stream',
@@ -90,10 +101,27 @@ async function setup(page: Page) {
     if (path === '/api/routes')
       payload = {
         routes:
-          url.searchParams.get('status') === 'borrador' ? [state.route] : [],
+          url.searchParams.get('status') === state.route.status
+            ? [state.route]
+            : [],
       };
     if (path === `/api/routes/${original.id}`) {
       if (method === 'PUT') {
+        if (state.delay)
+          await new Promise((resolve) => setTimeout(resolve, state.delay));
+        if (state.errorStatus) {
+          await handler.fulfill({
+            status: state.errorStatus,
+            json: {
+              error:
+                state.errorMessage ||
+                (state.errorStatus === 409
+                  ? 'Conflicto de revisión'
+                  : 'Error de red temporal'),
+            },
+          });
+          return;
+        }
         const body = handler.request().postDataJSON();
         state.writes.push(body);
         state.route = {
@@ -157,6 +185,7 @@ async function setup(page: Page) {
   await expect(
     page.getByRole('combobox', { name: 'Sección', exact: true }),
   ).toHaveValue('section-p0');
+  await go(page, 3);
   return state;
 }
 const verified = (page: Page) =>
@@ -248,14 +277,12 @@ test('applied edits, undo/redo and section changes preserve transaction boundari
     .getByRole('button', { name: 'Agarre 1: aumentar X', exact: true })
     .click();
   await page
+    .getByRole('button', { name: 'Cancelar ajuste', exact: true })
+    .click();
+  await go(page, 1);
+  await page
     .getByRole('combobox', { name: 'Sección', exact: true })
     .selectOption('section-other');
-  await expect(
-    page.getByText(
-      'La captura o sección cambió; preparación temporal cancelada.',
-      { exact: true },
-    ),
-  ).toBeVisible();
   await page
     .getByRole('button', { name: 'Guardar borrador', exact: true })
     .click();
@@ -377,6 +404,7 @@ for (const dpr of [1, 2, 3])
         y: Number(await pin.getAttribute('cy')),
       };
       const viewport = (await canvas.boundingBox())!;
+      await go(page, 5);
       await page
         .getByRole('button', {
           name: 'Usar vista anotada como respaldo',
@@ -511,4 +539,472 @@ test('marker anchors survive resize, themes, inspector scroll and CSS zoom witho
   await page.evaluate(() => (document.documentElement.style.zoom = '2'));
   await checkMapping();
   await page.screenshot({ path: `/tmp/p0-zoom-${info.project.name}.png` });
+});
+
+test('guided steps preserve published preparation locally and require explicit conflict review', async ({
+  page,
+}) => {
+  const state = await setup(page, true);
+  await go(page, 1);
+  await page
+    .getByLabel('Nombre de ruta', { exact: true })
+    .fill('Preparación conservada');
+  await page
+    .getByRole('button', { name: 'Conservar preparación local', exact: true })
+    .click();
+  expect(state.writes).toHaveLength(0);
+  expect(state.route.name).toBe(original.name);
+  await go(page, 6);
+  await expect(
+    page.getByRole('heading', { name: 'Revisar y publicar' }),
+  ).toBeFocused();
+  await expect(
+    page.getByText('Diferencias frente a la versión guardada: Nombre.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  state.errorStatus = 409;
+  await page
+    .getByRole('button', { name: 'Actualizar ruta', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Actualizar ruta', exact: true }),
+  ).toBeDisabled();
+  state.route.revision = 2;
+  state.route.name = 'Cambio concurrente';
+  state.errorStatus = 0;
+  await page
+    .getByRole('button', { name: 'Recargar versión guardada', exact: true })
+    .click();
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Editar ruta$/ })
+    .click();
+  await expect(page.getByLabel('Nombre de ruta', { exact: true })).toHaveValue(
+    'Preparación conservada',
+  );
+  await go(page, 6);
+  await expect(
+    page.getByRole('button', { name: 'Actualizar ruta', exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole('button', {
+      name: 'Revisé la nueva revisión y las diferencias',
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole('button', { name: 'Actualizar ruta', exact: true })
+    .click();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0].expectedRevision).toBe(2);
+  expect(state.writes[0].name).toBe('Preparación conservada');
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Editar ruta$/ })
+    .click();
+  await expect(
+    page.getByText('Sin cambios pendientes', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Preparación basada en revisión', { exact: false }),
+  ).toHaveCount(0);
+});
+
+test('temporary tools block step changes, Escape restores focus and keyboard undo avoids inputs', async ({
+  page,
+}) => {
+  const state = await setup(page);
+  const origin = page.getByRole('button', {
+    name: 'Ajustar agarre 1',
+    exact: true,
+  });
+  await origin.click();
+  await go(page, 2);
+  await expect(page.locator('.route-editor')).toHaveAttribute('data-step', '3');
+  await page
+    .getByRole('combobox', { name: 'Rol del agarre 1', exact: true })
+    .selectOption('final');
+  await page
+    .getByRole('combobox', { name: 'Rol del agarre 1', exact: true })
+    .press('Escape');
+  await expect(origin).toBeFocused();
+  await expect(verified(page)).toBeChecked();
+  await origin.click();
+  await page
+    .getByRole('combobox', { name: 'Rol del agarre 1', exact: true })
+    .selectOption('final');
+  await page
+    .getByRole('button', { name: 'Aplicar ajuste', exact: true })
+    .click();
+  await origin.press('ControlOrMeta+z');
+  await expect(verified(page)).not.toBeChecked();
+  await origin.press('ControlOrMeta+Shift+z');
+  await go(page, 1);
+  const input = page.getByLabel('Nombre de ruta', { exact: true });
+  await input.fill('Texto editable');
+  await input.press('ControlOrMeta+z');
+  await page
+    .getByRole('button', { name: 'Guardar borrador', exact: true })
+    .click();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0].holds3D[0].role).toBe('final');
+});
+
+test('incomplete draft saves, publication blockers link to steps and errors retain work', async ({
+  page,
+}) => {
+  const state = await setup(page);
+  await go(page, 1);
+  await page.getByLabel('Nombre de ruta', { exact: true }).fill('');
+  await go(page, 6);
+  await expect(
+    page.getByRole('button', { name: 'Publicar ruta', exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole('button', { name: 'Nombre · Ir a Datos', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Datos de la ruta', exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByLabel('Nombre de ruta', { exact: true }),
+  ).toHaveAttribute('aria-invalid', 'true');
+  state.errorStatus = 503;
+  await page
+    .getByRole('button', { name: 'Guardar borrador', exact: true })
+    .click();
+  await expect(
+    page.getByText('Error de red temporal', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel('Nombre de ruta', { exact: true })).toHaveValue(
+    '',
+  );
+  state.errorStatus = 0;
+  state.delay = 300;
+  const button = page.getByRole('button', {
+    name: 'Guardar borrador',
+    exact: true,
+  });
+  await button.click();
+  await expect(
+    page.getByRole('button', { name: 'Guardando…', exact: true }),
+  ).toBeDisabled();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0].status).toBe('borrador');
+  expect(state.writes[0].name).toBe('');
+});
+
+test('step navigation and mobile sheet heights retain one canvas, with usable no-WebGL fallback', async ({
+  page,
+}, info) => {
+  page.setDefaultTimeout(5000);
+  await setup(page);
+  await page
+    .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
+    .click();
+  const canvas = page.getByLabel('Visor de Gaussian Splatting', {
+    exact: true,
+  });
+  await expect(
+    page.getByText('fixture.ply · 0 MB · captura del gimnasio', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const first = await canvas.elementHandle();
+  const before = await canvas.boundingBox();
+  for (const step of [
+    /^2\. Encuadre/,
+    /^4\. Verificación/,
+    /^5\. Imagen/,
+    /^6\. Publicar/,
+    /^3\. Agarres/,
+  ]) {
+    await go(page, Number(step.source[1]));
+    expect(
+      await first!.evaluate((n) => n === document.querySelector('canvas')),
+    ).toBe(true);
+    expect(await canvas.boundingBox()).toEqual(before);
+  }
+  if (info.project.name === 'mobile') {
+    for (const label of ['Compacto', 'Medio', 'Ampliado']) {
+      await page.getByRole('button', { name: label, exact: true }).click();
+      expect(await canvas.boundingBox()).toEqual(before);
+    }
+  }
+  await page
+    .getByRole('button', { name: 'Cerrar preparación 3D', exact: true })
+    .click();
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (
+      kind: any,
+      ...args: any[]
+    ) {
+      if (String(kind).startsWith('webgl')) return null;
+      return (original as any).call(this, kind, ...args);
+    } as any;
+  });
+  await page.reload();
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Editar ruta$/ })
+    .click();
+  await go(page, 2);
+  await page
+    .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Guardar borrador', exact: true }),
+  ).toBeEnabled();
+  await go(page, 6);
+  await expect(
+    page.getByRole('heading', { name: 'Revisar y publicar' }),
+  ).toBeVisible();
+});
+
+for (const count of [3, 8])
+  test(`guided fixture publishes ${count} holds without coordinate entry`, async ({
+    page,
+  }) => {
+    const state = await setup(page);
+    await page
+      .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
+      .click();
+    const canvas = page.getByLabel('Visor de Gaussian Splatting', {
+      exact: true,
+    });
+    await expect(
+      page.getByText('fixture.ply · 0 MB · captura del gimnasio', {
+        exact: true,
+      }),
+    ).toBeVisible();
+    for (let n = 2; n < count; n++) {
+      await page
+        .getByRole('button', { name: 'Seleccionar punto', exact: true })
+        .click();
+      const box = (await canvas.boundingBox())!;
+      await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+      await page
+        .getByRole('combobox', { name: 'Función del agarre', exact: true })
+        .selectOption('intermedio');
+      await page
+        .getByRole('button', { name: 'Añadir agarre a la ruta', exact: true })
+        .click();
+    }
+    await go(page, 2);
+    await page
+      .getByRole('button', {
+        name: 'Guardar cámara para esta ruta',
+        exact: true,
+      })
+      .click();
+    await go(page, 4);
+    const verifiedBox = verified(page);
+    await expect(verifiedBox).toBeDisabled();
+    await page.getByLabel('Revisé la vista frontal', { exact: true }).check();
+    await canvas.press('ArrowRight');
+    await page
+      .getByLabel('Revisé la vista lateral y la profundidad', { exact: true })
+      .check();
+    await verifiedBox.check();
+    // Restore the reviewed route camera before exporting; navigating preserves the same canvas.
+    await go(page, 5);
+    await page
+      .locator('summary')
+      .filter({ hasText: /^Encuadre y vistas$/ })
+      .click();
+    await page.getByRole('button', { name: 'Ver ruta', exact: true }).click();
+    await page
+      .getByRole('button', {
+        name: 'Usar vista anotada como respaldo',
+        exact: true,
+      })
+      .click();
+    await expect.poll(() => state.images.length).toBe(1);
+    await go(page, 6);
+    await expect(
+      page.getByRole('button', { name: 'Publicar ruta', exact: true }),
+    ).toBeEnabled();
+    await page.getByLabel('Tamaño de previsualización').selectOption('desktop');
+    await expect(page.locator('.preview-content')).toHaveClass(
+      /desktop-preview/,
+    );
+    await page
+      .getByRole('button', { name: 'Publicar ruta', exact: true })
+      .click();
+    await expect.poll(() => state.writes.length).toBe(1);
+    expect(state.writes[0].holds3D).toHaveLength(count);
+    expect(state.writes[0].markersVerified).toBe(true);
+    expect(state.writes[0].imageId).toBe('image-new');
+    expect(state.writes[0].status).toBe('activa');
+  });
+
+test('failed scene recovers without replacing the canvas or discarding the draft', async ({
+  page,
+}) => {
+  const state = await setup(page);
+  state.failAsset = true;
+  await go(page, 1);
+  await page
+    .getByLabel('Nombre de ruta', { exact: true })
+    .fill('Conservar en fallo');
+  await go(page, 2);
+  await page
+    .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
+    .click();
+  const canvas = page.getByLabel('Visor de Gaussian Splatting', {
+    exact: true,
+  });
+  const first = await canvas.elementHandle();
+  await expect(
+    page.getByRole('button', { name: 'Reintentar 3D', exact: true }),
+  ).toBeVisible();
+  await go(page, 1);
+  await expect(page.getByLabel('Nombre de ruta', { exact: true })).toHaveValue(
+    'Conservar en fallo',
+  );
+  await go(page, 2);
+  state.failAsset = false;
+  await page
+    .getByRole('button', { name: 'Reintentar 3D', exact: true })
+    .click();
+  await expect(
+    page.getByText('fixture.ply · 0 MB · captura del gimnasio', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(
+    await first!.evaluate((n) => n === document.querySelector('canvas')),
+  ).toBe(true);
+  expect(state.writes).toHaveLength(0);
+});
+
+test('guided inspector stays readable at required widths, themes, zoom and emulated keyboard', async ({
+  page,
+}, info) => {
+  test.setTimeout(60000);
+  page.setDefaultTimeout(5000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await setup(page);
+  await page
+    .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
+    .click();
+  const canvas = page.getByLabel('Visor de Gaussian Splatting', {
+    exact: true,
+  });
+  await expect(
+    page.getByText('fixture.ply · 0 MB · captura del gimnasio', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const theme of ['first', 'second']) {
+      await go(page, 1);
+      const name = page.getByLabel('Nombre de ruta', { exact: true });
+      await name.fill(
+        'Ruta con nombre largo para comprobar el inspector y sus pasos',
+      );
+      await expect(
+        page.getByRole('button', { name: 'Guardar borrador', exact: true }),
+      ).toBeVisible();
+      const nav = await page
+        .getByRole('navigation', { name: 'Pasos del editor' })
+        .boundingBox();
+      expect(nav!.width).toBeLessThanOrEqual(width);
+      await go(page, 6);
+      await page.screenshot({
+        path: `/tmp/p1a-${info.project.name}-${width}-${theme}.png`,
+      });
+      await page
+        .getByRole('button', { name: 'Cambiar tema', exact: true })
+        .click();
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await go(page, 1);
+  await page.getByLabel('Nombre de ruta', { exact: true }).focus();
+  const before = await canvas.boundingBox();
+  // Emulate the visual viewport shrinking; no real phone/keyboard is claimed.
+  await page.evaluate(() => {
+    Object.defineProperty(window.visualViewport!, 'height', {
+      value: window.innerHeight - 260,
+      configurable: true,
+    });
+    window.visualViewport!.dispatchEvent(new Event('resize'));
+  });
+  expect(await canvas.boundingBox()).toEqual(before);
+  await expect(page.locator('#tools-panel')).toHaveCSS('bottom', '260px');
+  await page.evaluate(() => {
+    delete (window.visualViewport as any).height;
+    window.visualViewport!.dispatchEvent(new Event('resize'));
+    document.documentElement.style.zoom = '2';
+  });
+  await page
+    .getByRole('combobox', { name: 'Paso del editor', exact: true })
+    .selectOption('3');
+  await page.screenshot({ path: `/tmp/p1a-${info.project.name}-zoom.png` });
+  expect(errors).toEqual([]);
+});
+
+test('retirement and reactivation require reasons and preserve the prepared snapshot', async ({
+  page,
+}) => {
+  const state = await setup(page, true);
+  await go(page, 6);
+  await expect(
+    page.getByRole('button', { name: 'Confirmar retiro', exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel('Motivo del cambio').fill('Retiro de prueba');
+  await page
+    .getByRole('button', { name: 'Confirmar retiro', exact: true })
+    .click();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0].status).toBe('retirada');
+  expect(state.writes[0].holds3D).toEqual(original.holds3D);
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Editar ruta$/ })
+    .click();
+  await go(page, 6);
+  await expect(
+    page.getByRole('button', { name: 'Reactivar ruta', exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel('Motivo del cambio').fill('Reactivación de prueba');
+  await page
+    .getByRole('button', { name: 'Reactivar ruta', exact: true })
+    .click();
+  await expect.poll(() => state.writes.length).toBe(2);
+  expect(state.writes[1].status).toBe('activa');
+  expect(state.writes[1].expectedRevision).toBe(2);
+  expect(state.writes[1].imageId).toBe('image-original');
+});
+
+test('server rejection marks the responsible step and incomplete draft can omit a rejected backup', async ({
+  page,
+}) => {
+  const state = await setup(page);
+  state.errorStatus = 400;
+  state.errorMessage = 'La imagen debe pertenecer a la captura de la ruta.';
+  await go(page, 6);
+  await page
+    .getByRole('button', { name: 'Publicar ruta', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Publicar ruta', exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole('button', { name: 'Revisar Imagen/respaldo', exact: true })
+    .click();
+  await expect(page.locator('.route-editor')).toHaveAttribute('data-step', '5');
+  state.errorStatus = 0;
+  await page
+    .getByRole('button', { name: 'Guardar borrador', exact: true })
+    .click();
+  await expect.poll(() => state.writes.length).toBe(1);
+  expect(state.writes[0].status).toBe('borrador');
+  expect(state.writes[0].imageId).toBe('');
+  expect(state.writes[0].holds3D).toEqual(original.holds3D);
 });
