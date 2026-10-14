@@ -2,6 +2,16 @@
   import { renderCard, downloadBlob, type CardInfo } from './media';
   import { planeAxes } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
+  import RouteMarkerOverlay from './RouteMarkerOverlay.svelte';
+  import {
+    layoutMarkers,
+    drawMarkerLayout,
+    cssToPng,
+    viewportToLocal,
+    type MarkerLayout,
+    type LabelVisibility,
+    type Rect,
+  } from './marker-layout';
   import { onMount, tick } from 'svelte';
   import { measure } from './pilot';
   import { supabase } from './auth';
@@ -76,9 +86,8 @@
   let recordedCaptureId = '';
   let cancelButton = $state<HTMLButtonElement>();
   let canvas: HTMLCanvasElement;
-  let screenMarkers = $state<
-    { id: string; label: string; x: number; y: number; role: string }[]
-  >([]);
+  let screenMarkers = $state<MarkerLayout[]>([]);
+  let markerViewport = $state<Rect>({ x: 0, y: 0, width: 0, height: 0 });
   let cardPreview = $state(''),
     cardBlob = $state<Blob | undefined>();
   function exportPng() {
@@ -195,7 +204,7 @@
   }
 
   let status = $state('Selecciona una captura para explorarla.');
-  let showRouteHolds = $state(true);
+  let labelVisibility = $state<LabelVisibility>('all');
   let quality = $state('auto');
   let navigation = $state<'orbit' | 'pan'>('orbit');
   let picking = $state(false);
@@ -443,8 +452,15 @@
           if (!asset || !entity) return;
           const rect = canvas.getBoundingClientRect();
           // CameraComponent uses device.clientRect (CSS pixels), not framebuffer pixels.
-          const x = e.clientX - rect.left;
-          const y = e.clientY - rect.top;
+          const { x, y } = viewportToLocal(
+            { x: e.clientX, y: e.clientY },
+            {
+              x: rect.left,
+              y: rect.top,
+              width: rect.width,
+              height: rect.height,
+            },
+          );
           const far = camera.camera!.screenToWorld(x, y, 1);
           const worldOrigin = camera.getPosition();
           const inverse = entity.getWorldTransform().clone().invert();
@@ -482,17 +498,19 @@
           selectedPoint = [world.x, world.y, world.z];
           pickedWorld = selectedPoint;
           pickedEntity?.destroy();
-          pickedEntity = new pc.Entity('selected-point');
-          pickedEntity.addComponent('render', { type: 'sphere' });
-          pickedEntity.setPosition(world);
-          pickedEntity.setLocalScale(
-            distance * 0.012,
-            distance * 0.012,
-            distance * 0.012,
-          );
-          for (const mesh of pickedEntity.render!.meshInstances)
-            mesh.material = red;
-          app.root.addChild(pickedEntity);
+          if (!onHoldSelect) {
+            pickedEntity = new pc.Entity('selected-point');
+            pickedEntity.addComponent('render', { type: 'sphere' });
+            pickedEntity.setPosition(world);
+            pickedEntity.setLocalScale(
+              distance * 0.012,
+              distance * 0.012,
+              distance * 0.012,
+            );
+            for (const mesh of pickedEntity.render!.meshInstances)
+              mesh.material = red;
+            app.root.addChild(pickedEntity);
+          }
           picking = continuousPick;
           onPoint?.(raw, selectedPoint);
         };
@@ -610,6 +628,69 @@
           },
           { signal: abort.signal },
         );
+        const projectMarkers = (includePreparation = true) => {
+          const rect = canvas.getBoundingClientRect();
+          const points = [
+            ...holds3D.map((h, i) => ({
+              ...h,
+              label:
+                h.role === 'inicio'
+                  ? `I${i + 1}`
+                  : h.role === 'final'
+                    ? `F${i + 1}`
+                    : String(i + 1),
+              active: includePreparation && h.id === selectedHoldId,
+            })),
+            ...(includePreparation && previewPoint
+              ? [
+                  {
+                    id: 'candidate',
+                    position: previewPoint,
+                    role: 'candidate' as const,
+                    label: '?',
+                    active: true,
+                  },
+                ]
+              : []),
+          ];
+          const projected = points.flatMap((h) => {
+            const p = camera.camera!.worldToScreen(new pc.Vec3(...h.position));
+            return p.z > 0
+              ? [
+                  {
+                    id: h.id,
+                    label: h.label,
+                    role: h.role,
+                    active: h.active,
+                    x: p.x,
+                    y: p.y,
+                  },
+                ]
+              : [];
+          });
+          const blocked = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '.drawer-toggle,.scene-exit,.cancel-recording',
+            ),
+          )
+            .filter((n) => !n.hidden)
+            .map((n) => {
+              const r = n.getBoundingClientRect();
+              return {
+                x: r.left - rect.left,
+                y: r.top - rect.top,
+                width: r.width,
+                height: r.height,
+              };
+            });
+          return layoutMarkers(
+            projected,
+            rect.width,
+            rect.height,
+            labelVisibility,
+            blocked,
+          );
+        };
         controller = {
           quality: (value) => {
             app.graphicsDevice.maxPixelRatio =
@@ -642,39 +723,12 @@
             out.height = canvas.height;
             const c = out.getContext('2d')!;
             c.drawImage(canvas, 0, 0);
-            for (const [i, h] of holds3D.entries()) {
-              const p = camera.camera!.worldToScreen(
-                new pc.Vec3(...h.position),
-              );
-              const rect = canvas.getBoundingClientRect();
-              p.x *= out.width / rect.width;
-              p.y *= out.height / rect.height;
-              if (
-                p.z <= 0 ||
-                p.x < 0 ||
-                p.y < 0 ||
-                p.x > out.width ||
-                p.y > out.height
-              )
-                continue;
-              const label =
-                h.role === 'inicio'
-                  ? 'I'
-                  : h.role === 'final'
-                    ? 'F'
-                    : String(i + 1);
-              c.beginPath();
-              c.arc(p.x, p.y, 16, 0, Math.PI * 2);
-              c.fillStyle = '#172c3e';
-              c.fill();
-              c.lineWidth = 3;
-              c.strokeStyle = 'white';
-              c.stroke();
-              c.fillStyle = 'white';
-              c.font = 'bold 18px system-ui';
-              c.textAlign = 'center';
-              c.fillText(label, p.x, p.y + 6);
-            }
+            const rect = canvas.getBoundingClientRect();
+            const scale = cssToPng({ x: 1, y: 1 }, rect, out);
+            c.save();
+            c.scale(scale.x, scale.y);
+            drawMarkerLayout(c, projectMarkers(false));
+            c.restore();
             return out;
           },
           clear: () => {
@@ -901,49 +955,15 @@
         app.on('update', () => {
           if (!visible || document.hidden) return;
           const rect = canvas.getBoundingClientRect();
-          const points = [
-            ...(showRouteHolds
-              ? holds3D.map((h, i) => ({
-                  ...h,
-                  label:
-                    h.role === 'inicio'
-                      ? `I${i + 1}`
-                      : h.role === 'final'
-                        ? `F${i + 1}`
-                        : String(i + 1),
-                }))
-              : []),
-            ...(previewPoint
-              ? [
-                  {
-                    id: 'candidate',
-                    position: previewPoint,
-                    role: 'candidate',
-                    label: '?',
-                  },
-                ]
-              : []),
-          ];
-          const projected = points.flatMap((h) => {
-            const p = camera.camera!.worldToScreen(new pc.Vec3(...h.position));
-            const x = p.x;
-            const y = p.y;
-            return p.z > 0 &&
-              x >= 22 &&
-              y >= 22 &&
-              x <= rect.width - 22 &&
-              y <= rect.height - 22
-              ? [
-                  {
-                    id: h.id,
-                    label: h.label,
-                    role: h.role,
-                    x: rect.left + x,
-                    y: rect.top + y,
-                  },
-                ]
-              : [];
-          });
+          const viewport = {
+            x: rect.left,
+            y: rect.top,
+            width: rect.width,
+            height: rect.height,
+          };
+          if (JSON.stringify(viewport) !== JSON.stringify(markerViewport))
+            markerViewport = viewport;
+          const projected = ready && !loading ? projectMarkers() : [];
           if (JSON.stringify(projected) !== JSON.stringify(screenMarkers))
             screenMarkers = projected;
           if (onHoldSelect && !previewPoint && pickedWorld) {
@@ -1033,50 +1053,7 @@
                     false,
                   );
           }
-          if (showRouteHolds)
-            for (const h of holds3D) {
-              const p = new pc.Vec3(...h.position),
-                r = Math.max(distance * 0.01, 0.015);
-              const color =
-                h.role === 'inicio'
-                  ? new pc.Color(0.1, 1, 0.3)
-                  : h.role === 'final'
-                    ? new pc.Color(1, 0.5, 0.1)
-                    : new pc.Color(0.2, 0.6, 1);
-              const right = camera.right.clone().mulScalar(r),
-                up = camera.up.clone().mulScalar(r);
-              const stroke = (
-                a: InstanceType<typeof pc.Vec3>,
-                b: InstanceType<typeof pc.Vec3>,
-              ) =>
-                app.drawLine(p.clone().add(a), p.clone().add(b), color, false);
-              if (h.role === 'inicio') {
-                stroke(up.clone().mulScalar(-1), up);
-                stroke(up.clone().add(right), up.clone().sub(right));
-                stroke(
-                  up.clone().mulScalar(-1).add(right),
-                  up.clone().mulScalar(-1).sub(right),
-                );
-              } else if (h.role === 'final') {
-                stroke(
-                  up.clone().mulScalar(-1).sub(right),
-                  up.clone().sub(right),
-                );
-                stroke(up.clone().sub(right), up.clone().add(right));
-                stroke(right.clone().mulScalar(-1), right);
-              }
-              for (const offset of [
-                camera.right.clone().mulScalar(r),
-                camera.up.clone().mulScalar(r),
-              ])
-                app.drawLine(
-                  p.clone().sub(offset),
-                  p.clone().add(offset),
-                  color,
-                  false,
-                );
-            }
-          if (pickedWorld) {
+          if (pickedWorld && !onHoldSelect) {
             const p = new pc.Vec3(...pickedWorld),
               r = Math.max(distance * 0.01, 0.01);
             for (const offset of [
@@ -1157,42 +1134,12 @@
     aria-label="Visor de Gaussian Splatting"
     tabindex="0"
   ></canvas>
-  {#if visible}
-    <div class="point-overlay" aria-label="Marcadores sobre el muro">
-      {#each screenMarkers as marker (marker.id)}
-        {#if marker.id === 'candidate'}
-          <span
-            role="img"
-            class="screen-marker candidate"
-            style:left={`${marker.x}px`}
-            style:top={`${marker.y}px`}
-            aria-label="Punto en preparación">?</span
-          >
-        {:else if onHoldSelect}
-          <button
-            type="button"
-            class="screen-marker"
-            class:active={selectedHoldId === marker.id}
-            data-role={marker.role}
-            style:left={`${marker.x}px`}
-            style:top={`${marker.y}px`}
-            aria-label={`Seleccionar agarre ${marker.label} · ${marker.role}`}
-            onclick={() => onHoldSelect?.(marker.id)}>{marker.label}</button
-          >
-        {:else}
-          <span
-            role="img"
-            class="screen-marker readonly"
-            data-role={marker.role}
-            style:left={`${marker.x}px`}
-            style:top={`${marker.y}px`}
-            aria-label={`Agarre ${marker.label} · ${marker.role}`}
-            >{marker.label}</span
-          >
-        {/if}
-      {/each}
-    </div>
-  {/if}
+  {#if visible}<RouteMarkerOverlay
+      markers={screenMarkers}
+      viewport={markerViewport}
+      onSelect={onHoldSelect}
+      disabled={recording || loading}
+    />{/if}
   <p>
     Arrastra para {navigation === 'orbit' ? 'orbitar' : 'desplazar'} · Rueda para
     acercar · Dos dedos para desplazar y pinza para acercar · Flechas para desplazar
@@ -1275,13 +1222,17 @@
         }}>Guardar cámara inicial del gimnasio</button
       >{/if}
   </div>
-  {#if holds3D.length}<label class="toggle"
-      ><input type="checkbox" bind:checked={showRouteHolds} />Mostrar agarres 3D
-      ({holds3D.length})</label
+  {#if holds3D.length || onHoldSelect}<label
+      >Etiquetas de agarres<select bind:value={labelVisibility}
+        ><option value="all">Todos</option><option value="ends"
+          >Solo inicio y final</option
+        ><option value="hidden">Ocultar etiquetas</option></select
+      ></label
     >
     <p>
-      Verde: inicio · Azul: intermedio · Naranja: final. Marcadores aproximados
-      visibles a través de superficies; verifica su posición.
+      Selección aproximada: las anclas pueden verse a través del muro. Comprueba
+      la profundidad desde otro ángulo. Las etiquetas sin espacio se seleccionan
+      desde la lista.
     </p>{/if}
   {#if picking}<p role="status">
       Haz clic o toca sobre la pared para seleccionar un centro gaussiano
@@ -1397,48 +1348,6 @@
     height: 360px;
     touch-action: none;
     background: #172c3e;
-  }
-  .point-overlay {
-    pointer-events: none;
-  }
-  .screen-marker {
-    position: fixed;
-    z-index: 8;
-    transform: translate(-50%, -50%);
-    width: 44px;
-    height: 44px;
-    min-width: 44px;
-    padding: 0;
-    border: 3px solid white;
-    border-radius: 50%;
-    background: #173e69;
-    color: white;
-    font-weight: 800;
-    box-shadow:
-      0 0 0 2px #152534,
-      0 2px 10px #0008;
-    pointer-events: auto;
-    display: grid;
-    place-items: center;
-  }
-  .screen-marker[data-role='inicio'] {
-    background: #12603b;
-  }
-  .screen-marker[data-role='final'] {
-    background: #984115;
-  }
-  .screen-marker.active,
-  .screen-marker.candidate {
-    outline: 4px solid #ffdf55;
-    outline-offset: 3px;
-  }
-  .screen-marker.readonly {
-    pointer-events: none;
-  }
-  .screen-marker.candidate {
-    background: #152534;
-    pointer-events: none;
-    border-style: dashed;
   }
   .navigation-tools {
     align-items: flex-start;
