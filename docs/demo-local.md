@@ -91,3 +91,5 @@ Si falla después de escribir, conserva los datos para diagnóstico e indica el 
 Verificación del código sin credenciales: `npm run test:demo-tools` y `node --check scripts/demo-private.mjs`. Estas comprobaciones no equivalen a ejecutar el recorrido privado.
 
 Evidencia de esta preparación: 27 frontend, 50 API, 3 guardas de herramientas, 56 e2e y 6 smoke públicos aprobados; tipos, formato y build aprobados. Firefox administrado abrió el Inicio y comprobó gym-demo sin sesión. El timeout total de la matriz de capturas DPR 3 se amplió a 60 s tras un agotamiento de 30 s; repetición espacial y suite completa aprobadas. La ejecución privada y la publicación de la ruta D04 no están verificadas.
+
+Ruta D04 publicada tras revisión/autorización humana: `http://127.0.0.1:5174/?ruta=315f81b8-ee45-4ebe-b56a-c934a8509480`, revisión 4 con nueve agarres y respaldo real. Este enlace es local, no accesible desde internet. La precondición de publicación del verificador está cumplida; falta la segunda cuenta y ambas sesiones autorizadas.

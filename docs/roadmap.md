@@ -166,3 +166,7 @@ UX-P0 implementado y probado localmente en el PR #3: marcadores legibles y edici
 ### Preparación del cierre D04
 
 Helper de sesiones Firefox y verificador privado opt-in implementados, con destino gym-demo y precondiciones antes de escritura. [Runbook](demo-local.md#verificador-privado-preparado-14-de-octubre-de-2026). Prueba manual favorable del propietario sobre precisión inicial del picking registrada. No hay segunda cuenta; ejecución privada, revisión/publicación de la ruta y validación física siguen pendientes. D04 permanece abierto; no se adelanta UX-P1A ni se despliega.
+
+### Publicación de la ruta D04
+
+Tras confirmación humana del propietario, la ruta Crux quedó publicada exclusivamente en el demo local, revisión 4, con nueve agarres, cámara y PNG anotado. Lectura anónima y smoke público real aprobados. D04 continúa abierto por segunda cuenta y recorrido privado real; L1–L3 y validación física pendientes.
