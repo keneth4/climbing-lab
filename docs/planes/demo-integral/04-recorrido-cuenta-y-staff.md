@@ -1,6 +1,6 @@
 # D04 — Cuenta y staff controlados
 
-Una cuenta real fue autorizada como admin del demo durante el recorrido manual. Falta una segunda cuenta escaladora. No se crean JWT, contraseñas ni permisos por seed. Recorrido privado completo pendiente; las regresiones existentes con mocks no lo cierran.
+D04 funcional cerrado localmente con dos cuentas reales autorizadas y revisión humana de la ruta. No se crean JWT, contraseñas ni permisos por seed. Las secciones siguientes conservan el registro cronológico; sus pendientes quedaron superados según el cierre al final. La validación física y L1–L3 siguen pendientes.
 
 Guion cuando el propietario disponga de cuentas controladas: entrar como escalador → verificar `/api/me` sin rol → guardar intento/proyecto/reporte → recargar y exportar sin campos privados → comprobar privacidad con segunda cuenta. Autorizar un UUID staff expresamente en D1 demo mediante procedimiento administrativo aislado y auditado; nunca reutilizar el script A para demo. Publicar solo después de preparar captura/cámara/agarres e imagen reales: las ilustraciones no satisfacen ese requisito. Revisar reporte, retirar y comprobar snapshots históricos/QR. Contrastar permisos A/B con las pruebas existentes.
 
@@ -69,3 +69,25 @@ La previsualización indicó «Lista para publicar» y se publicó desde la inte
 Los seis smoke públicos reales pasaron de nuevo con el catálogo ampliado, sin setup/reset. Pendiente D04: segunda cuenta, sesiones privadas y ejecución del recorrido de proyecto/actividad, privacidad entre usuarios y revisiones históricas. Teléfonos, lector y rendimiento físico siguen pendientes.
 
 Firefox administrado con contexto anónimo y WebGL deshabilitado: ficha y respaldo cargaron, QR/enlace conservaron el ID, recarga aprobada y PNG descargado idéntico byte a byte a la vista previa. Al solicitar 3D apareció «El visor 3D no está disponible en este navegador» manteniendo la ficha y Registrar actividad disponibles. La primera aserción temporal buscaba otro texto; se corrigió al mensaje existente y la prueba pasó, sin cambio de producto. No se inició sesión ni se ejecutó el verificador privado.
+
+## Continuación con navegador interno y segunda cuenta real
+
+El propietario creó personalmente una segunda cuenta de correo y pidió usar el navegador interno, reservando Firefox para necesidad demostrada. La reapertura de Firefox fue rechazada por la revisión automática tras esa instrucción y no se reintentó. Se usa `localhost:5174` para escalador y `127.0.0.1:5174` para staff: dos orígenes loopback fijos del mismo gym-demo, sin cambiar bindings ni servidores.
+
+El navegador confirmó «Escalador» con UUID distinto; se exportó solo su sesión Supabase desde una herramienta local de Vite y se importó con comprobación /api/me, directorio 0700 y archivos 0600. No se guardan cookies Google ni tokens en Git/documentación. La cuenta staff requiere completar su login en la pestaña Google del navegador interno; no se trasladó su perfil Firefox nativo.
+
+Defecto observado: el formulario de login exigía ocho caracteres también para contraseñas ya existentes. Se retiró ese mínimo solo para acceso; creación y recuperación conservan sus controles y Supabase sigue validando credenciales. Login real de escalador confirmado; tipos/build y cuatro regresiones simuladas login/recuperación aprobados en escritorio/móvil.
+
+El verificador se adaptó a llamadas API reales usando los perfiles exportados, sin abrir un navegador externo. Mantiene copia identificada de ruta, actividad/proyecto, rechazo ajeno, 401/403, concurrencia, reporte y revisión histórica. Deja el registro de prueba vigente para validar tarjeta/privacidad desde el navegador interno y genera recibo privado; la limpieza lógica se ejecuta después con `demo:private cleanup`. Ejecución del recorrido completo pendiente hasta confirmar/importar el perfil staff y revisar UI; no se declara D04 cerrado por el login de escalador.
+
+## Cierre funcional real — 14 de octubre de 2026
+
+El login Google inicial terminó en `invalid_request`; una nueva pestaña y un login manual completo permitieron confirmar Admin mediante `/api/me`, sin modificar OAuth ni eludir autenticación. El recorrido real se realizó en el navegador interno, con dos orígenes loopback aislados. Staff: `cccff3a8-30a1-44f4-b34c-c192c01943f5`; escalador sin privilegios: `df615cfa-178c-4abb-b81d-ab63445b9809`. No se registran correos, contraseñas ni tokens.
+
+El smoke privado real aprobó proyecto sin ascenso implícito, intento persistente y corrección a ascenso, 401/403, rechazo de lectura/corrección ajena, versiones concurrentes y resolución de reporte sin cambiar automáticamente la ruta. Copia identificada: `3359fe0c-3510-47c3-b1a3-0a1db20ff207`; actividad: `257e2bfb-8113-4408-9d26-2b8bf42eaebc`. Tras editar y retirar la copia (revisión 3), su actividad mantuvo exactamente la presentación original de revisión 1. La ruta humana original sigue activa en revisión 4; no se modificaron Crux ni sus agarres.
+
+QA real de interfaz: recarga de bitácora, tarjeta histórica, reporte resuelto, ficha retirada y QR con destino estable. Se recorrieron las 16 combinaciones de privacidad en la vista previa (16 imágenes distintas) y se comprobó por separado el contrato de selección con 16 casos sin campos inesperados. Se descargaron e inspeccionaron dos PNG, todos los campos activados y todos desactivados, coincidentes con sus vistas previas. Se utilizaron nombre y notas sintéticos. SHA-256 sobre el contenido base64 PNG: completo `4a22b9d2cfd672cfc4eb939bd25c718859f2003b7d2f41187885a84f7fd0b8f5`; privado `7bf4f71d7ed930bbefc732c19826cead8b3f7305c004fd68e74a65947a89d06a`. No se afirma haber descargado los 16 archivos.
+
+La limpieza retiró lógicamente la actividad y archivó el proyecto. Se conservan copia retirada, reporte resuelto e historial. Se eliminaron explícitamente perfiles privados, recibo y ambos JSON descargados; no se revocaron sesiones del navegador ni se eliminaron cuentas. Sin setup/reset, cambios A/B, migraciones remotas ni despliegue.
+
+Validación automatizada: tipos frontend/backend, formato y build aprobados; 27 frontend, 50 API, 4 guardas, 56 e2e y 6 smoke públicos reales reutilizando el demo. Los e2e con fixtures se distinguen del recorrido privado real. El aviso de tamaño de PlayCanvas permanece; teléfonos, lector de pantalla y rendimiento físico no están aprobados. UX-P1A es la próxima entrega de interfaz, separada de este cierre.

@@ -44,7 +44,7 @@ Reset elimina todo el almacenamiento **solo del demo**, incluidas eventuales act
 4. Compartir → QR/enlace local → recargar la misma identidad. Preparar PNG: contiene advertencia de ilustración y no datos personales por defecto.
 5. Abrir `/?ruta=demo-route-07`: retirada, historial y enlace conservados.
 6. Consultar borrador sin sesión: 401 y estado de no disponibilidad.
-7. Recorrido privado de escalador/staff: **parcial**. Admin real confirmado en Firefox y captura Crux publicada localmente; la ruta D04 continúa como borrador y falta la segunda cuenta. Procedimiento en [D04](planes/demo-integral/04-recorrido-cuenta-y-staff.md). No insertar roles con el seed ni usar tokens falsos.
+7. Recorrido privado de escalador/staff: **verificado localmente con dos cuentas reales en el navegador interno**. Crux y la ruta D04 están publicadas solo en el demo. Procedimiento en [D04](planes/demo-integral/04-recorrido-cuenta-y-staff.md). No insertar roles con el seed ni usar tokens falsos.
 
 ## Operación privada local D04
 
@@ -58,7 +58,18 @@ npm run demo:staff -- UUID revoke --confirm=gym-demo
 
 Destino fijo demo y cambio/auditoría atómicos; no modifica Supabase ni A/B. Recargar la interfaz para confirmar el rol real. Crux se importa por Staff → Capturas, desde el archivo local fuera de Git. `node scripts/demo-crux-check.mjs` comprueba tamaño y SHA-256 contra ese original, sin publicar ni escribir objetos.
 
-`npm run demo:auth -- staff` y `npm run demo:auth -- escalador` preparan sesiones con login manual en Firefox administrado por Playwright para automatización posterior. Instalar ese navegador con `npx playwright install firefox`; usar `npm run demo:auth -- staff chrome` si se elige Chrome explícitamente. No reutilizan ni extraen el perfil nativo de Firefox. Solo guardan el estado Supabase del origen demo, sin cookies de Google, en `.playwright/demo-auth` ignorado por Git (directorio 0700, archivo 0600). No enviar tokens por chat ni incluir estos archivos en evidencias. Para eliminar exclusivamente estos perfiles: `npm run demo:auth -- clear --confirm=gym-demo`; esto no revoca sesiones remotas ni roles D1. El recorrido manual actual continúa en Firefox; las sesiones automatizadas siguen pendientes.
+El recorrido real usa el navegador interno. `npm run demo:auth -- staff` y `npm run demo:auth -- escalador` indican la URL de la herramienta local `demo-auth.html`; no abren navegadores externos por defecto. Iniciar sesión normalmente en Climbing Lab y abrir la herramienta en el mismo origen. Usar `localhost:5174` para escalador y `127.0.0.1:5174` para staff permite conservar dos sesiones aisladas en el navegador interno, ambas contra gym-demo.
+
+La herramienta comprueba identidad/rol por `/api/me` y descarga exclusivamente la sesión Supabase (sin cookies Google). Importarla con:
+
+```sh
+npm run demo:auth -- import escalador /RUTA/ABSOLUTA/d04-escalador-session.json --confirm=gym-demo
+npm run demo:auth -- import staff /RUTA/ABSOLUTA/d04-staff-session.json --confirm=gym-demo
+```
+
+El importador protege el archivo descargado con 0600, valida los dos orígenes loopback fijos y vuelve a comprobar `/api/me` antes de guardar en `.playwright/demo-auth` (directorio 0700, archivos 0600, ignorados por Git). No enviar tokens ni contraseñas por chat. La herramienta solo se sirve por Vite local y no se incluye en el build de producción. No extrae perfiles nativos. Opciones externas `firefox`/`chrome` siguen disponibles únicamente si se solicitan explícitamente y hay necesidad; el recorrido D04 actual no las usa.
+
+Para eliminar los perfiles locales tras terminar: `npm run demo:auth -- clear --confirm=gym-demo`; eliminar también las dos descargas privadas generadas. No elimina cuentas, roles ni historia D1, ni revoca sesiones remotas.
 
 No ejecutar reset durante D04: eliminaría la captura, permisos y datos de prueba locales.
 
@@ -72,7 +83,7 @@ Para comprobar el catálogo público mientras el demo está abierto, sin reinici
 - Se corrigió una confirmación de recuperación de contraseña que desaparecía al cambiar la vista de cuenta; se verifica repetidamente en desktop/móvil. No prueba credenciales reales del demo.
 - Browser plugin no disponible: Playwright con Chrome; capturas revisadas del catálogo y ficha reales. Teclado/responsive verificados, sin certificación WCAG ni lector físico.
 
-D01–D03 y preparación/QA D05 completos para lectura pública L0. **D04 privado y L1–L3 pendientes**: cuentas autorizadas, captura real publicable, staging/DNS/R2, callbacks, protección antiabuso, backups y restore D1 + objetos R2, teléfonos/lector y tareas presenciales. Véase [piloto remoto](piloto-remoto.md) y [validación física](validacion-formatos-dispositivos.md). No ampliar pagos, tienda, video ni tres marcas para cerrar esta entrega.
+D01–D03 y preparación/QA D05 completos para lectura pública L0. **D04 funcional cerrado localmente; L1–L3 pendientes**: staging/DNS/R2, callbacks, protección antiabuso, backups y restore D1 + objetos R2, teléfonos/lector y tareas presenciales. Véase [piloto remoto](piloto-remoto.md) y [validación física](validacion-formatos-dispositivos.md). No ampliar pagos, tienda, video ni tres marcas para cerrar esta entrega.
 
 ## Verificador privado preparado (14 de octubre de 2026)
 
@@ -82,14 +93,18 @@ Tras preparar las dos sesiones, publicar y revisar humanamente la ruta D04:
 npm run demo:private -- UUID_RUTA_D04_PUBLICADA --confirm=gym-demo
 ```
 
-No ejecutar este comando todavía: falta la cuenta escaladora distinta y la revisión/publicación de la ruta. El verificador comprueba destino, permisos privados de archivos, identidades distintas y roles confirmados mediante `/api/me` antes de escribir. No extrae el perfil nativo de Firefox ni crea cuentas, tokens o permisos.
+Ejecutar solo después de exportar/importar ambas sesiones reales y publicar la ruta revisada. El verificador comprueba destino, permisos privados de archivos, identidades distintas y roles confirmados mediante `/api/me` antes de escribir. No extrae el perfil nativo de Firefox ni crea cuentas, tokens o permisos.
 
-Crea una copia «D04 smoke …» de la presentación ya revisada, sin inventar coordenadas ni modificar la ruta original. Proyecto sin actividad implícita, intento y corrección a ascenso, recarga, acceso ajeno denegado, concurrencia, toma/resolución de reporte sin cambio de ruta, edición y retiro preservando presentación histórica. Prueba las 16 combinaciones de privacidad en el renderer real y compara bytes de vista previa/descarga desde la interfaz de bitácora. Al terminar, retira lógicamente la actividad, archiva el proyecto y conserva ruta retirada, reporte resuelto e historia.
+Crea una copia «D04 smoke …» de la presentación ya revisada, sin inventar coordenadas ni modificar la ruta original. Proyecto sin actividad implícita, intento y corrección a ascenso, recarga, acceso ajeno denegado, concurrencia, toma/resolución de reporte sin cambio de ruta, edición y retiro preservando presentación histórica. El comando API conserva el registro de prueba vigente y un recibo privado para revisar tarjeta histórica y las 16 combinaciones de privacidad desde la bitácora en el navegador interno. Después de comprobar vista previa/descarga, ejecutar `npm run demo:private -- cleanup UUID_RUTA_D04_PUBLICADA --confirm=gym-demo`: retira lógicamente la actividad y archiva el proyecto, conservando ruta retirada, reporte resuelto e historia. La limpieza admite repetición parcial y no usa un navegador externo.
 
 Si falla después de escribir, conserva los datos para diagnóstico e indica el ID de la ruta de prueba; no borra historia ni intenta reparar permisos. No guardar screenshots/traces de cuentas ni sesiones en evidencias. La eliminación explícita de los perfiles locales sigue siendo `npm run demo:auth -- clear --confirm=gym-demo`, después del recorrido; no revoca sesiones remotas.
 
 Verificación del código sin credenciales: `npm run test:demo-tools` y `node --check scripts/demo-private.mjs`. Estas comprobaciones no equivalen a ejecutar el recorrido privado.
 
-Evidencia de esta preparación: 27 frontend, 50 API, 3 guardas de herramientas, 56 e2e y 6 smoke públicos aprobados; tipos, formato y build aprobados. Firefox administrado abrió el Inicio y comprobó gym-demo sin sesión. El timeout total de la matriz de capturas DPR 3 se amplió a 60 s tras un agotamiento de 30 s; repetición espacial y suite completa aprobadas. La ejecución privada y la publicación de la ruta D04 no están verificadas.
+Evidencia de esta preparación: 27 frontend, 50 API, 3 guardas de herramientas, 56 e2e y 6 smoke públicos aprobados; tipos, formato y build aprobados. Firefox administrado abrió el Inicio y comprobó gym-demo sin sesión. El timeout total de la matriz de capturas DPR 3 se amplió a 60 s tras un agotamiento de 30 s; repetición espacial y suite completa aprobadas. Este registro corresponde a la preparación histórica; la ejecución posterior está documentada en el cierre D04.
 
-Ruta D04 publicada tras revisión/autorización humana: `http://127.0.0.1:5174/?ruta=315f81b8-ee45-4ebe-b56a-c934a8509480`, revisión 4 con nueve agarres y respaldo real. Este enlace es local, no accesible desde internet. La precondición de publicación del verificador está cumplida; falta la segunda cuenta y ambas sesiones autorizadas.
+Ruta D04 publicada tras revisión/autorización humana: `http://127.0.0.1:5174/?ruta=315f81b8-ee45-4ebe-b56a-c934a8509480`, revisión 4 con nueve agarres y respaldo real. Este enlace es local, no accesible desde internet. El recorrido posterior entre dos cuentas reales quedó aprobado; los archivos privados fueron eliminados al terminar.
+
+## Cierre D04 real
+
+[Resultados y límites](planes/demo-integral/04-recorrido-cuenta-y-staff.md#cierre-funcional-real--14-de-octubre-de-2026): API privada real, recarga, privacidad de tarjeta, revisión histórica, reporte y retiro aprobados. Se verificaron 16 vistas previas y dos descargas PNG. La actividad de prueba fue retirada lógicamente y el proyecto archivado; se preservó historia. Sesiones exportadas y descargas JSON eliminadas explícitamente. Resultado final: 27 frontend, 50 API, 4 guardas, 56 e2e y 6 smoke públicos; tipos, formato y build aprobados. No equivale a validación física ni staging.
