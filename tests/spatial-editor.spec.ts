@@ -270,6 +270,9 @@ for (const dpr of [1, 2, 3])
     test('candidate, labels, focus and annotated backup share the same scene', async ({
       page,
     }, info) => {
+      // Eight responsive/theme screenshots at DPR 3 need a larger total budget
+      // when this matrix shares GPU time with the rest of the browser suite.
+      test.setTimeout(60000);
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
       const state = await setup(page);

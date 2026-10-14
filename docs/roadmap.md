@@ -162,3 +162,7 @@ D01–D03 y preparación D05 implementados en `codex/demo-integral-canonico`: da
 ### Continuación UX-P0 — 14 de octubre de 2026
 
 UX-P0 implementado y probado localmente en el PR #3: marcadores legibles y edición reversible, sin cambiar API ni geometría de secciones. [Evidencia por nivel](planes/ux/01-editor-espacial-y-tour-3d.md#12-entrega-ux-p0--14-de-octubre-de-2026). Crux está publicada solo en el demo local y la ruta D04 sigue como borrador: revisión humana de agarres y recorridos privados entre cuentas pendientes. D04 y L1–L3 no se consideran completos; UX-P1/P2 se mantienen separados.
+
+### Preparación del cierre D04
+
+Helper de sesiones Firefox y verificador privado opt-in implementados, con destino gym-demo y precondiciones antes de escritura. [Runbook](demo-local.md#verificador-privado-preparado-14-de-octubre-de-2026). Prueba manual favorable del propietario sobre precisión inicial del picking registrada. No hay segunda cuenta; ejecución privada, revisión/publicación de la ruta y validación física siguen pendientes. D04 permanece abierto; no se adelanta UX-P1A ni se despliega.

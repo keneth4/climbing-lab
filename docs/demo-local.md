@@ -44,7 +44,7 @@ Reset elimina todo el almacenamiento **solo del demo**, incluidas eventuales act
 4. Compartir → QR/enlace local → recargar la misma identidad. Preparar PNG: contiene advertencia de ilustración y no datos personales por defecto.
 5. Abrir `/?ruta=demo-route-07`: retirada, historial y enlace conservados.
 6. Consultar borrador sin sesión: 401 y estado de no disponibilidad.
-7. Recorrido privado de escalador/staff: **parcial**. Admin real confirmado en Firefox y Crux cargado como borrador íntegro; faltan publicación y segunda cuenta. Procedimiento en [D04](planes/demo-integral/04-recorrido-cuenta-y-staff.md). No insertar roles con el seed ni usar tokens falsos.
+7. Recorrido privado de escalador/staff: **parcial**. Admin real confirmado en Firefox y captura Crux publicada localmente; la ruta D04 continúa como borrador y falta la segunda cuenta. Procedimiento en [D04](planes/demo-integral/04-recorrido-cuenta-y-staff.md). No insertar roles con el seed ni usar tokens falsos.
 
 ## Operación privada local D04
 
@@ -58,7 +58,7 @@ npm run demo:staff -- UUID revoke --confirm=gym-demo
 
 Destino fijo demo y cambio/auditoría atómicos; no modifica Supabase ni A/B. Recargar la interfaz para confirmar el rol real. Crux se importa por Staff → Capturas, desde el archivo local fuera de Git. `node scripts/demo-crux-check.mjs` comprueba tamaño y SHA-256 contra ese original, sin publicar ni escribir objetos.
 
-`npm run demo:auth -- staff` y `npm run demo:auth -- escalador` preparan sesiones con login manual en Chrome para automatización posterior. No reutilizan ni extraen el perfil nativo de Firefox. Solo guardan el estado Supabase del origen demo, sin cookies de Google, en `.playwright/demo-auth` ignorado por Git (directorio 0700, archivo 0600). No enviar tokens por chat ni incluir estos archivos en evidencias. Para eliminar exclusivamente estos perfiles: `npm run demo:auth -- clear --confirm=gym-demo`; esto no revoca sesiones remotas ni roles D1. El recorrido manual actual continúa en Firefox; las sesiones automatizadas siguen pendientes.
+`npm run demo:auth -- staff` y `npm run demo:auth -- escalador` preparan sesiones con login manual en Firefox administrado por Playwright para automatización posterior. Instalar ese navegador con `npx playwright install firefox`; usar `npm run demo:auth -- staff chrome` si se elige Chrome explícitamente. No reutilizan ni extraen el perfil nativo de Firefox. Solo guardan el estado Supabase del origen demo, sin cookies de Google, en `.playwright/demo-auth` ignorado por Git (directorio 0700, archivo 0600). No enviar tokens por chat ni incluir estos archivos en evidencias. Para eliminar exclusivamente estos perfiles: `npm run demo:auth -- clear --confirm=gym-demo`; esto no revoca sesiones remotas ni roles D1. El recorrido manual actual continúa en Firefox; las sesiones automatizadas siguen pendientes.
 
 No ejecutar reset durante D04: eliminaría la captura, permisos y datos de prueba locales.
 
@@ -73,3 +73,21 @@ Para comprobar el catálogo público mientras el demo está abierto, sin reinici
 - Browser plugin no disponible: Playwright con Chrome; capturas revisadas del catálogo y ficha reales. Teclado/responsive verificados, sin certificación WCAG ni lector físico.
 
 D01–D03 y preparación/QA D05 completos para lectura pública L0. **D04 privado y L1–L3 pendientes**: cuentas autorizadas, captura real publicable, staging/DNS/R2, callbacks, protección antiabuso, backups y restore D1 + objetos R2, teléfonos/lector y tareas presenciales. Véase [piloto remoto](piloto-remoto.md) y [validación física](validacion-formatos-dispositivos.md). No ampliar pagos, tienda, video ni tres marcas para cerrar esta entrega.
+
+## Verificador privado preparado (14 de octubre de 2026)
+
+Tras preparar las dos sesiones, publicar y revisar humanamente la ruta D04:
+
+```sh
+npm run demo:private -- UUID_RUTA_D04_PUBLICADA --confirm=gym-demo
+```
+
+No ejecutar este comando todavía: falta la cuenta escaladora distinta y la revisión/publicación de la ruta. El verificador comprueba destino, permisos privados de archivos, identidades distintas y roles confirmados mediante `/api/me` antes de escribir. No extrae el perfil nativo de Firefox ni crea cuentas, tokens o permisos.
+
+Crea una copia «D04 smoke …» de la presentación ya revisada, sin inventar coordenadas ni modificar la ruta original. Proyecto sin actividad implícita, intento y corrección a ascenso, recarga, acceso ajeno denegado, concurrencia, toma/resolución de reporte sin cambio de ruta, edición y retiro preservando presentación histórica. Prueba las 16 combinaciones de privacidad en el renderer real y compara bytes de vista previa/descarga desde la interfaz de bitácora. Al terminar, retira lógicamente la actividad, archiva el proyecto y conserva ruta retirada, reporte resuelto e historia.
+
+Si falla después de escribir, conserva los datos para diagnóstico e indica el ID de la ruta de prueba; no borra historia ni intenta reparar permisos. No guardar screenshots/traces de cuentas ni sesiones en evidencias. La eliminación explícita de los perfiles locales sigue siendo `npm run demo:auth -- clear --confirm=gym-demo`, después del recorrido; no revoca sesiones remotas.
+
+Verificación del código sin credenciales: `npm run test:demo-tools` y `node --check scripts/demo-private.mjs`. Estas comprobaciones no equivalen a ejecutar el recorrido privado.
+
+Evidencia de esta preparación: 27 frontend, 50 API, 3 guardas de herramientas, 56 e2e y 6 smoke públicos aprobados; tipos, formato y build aprobados. Firefox administrado abrió el Inicio y comprobó gym-demo sin sesión. El timeout total de la matriz de capturas DPR 3 se amplió a 60 s tras un agotamiento de 30 s; repetición espacial y suite completa aprobadas. La ejecución privada y la publicación de la ruta D04 no están verificadas.

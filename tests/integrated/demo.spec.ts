@@ -5,6 +5,9 @@ test('real local visitor uses D1 catalog and R2 illustrations without HTTP mocks
 }, info) => {
   const health = await (await request.get('/api/health')).json();
   expect(health.gymId).toBe('gym-demo');
+  const catalog = await (await request.get('/api/routes')).json();
+  const activeCount = catalog.routes.length;
+  expect(activeCount).toBeGreaterThanOrEqual(6);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => {
@@ -15,7 +18,7 @@ test('real local visitor uses D1 catalog and R2 illustrations without HTTP mocks
   await page
     .getByRole('button', { name: 'Explorar rutas', exact: true })
     .click();
-  await expect(page.locator('.route-card')).toHaveCount(6);
+  await expect(page.locator('.route-card')).toHaveCount(activeCount);
   await page.getByLabel('Buscar', { exact: true }).fill('travesia');
   await expect(page.locator('.route-card')).toHaveCount(1);
   await page.locator('.route-card').click();
@@ -84,6 +87,11 @@ test('real catalog supports all widths, keyboard, empty filters and share illust
   expect((await (await request.get('/api/health')).json()).gymId).toBe(
     'gym-demo',
   );
+  const catalog = await (await request.get('/api/routes')).json();
+  const activeCount = catalog.routes.length;
+  const plateCount = catalog.routes.filter(
+    (r: { sector: string }) => r.sector === 'Placa de ejemplo',
+  ).length;
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
@@ -97,11 +105,13 @@ test('real catalog supports all widths, keyboard, empty filters and share illust
     await expect(
       page.getByRole('heading', { name: 'Rutas', exact: true }),
     ).toBeFocused();
-    await page.getByText('Filtros 6 resultados', { exact: true }).click();
+    await page
+      .getByText(`Filtros ${activeCount} resultados`, { exact: true })
+      .click();
     await page
       .getByRole('combobox', { name: 'Sector', exact: true })
       .selectOption('Placa de ejemplo');
-    await expect(page.locator('.route-card')).toHaveCount(2);
+    await expect(page.locator('.route-card')).toHaveCount(plateCount);
     await page
       .getByRole('button', { name: 'Limpiar filtros', exact: true })
       .click();
@@ -141,8 +151,10 @@ test('real network failure preserves catalog and retry restores API reading', as
   expect((await (await request.get('/api/health')).json()).gymId).toBe(
     'gym-demo',
   );
+  const catalog = await (await request.get('/api/routes')).json();
+  const activeCount = catalog.routes.length;
   await page.goto('/?vista=Catálogo');
-  await expect(page.locator('.route-card')).toHaveCount(6);
+  await expect(page.locator('.route-card')).toHaveCount(activeCount);
   await page.context().setOffline(true);
   await page
     .getByRole('button', { name: 'Actualizar rutas', exact: true })
@@ -150,7 +162,7 @@ test('real network failure preserves catalog and retry restores API reading', as
   await expect(
     page.getByText('No se pudo actualizar.', { exact: false }),
   ).toBeVisible();
-  await expect(page.locator('.route-card')).toHaveCount(6);
+  await expect(page.locator('.route-card')).toHaveCount(activeCount);
   await page.context().setOffline(false);
   await page
     .getByRole('button', { name: 'Reintentar catálogo', exact: true })
@@ -158,5 +170,5 @@ test('real network failure preserves catalog and retry restores API reading', as
   await expect(
     page.getByText('No se pudo actualizar.', { exact: false }),
   ).toHaveCount(0);
-  await expect(page.locator('.route-card')).toHaveCount(6);
+  await expect(page.locator('.route-card')).toHaveCount(activeCount);
 });
