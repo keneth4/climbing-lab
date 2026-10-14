@@ -44,7 +44,23 @@ Reset elimina todo el almacenamiento **solo del demo**, incluidas eventuales act
 4. Compartir → QR/enlace local → recargar la misma identidad. Preparar PNG: contiene advertencia de ilustración y no datos personales por defecto.
 5. Abrir `/?ruta=demo-route-07`: retirada, historial y enlace conservados.
 6. Consultar borrador sin sesión: 401 y estado de no disponibilidad.
-7. Recorrido privado de escalador/staff: **pendiente** de cuentas autorizadas y captura válida. Procedimiento en [D04](planes/demo-integral/04-recorrido-cuenta-y-staff.md). No insertar roles con el seed ni usar tokens falsos.
+7. Recorrido privado de escalador/staff: **parcial**. Admin real confirmado en Firefox y Crux cargado como borrador íntegro; faltan publicación y segunda cuenta. Procedimiento en [D04](planes/demo-integral/04-recorrido-cuenta-y-staff.md). No insertar roles con el seed ni usar tokens falsos.
+
+## Operación privada local D04
+
+Tras login manual, Mi cuenta muestra el UUID. El propietario debe indicar expresamente qué UUID autoriza antes de asignar permisos:
+
+```sh
+npm run demo:staff -- UUID admin --confirm=gym-demo
+npm run demo:staff -- UUID editor --confirm=gym-demo
+npm run demo:staff -- UUID revoke --confirm=gym-demo
+```
+
+Destino fijo demo y cambio/auditoría atómicos; no modifica Supabase ni A/B. Recargar la interfaz para confirmar el rol real. Crux se importa por Staff → Capturas, desde el archivo local fuera de Git. `node scripts/demo-crux-check.mjs` comprueba tamaño y SHA-256 contra ese original, sin publicar ni escribir objetos.
+
+`npm run demo:auth -- staff` y `npm run demo:auth -- escalador` preparan sesiones con login manual en Chrome para automatización posterior. No reutilizan ni extraen el perfil nativo de Firefox. Solo guardan el estado Supabase del origen demo, sin cookies de Google, en `.playwright/demo-auth` ignorado por Git (directorio 0700, archivo 0600). No enviar tokens por chat ni incluir estos archivos en evidencias. Para eliminar exclusivamente estos perfiles: `npm run demo:auth -- clear --confirm=gym-demo`; esto no revoca sesiones remotas ni roles D1. El recorrido manual actual continúa en Firefox; las sesiones automatizadas siguen pendientes.
+
+No ejecutar reset durante D04: eliminaría la captura, permisos y datos de prueba locales.
 
 ## Resultado verificado y siguientes puertas
 

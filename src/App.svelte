@@ -971,6 +971,17 @@
         >
           Sesión iniciada: {userEmail}
         </p>
+        <label
+          >Identificador de cuenta (UUID)<input
+            readonly
+            value={userId}
+            aria-describedby="account-id-help"
+          /></label
+        >
+        <p id="account-id-help">
+          Usa este identificador para autorizar tu cuenta en el demo local. No
+          es una contraseña ni concede permisos por sí solo.
+        </p>
         <button onclick={() => navigate('Bitácora')}>Ver mi actividad</button
         >{:else}<AuthPanel
           onPasswordUpdated={() => (accountNotice = 'Contraseña actualizada.')}
