@@ -1,4 +1,4 @@
-import { chromium } from '@playwright/test';
+import { chromium, firefox } from '@playwright/test';
 import { writeFile, rm, lstat, chmod } from 'node:fs/promises';
 import {
   assertDemoTarget,
@@ -9,6 +9,7 @@ import {
   demoOrigin,
 } from './demo-local.mjs';
 const profile = process.argv[2];
+const browserName = process.argv[3] || 'firefox';
 let browser;
 try {
   await assertDemoTarget();
@@ -21,7 +22,8 @@ try {
       'Sesiones privadas locales eliminadas. No revoca sesiones remotas ni permisos D1.',
     );
   } else {
-    if (process.argv.length !== 3) throw new Error('Usa staff o escalador.');
+    if (process.argv.length > 4 || !['firefox', 'chrome'].includes(browserName))
+      throw new Error('Usa staff|escalador [firefox|chrome].');
     const destination = profilePath(profile);
     await lstat(destination).then(
       (s) => {
@@ -33,12 +35,14 @@ try {
       },
     );
     await requireDemoServer();
-    browser = await chromium.launch({ channel: 'chrome', headless: false });
+    browser = await (browserName === 'firefox'
+      ? firefox.launch({ headless: false })
+      : chromium.launch({ channel: 'chrome', headless: false }));
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto(`${demoOrigin}/?vista=Cuenta`);
     console.log(
-      `Login manual de ${profile} en la ventana Chrome abierta. No envíes contraseñas por chat. Esperando hasta 15 minutos.`,
+      `Login manual de ${profile} en la ventana ${browserName} abierta. No envíes contraseñas por chat. Esperando hasta 15 minutos.`,
     );
     const deadline = Date.now() + 15 * 60 * 1000;
     let me;
@@ -100,7 +104,7 @@ try {
   }
 } catch {
   console.error(
-    'Perfil no guardado: revisa destino demo, argumentos o completa el login manual.',
+    'Perfil no guardado: revisa destino demo, argumentos o completa el login manual. Firefox requiere npx playwright install firefox.',
   );
   process.exitCode = 1;
 } finally {
