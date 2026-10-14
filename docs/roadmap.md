@@ -1,253 +1,156 @@
-# Roadmap — demo web canónico y evolución del producto
+# Roadmap — Climbing Lab canónico y demo de un gimnasio
 
-**Actualizado:** 13 de octubre de 2026.  
-**Referencia del diagnóstico inicial:** `main`, commit `6fce9a7b2f70eab81df0799fbfc234d72bb27ec1`.  
-**Plan ejecutable siguiente:** [Plan de implementación del demo web](planes/2026-10-demo-web-canonico.md).
+**Actualización:** 13 de octubre de 2026 (nueva revisión del estado de `main`).  
+**Código revisado:** [`main@416eb32a1205`](https://github.com/keneth4/climbing-lab/commit/416eb32a1205287c3d96b8a3842eb1d0ca08f625).  
+**Siguiente plan ejecutable:** [Demo integral reproducible de un gimnasio](planes/2026-10-demo-integral-siguiente.md).  
+**Naturaleza de la revisión:** lectura de repositorio, documentación, interfaces, scripts y tests existentes. No se ejecutaron aquí pruebas de navegador, dispositivos ni un despliegue.
 
-## Estado al integrar el trabajo local
+> **Esta sección es la referencia vigente de prioridades.** El [plan de demo anterior](planes/2026-10-demo-web-canonico.md) documenta una etapa histórica (`main@6fce9a7`): no ejecutar sus pasos iniciales como si API, login, sitio público, editor y bitácora siguieran pendientes. Los cierres de desarrollos anteriores permanecen en el historial Git de este archivo y sus documentos especializados.
 
-Los cambios de implementación locales se incorporan desde el commit `c929cc2` y los 22 commits locales anteriores. El diagnóstico de la sección 2 y del plan enlazado se realizó sobre `6fce9a7b2f70`: sirve como punto de partida histórico, no describe todas las capacidades actuales.
+## 1. Objetivo de producto confirmado
 
-La fuente de implementación vigente es [Implementación y límites](implementacion.md), la [matriz de 36 hallazgos](auditoria-ux-implementacion.md) y el [sitio base de ejemplo con comparación de 17 hallazgos](sitio-base-ejemplo.md). Ya existen conexión frontend/API, autenticación, portada, navegación, borradores/publicación, capturas versionadas, bitácora, proyectos y exportaciones. El cierre de contratos tipados/validados sigue siendo candidato para la primera rebanada del nuevo plan; el despliegue remoto y la validación física siguen pendientes.
+**Primero un sitio completo, útil y visualmente digno de UN gimnasio de ejemplo.** Debe existir y mantenerse como la **implementación canónica** de la plataforma: referencia funcional, de componentes, UX/UI, accesibilidad, pruebas y correcciones. No se necesita publicar tres gimnasios ni diseñar tres marcas para demostrarlo.
 
-Se conserva la nueva dirección D0–D4. El historial local al final registra trabajo previo y sus comprobaciones; sus expresiones «siguiente entrega» son históricas y no sustituyen las prioridades de este plan. Los módulos comerciales existentes se conservan, sin ampliar su alcance ahora.
+**Después de estabilizar el ejemplo funcional**, crear cada diseño particular como trabajo independiente sobre la misma plataforma; los sitios de los tres gimnasios pueden variar significativamente de composición y marca, pero no deben duplicar la lógica común. Una corrección del core se aplica a la base canónica y se verifica en cada sitio particular.
 
-## 1. Dirección del producto (acuerdo de alcance)
+### Límites de la arquitectura
 
-**Primero se desarrollará y demostrará UN sitio ejemplo, de UN gimnasio ficticio o piloto, con una UX/UI genérica, digna, accesible y completamente funcional para el alcance acordado.** No se crearán ahora tres sitios visuales ni tres personalizaciones.
+- **Un frontend visible ahora:** gimnasio ficticio/de ejemplo, con aviso inequívoco y sin dirección, precios, horarios o credenciales inventadas de un negocio real.
+- **Preparado para más gimnasios:** IDs y contratos de dominio compatibles, permisos por gimnasio, pruebas A/B y migraciones compartidas. Mantener un sitio visible **no** impide que existan más gimnasios en el modelo ni en ambientes de pruebas.
+- **Aislamiento actual:** según [ADR-0001](decisiones/0001-backend-cloudflare.md), **un Worker, una D1 y un R2 por gimnasio**. «Más gimnasios en DB» NO significa mezclar los datos de los tres en la misma D1; un cambio de estrategia exige ADR de migración y seguridad. El navegador no selecciona el binding por una variable de cliente.
+- **Identidad y código comunes; datos y permisos locales:** Supabase Auth es la identidad compartida integrada; la autorización de staff/admin procede del Worker y D1 correspondiente. Un staff de A no hereda permisos de B/C.
+- **Fuente canónica permanente:** el gimnasio demo sigue ejecutándose y pasando QA después de lanzar los diseños individuales.
 
-Climbing Lab se conserva como **base canónica** para funcionalidades, modelos, contratos, correcciones, accesibilidad y componentes comunes. Solo **después de estabilizar la aplicación funcional** se crearán diseños propios para cada uno de los tres gimnasios de la ciudad, manteniendo esa base compartida.
+## 2. Estado REAL del repositorio al revisar `main`
 
-- **Un sitio visible ahora:** portada, catálogo, ficha, visor, cuenta/bitácora y staff, según los hitos; contenido de un gimnasio de ejemplo sin mezclar marcas reales.
-- **Más gimnasios previstos en datos:** entidades, contratos, permisos, IDs y seeds preparados para distintos gimnasios; la prueba de aislamiento con A/B se conserva. La existencia de varios gimnasios en datos **no obliga a publicar múltiples frontends**.
-- **Decisión técnica vigente:** [ADR-0001](decisiones/0001-backend-cloudflare.md) establece **una D1 por gimnasio y un Worker por gimnasio**, no una tabla compartida sin aislamiento. «Soportar varios gimnasios en la DB» se traduce por ahora a **modelo de producto multigimnasio y despliegues/almacenamientos aislados**. Cambiar a una base multitenant central requeriría un ADR nuevo y pruebas de seguridad.
-- **Sin forks por cliente:** el core, el sistema de diseño base y la lógica se mantienen actualizables desde un solo repositorio. Las futuras capas de marca, contenido, variantes visuales y extensiones concretas se aíslan del core mediante interfaces/versiones estables; una corrección funcional no se rehace tres veces.
-- **No confundir etapas:** demo navegable ≠ demo público seguro ≠ piloto funcional completo ≠ despliegues personalizados.
-
-## 2. Evidencia del diagnóstico inicial de `main`
-
-| Capacidad | Estado real al revisar el código | Archivo de referencia |
+| Componente/capacidad | Evidencia vigente | Estado |
 | --- | --- | --- |
-| UI local | Catálogo, bitácora, QR, exportaciones PNG y staff demo en una pantalla | `src/App.svelte`; [implementación](implementacion.md) |
-| Visor | PlayCanvas PLY/SOG desde archivo local; cámara local | `src/SplatViewer.svelte` |
-| API por gimnasio | Worker, D1 A/B locales, lectura de rutas, bitácora/reporte y autorización probada | `worker/index.ts`; [API local](api-local.md) |
-| Autenticación | Verificación JWT preparada; emisor configurado como `auth.invalid`; sin login ni identidad desplegada | `worker/index.ts`, `wrangler.jsonc` |
-| Integración web/API | **Pendiente**: el frontend continúa en `localStorage` | `src/domain.ts` y `src/App.svelte` |
-| Publicación de rutas y capturas | **Pendiente**: no existen endpoints de editor/versión de captura ni assets remotos publicados | [API local](api-local.md); [piloto](piloto.md) |
-| Presentación/UX | CSS y estructura de demo, sin home real, sin shells separadas, sin tematización configurable | `src/styles.css`; [interfaz base](interfaz-base.md) |
-| Operación/hosting | Sin recursos de producción ni dominio para demo verificados en la documentación | [ADR](decisiones/0001-backend-cloudflare.md) |
-| Calidad | Tests de dominio, API y navegador, pero no validación con escena real, dispositivos representativos o accesibilidad integral | `tests/pilot.spec.ts`; `worker/api.test.ts` |
+| Sitio público | `src/site.ts`, `SiteHeader.svelte`, `SitePublic.svelte`, `RouteCatalog.svelte`; Inicio, Rutas, El gimnasio y FAQ | **Implementado localmente**; contenido ficticio |
+| Navegación/UX | ficha independiente, filtros/URL, dos temas, estados, fallback de imagen, responsive | **Implementado localmente**; QA físico pendiente |
+| API, sesiones y permisos | `src/auth.ts`, `worker/index.ts`; Supabase Auth, D1/R2 y roles locales | **Integrado localmente**; falta smoke remoto sin mocks |
+| Rutas/3D | `RouteEditor`, `CaptureManager`, `SplatRuntime`, capturas/secciones/revisiones, agarres 3D, cámaras | **Implementado localmente**; precisión/rendimiento físico pendientes |
+| Bitácora/compartir | fecha de actividad, edición/retiro e historial, CSV, proyectos, tarjetas PNG históricas y QR | **Implementado localmente** |
+| Staff | borradores, publicar/retirar, reportes, capturas, cambios auditados | **Implementado localmente** |
+| Operación gimnasio | socios/visitas QR, planes, cobros manuales, dashboard, inventario y ventas manuales | **Implementado localmente**; no apto aún para dinero real |
+| Video | barrido experimental de seis segundos y descarga compatible | **Implementado localmente**; no prometer compatibilidad universal |
+| QA automática | scripts `check`, `check:api`, `test`, `test:api`, `test:e2e`, `build`; pruebas de dos gimnasios | **Suites presentes**; resultados documentados, no reejecutados en esta revisión |
+| Demo con datos útiles | `scripts/seed-local.mjs` solo inserta una ruta heredada simple por gimnasio (sin captura, sector/agarres completos ni imagen) | **Brecha real de demostración** |
+| Publicación accesible | `wrangler.pilot.example.json`, `scripts/pilot.mjs`, runbook | **Preparado documentalmente; NO publicado** |
+| Validación en campo | Crux real probado en escritorio local; faltan segundo splat, teléfonos físicos, QR impreso, lector, red remota | **Pendiente** |
 
-**Corrección de lectura de documentación:** [implementación](implementacion.md) describe correctamente la UI local; donde indica que «no hay backend», leerlo como «la UI aún no consume el backend». La API local D1 sí existe. No considerar sus pruebas equivalentes a un despliegue remoto o a sesiones productivas.
+**Documentación de fuente:** [implementación](implementacion.md), [sitio de ejemplo](sitio-base-ejemplo.md), [continuación integral](continuacion-integral.md), [matriz UX](auditoria-ux-implementacion.md), [piloto remoto](piloto-remoto.md), [medición de formatos](validacion-formatos-dispositivos.md). Los cierres «locales» no certifican funcionamiento en el servicio publicado ni con usuarios reales.
 
-## 3. Secuencia actual: un demo web antes del diseño por gimnasio
+### Implicación inmediata
 
-| Etapa | Objetivo | Criterio de salida |
+No reiniciar D0–D3 del plan anterior: **API ↔ frontend, autenticación, portada, editor, visor, proyectos y módulos de gestión ya existen**. El siguiente trabajo es hacer que todo ello sea fácil de montar, mostrar y evaluar con datos coherentes, sin mocks ni dependencias innecesarias durante la demo local.
+
+## 3. Definiciones de terminado: no confundir cuatro estados
+
+| Nivel | Qué demuestra | Condición de cierre |
 | --- | --- | --- |
-| **D0 — Integración de base** | Arquitectura mínima de rutas/pantallas, config de **gimnasio ejemplo** y cliente API real; contrato coherente frontend/Worker | Catálogo desde D1 local, estado vacío/error, sin datos de ejemplo incrustados como fuente principal |
-| **D1 — Demo público compartible** | Portada y catálogo/ficha responsive; captura publicada y 3D remoto o fallback válido; QR y enlaces estables | Un visitante sin login abre el demo desde otro dispositivo; ficha es útil antes o sin 3D |
-| **D2 — Demo interactivo seguro** | Auth gestionada real, bitácora/reportes vía API, roles staff e integración de edición/publicación mínimas | Flujo visitante → escalador → staff con datos persistentes y autorización, sin selector staff ficticio |
-| **D3 — Base funcional canónica** | Completar el [piloto funcional](piloto.md): revisiones, agarres 3D, cámara, exportaciones consistentes, proyectos y pruebas de regresión | Un staff publica una ruta; un escalador la consulta, registra ascenso, exporta tarjeta y otro visitante abre el QR |
-| **D4 — Validación y estabilización** | QA, rendimiento con captura real, accesibilidad, correcciones y documentación de operación/recuperación | Demo web presentable, reproducible, con fallbacks y métricas; core candidato a base reutilizable |
-| **P — Diseños particulares (después)** | Diseños y contenido propios de gimnasio 1, 2 y 3 sobre el core estable; dominios/datos por sitio | Tres apariencias sin duplicar negocio ni perder actualizaciones del core |
-
-Las fases D0–D4 pueden desarrollarse de forma incremental, con una demo visible desde D1. **La individualización visual P no bloquea avanzar con ninguna capacidad útil del core.**
-
-### Funciones posteriores, separadas del objetivo demo
-
-Se preserva el plan de evolución, pero no entra como condición para mostrar el demo:
-
-| Etapa futura | Resultado esperado |
-| --- | --- |
-| F1. Video | Barridos de cámara configurables y exportación de clips |
-| F2. Gestión de socios | Planes, vigencias, QR de visita, asistencia y cobros manuales |
-| F3. Pagos | Compras, renovaciones, promociones y conciliación del proveedor |
-| F4. Tienda | Productos, inventario y pedidos |
-| F5. Escalada exterior/experiencias avanzadas | Ampliaciones tras validar utilidad real |
-
-Pueden implementarse funcionalmente en la base canónica antes de habilitarse en un sitio particular, pero requieren planes y criterios de seguridad propios.
-
-## 4. Prioridades inmediatas (en orden de dependencia)
-
-1. **Fijar el contrato del gimnasio ejemplo y del demo:** marca neutra, datos ficticios, alcance y rutas públicas; conservar seeds de A/B para aislamiento.
-2. **Cerrar discrepancias de API/dominio y conexión web:** actualmente `GET /api/routes` no entrega la misma representación de ruta/revisión que espera `App.svelte`; definir DTO, paginación y estados de UI.
-3. **Crear shell público sencillo y responsive:** Inicio, Rutas, Detalle y navegación; estilos con tokens mínimos para cambiar de identidad después, **sin diseñar marcas propias ahora**.
-4. **Probar escena REAL y preparar entrega remota:** elegir PLY/SOG/SPZ/streaming por mediciones; publicar captura/versiones en R2; miniatura o fallback disponible antes de cargar 3D.
-5. **Completar modelo/editor/publicación:** captura, revisión, cámara, marcadores, borrador y retirada, vinculados a identidad de captura; preservar QR y bitácora histórica.
-6. **Activar auth real y conectar bitácora/reportes/staff:** roles por gimnasio, sesión, estados de carga/error, prohibición de acceso cruzado y registro auditable.
-7. **Unificar compartibles y calidad:** tarjeta de ascenso y PNG usando revisión histórica y captura correcta; prueba de QR físico y enlace remoto; responsive, teclado, fallbacks, tasa de errores y rendimiento.
-
-**Plan de trabajo detallado por entregables y criterios:** [`docs/planes/2026-10-demo-web-canonico.md`](planes/2026-10-demo-web-canonico.md).
-
-## 5. Reglas para mantener la base canónica
-
-1. Código de negocio, D1/migraciones, contratos API, permisos, estados, accesibilidad y visor viven en el core.
-2. El demo usa un **tema neutro único** y contenido/configuración del gimnasio ejemplo. Los tokens semánticos evitan colores y marcas codificados dentro de lógica o exportaciones.
-3. El diseño particular futuro se implementa como **capa de branding/composición versionada** (configuración, tokens, layouts y assets) sin editar el core. Las excepciones requieren una extensión explícita, no copiar/pegar componentes comunes.
-4. Cambios al core deben ejecutar pruebas del demo canónico y, cuando existan, smoke/regresión de los tres sitios personalizados. La base demo permanece disponible como referencia después de lanzar los sitios.
-5. Versionar contratos, migraciones y cambios de interfaces para que un tema antiguo sea detectable e incompatible explícitamente, no silenciosamente.
-6. Un único código fuente **no implica** mezclar datos de gimnasio ni ofrecer capacidades staff sin verificar en servidor.
-
-## 6. Trabajo con Codex y Git
-
-Para cualquier **feature de implementación**, crear una rama desde `main`. Documentar el plan en Markdown en esa rama, de manera incremental (**un documento de planificación por commit**, si se divide el alcance), validar entregables y abrir PR hacia `main`. Evitar desarrollo funcional directamente en `main`.
-
-Este ajuste de planeación se puede integrar a `main` mediante PR documental antes de iniciar el feature técnico. El siguiente feature sugerido es **`feat/demo-web-base`** (nombre orientativo; abrirlo al arrancar desarrollo), cuyo plan inicial es el documento enlazado arriba.
-
-## 7. Decisiones vigentes y pendientes
-
-### Conservadas
-
-- Piloto con una escena completa por gimnasio, sectores sobre la misma captura; ver [producto](producto.md).
-- Cuenta compartida de identidad como posibilidad; staff/bitácoras/membresías de cada gimnasio siguen aislados.
-- QR de ruta estable e independiente de la captura; los QR de login y visita **no se confunden**.
-- Solo staff publica rutas; registros históricos referencian revisiones; la beta es opcional.
-- AWS/otras plataformas no se introducen por costumbre: continuar evaluación dentro de la arquitectura Cloudflare decidida.
-- Video, pagos, tienda y gestión de visitas siguen posteriores al piloto.
-
-### Por validar (no bloquear el inicio de D0)
-
-- Gimnasio/paleta neutros y copy del ejemplo; se pueden usar datos ficticios comprobables.
-- Selección/configuración de proveedor de identidad gestionada y flujo de login (bloquea D2 y despliegue con cuentas).
-- Captura real y formato de entrega; umbrales de rendimiento (bloquea afirmar D1 completo en 3D).
-- Criterio de cuándo un ajuste de armado origina una nueva revisión o una nueva ruta.
-- Quién puede publicar y resolver incidentes; roles y protocolo de agarre suelto.
-- DNS, recursos cloud, almacenamiento, dominio, backups y rate limiting (bloquea compartir un demo con escritura).
-
-### Preguntas de fases comerciales (sin adelantar)
-
-Planes, caducidad, renovaciones, conciliación de cobros, costos de tienda, proveedor de pagos, exportación de video y modelo de cobro Creativivid. Revisar al arrancar cada fase, no incluir en la primera demo.
-
-## Anexo: historial de implementación local anterior a la integración
-
-Las siguientes notas conservan el registro previo. Para planificar, contrastarlas con las fuentes de estado actual indicadas arriba.
-
-## Estado de la base funcional
-
-- [x] Login Google/correo mediante Supabase y permisos locales por gimnasio.
-- [x] Catálogo, cámaras de ruta, bitácora, reportes y QR de rutas.
-- [x] Capturas completas versionadas, alineación asistida y conservación/importación por sección.
-- [x] Cámara inicial del gimnasio y encuadre principal.
-- [x] Secciones por caja o contorno, cuadrícula y selección aproximada de puntos.
-
-Estas tareas describen capacidades locales verificadas, no certifican un servicio de producción. La selección de puntos, escala y alineación requieren revisión humana.
-
-## Próximas entregas del piloto
-
-| Orden | Entrega                             | Criterio para cerrarla                                                                                                                                 |
-| ----- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1     | Corrección de regiones guardadas    | Editar cajas y contornos conservando identidad, historial y referencias de rutas; impedir sobrescrituras concurrentes; cancelar sin escribir datos     |
-| 2     | Edición espacial más directa        | Seleccionar/mover un vértice, orientar el plano para paredes inclinadas y ajustar profundidad; conservar controles numéricos y comprobar móvil/teclado |
-| 3     | Validación entre capturas completas | Probar con dos capturas reales alineadas; revisar escala, error de referencias y correspondencia de secciones/cámaras; conservar versiones anteriores  |
-| 4     | Ruta real de principio a fin        | Elegir sección, cámara, puntos 3D de agarres y beta; consultar desde QR; registrar intento/ascenso y retirar ruta preservando historial                |
-| 5     | Rendimiento y recuperación          | Medir carga, memoria y fluidez en dispositivos piloto; comparar PLY/SOG/SPZv4; reanudar/limpiar subidas interrumpidas; elegir LOD solo con evidencia   |
-| 6     | Exportaciones compartibles          | Imagen y tarjeta con encuadre, datos y atribución; después barrido de cámara/video con límites de dispositivo conocidos                                |
-| 7     | Piloto remoto con un gimnasio       | Configurar dominio y R2 remoto, backups/restauración, permisos y observabilidad; verificar flujos sin mocks antes de invitar socios                    |
-
-## Siguiente entrega concreta: corrección de regiones
-
-- [x] E1 — Definir revisión de sección y snapshot histórico; conservar su identidad al corregirla.
-- [x] E2 — Migrar regiones existentes sin perder rutas ni capturas.
-- [x] E3 — API administrativa con validación de geometría, versión esperada y auditoría atómica.
-- [x] E4 — Cargar una región guardada en el editor, modificar nombre/tipo/volumen/vértices, previsualizar y guardar o cancelar.
-- [x] E5 — Consultar historial y establecer cómo revisar correcciones sobre rutas existentes; no sobrescribir snapshots de ascensos.
-- [x] E6 — Probar conflictos concurrentes, permisos, aislamiento, cancelación y persistencia en navegador.
-
-La corrección geométrica no equivale a un cambio de armado: no retira rutas por sí sola. Cuando cambie el armado, se mantiene el flujo de publicación de captura completa por secciones. Las rutas guardadas conservan la revisión de sección anterior; al guardar explícitamente una edición de ruta, el staff adopta la revisión vigente. El historial anterior a la migración no puede reconstruirse: la geometría existente se registra como revisión inicial.
-
-## Después del piloto visual
-
-Gestión de socios y QR de visitas → planes, vigencias y cobros manuales → pagos en línea y conciliación → catálogo de ventas e inventario. Los gastos y el alcance de contabilidad se definirán como un módulo propio. Estas etapas siguen contempladas y no se adelantan mientras se valida el clon digital.
-
-## Cierre de corrección de regiones — 12 de octubre de 2026
-
-La edición administrativa mantiene ID, registra snapshots y auditoría, detecta revisión obsoleta y permite cancelar sin escribir. Historial y preparación de restauración disponibles en Capturas. Las restauraciones requieren confirmación y crean una revisión nueva. Los vértices admiten corrección numérica además de selección aproximada.
-
-Verificación: 27 pruebas backend, 9 de dominio/geometría y 10 de navegador; tipos y build. Las pruebas de navegador usan auth/API simulados; las pruebas del Worker ejercitan D1 local y transacciones. Migración 0005 aplicada en bases A/B locales. Sigue pendiente la siguiente entrega: gizmos y plano de orientación libre.
-
-## Continuación fuera del editor de secciones
-
-La mejora UX/UI de los incrementos A–C está implementada según la [matriz de auditoría](auditoria-ux-implementacion.md); queda pendiente su validación física. Gizmos y orientación libre de secciones siguen fuera de esta entrega. Se implementó el [flujo de agarres 3D de rutas](rutas-3d.md): preparación, cámara, beta y visualización con revisiones. El siguiente trabajo funcional es mejorar la relación entre beta/agarres y exportaciones, junto con la validación de continuidad usando dos capturas reales.
-
-## Corrección de arranque del piloto
-
-- [x] Rutas antiguas/de prueba sin sección ni captura no bloquean la primera publicación ni se vinculan automáticamente. Mantienen su snapshot y pueden prepararse tras publicar.
-- [x] La interfaz identifica estas rutas como pendientes de asignación.
-- [x] Pruebas de publicación inicial y reemplazo con ruta de prueba, conservación de cámara local/snapshot y navegador escritorio/móvil.
-
-Se conserva el control para rutas ya vinculadas a una captura que perdieron su sección. Importar una ruta sin sección exige asignarla primero.
-
-## Área personal del escalador
-
-Se completó la [primera entrega de bitácora personal](bitacora-personal.md): resumen de intervalo completo, filtros locales de fecha/resultado, páginas, CSV de página y tarjetas históricas. Los siguientes candidatos fuera del editor de secciones son proyectos/sesiones de escalada y exportaciones 3D compartibles. Visitas QR, membresías y módulos comerciales siguen en etapas posteriores.
-
-## Prioridades tras habilitar registro directo en bitácora
-
-1. **Completar la actividad personal**: corrección/eliminación de registros propios con auditoría, fecha explícita para actividad pasada y exportación del intervalo completo. Definir estas reglas antes de implementar cambios sobre registros históricos.
-2. **Proyectos y sesiones de escalada**: agrupar intentos, marcar rutas en proyecto y consultar progreso sin confundirlo con visitas del gimnasio.
-3. **Visuales compartibles**: tarjetas con vista 3D y datos elegidos por el usuario; después recorridos de cámara/video. Mejorar secuencia de beta por agarre en paralelo cuando las rutas reales lo requieran.
-4. **Validación y piloto remoto**: continuidad con dos capturas completas reales, dispositivos físicos, formato/rendimiento, dominio, backups/restauración y pruebas del servicio sin mocks.
-5. **Gestión del gimnasio**: credenciales QR revocables y registro de visitas por staff, planes/vigencias y registro de cobros manuales.
-6. **Comercial**: pagos en línea/conciliación y catálogo de ventas/inventario; definir alcance de gastos y contabilidad como módulo propio.
-
-Las mejoras del UX/UI de secciones, gizmos y orientación libre siguen registradas y diferidas por preferencia del usuario. La prioridad inmediata es cerrar flujos cotidianos del piloto, no ampliar módulos comerciales antes de validarlo.
-
-- [x] Acceso visible **Añadir registro** en bitácora y prueba de guardar/cancelar en escritorio y móvil.
-
-## Cierre: corrección y retiro de actividad personal
-
-- [x] Historial privado y versión independiente de la revisión de ruta.
-- [x] Corrección de intentos, resultado y notas sin alterar ruta ni fecha.
-- [x] Retiro confirmado y filtro de retirados, con exclusión del resumen vigente.
-- [x] Transacciones, conflictos concurrentes, aislamiento de propietario/gimnasio y cancelación.
-- [x] Flujo de navegador escritorio/móvil y limpieza del historial al refrescar sesión.
-
-Continúan pendientes fecha explícita de actividad pasada y CSV del intervalo completo. Luego: proyectos/sesiones, visuales 3D compartibles, piloto remoto y gestión comercial en el orden anterior.
-
-## Prioridad de interfaz espacial
-
-- [x] Visor fijo y herramientas en panel plegable, con distribución lateral/escritorio e inferior/móvil.
-- [x] Desplazamiento independiente: editar rutas/secciones no desplaza el muro fuera del viewport.
-- [x] Compartir renderer entre herramientas para preservar cámara y carga al cambiar de módulo.
-- [ ] Validar ergonomía de selección de puntos con Crux y dispositivos físicos.
-
-Este principio de interfaz aplica a futuras herramientas del clon digital. Fecha de actividad pasada, exportaciones y módulos comerciales mantienen su alcance previo.
-
-## Cierre: fecha explícita de actividad
-
-- [x] Registrar actividad pasada con fecha/hora local convertida a UTC.
-- [x] Rechazar futuro/fechas inválidas y conservar fecha real de escritura en auditoría.
-- [x] Explicar que se usa la revisión vigente, sin reconstruir armados históricos.
-
-Siguiente entrega personal: CSV del intervalo completo, separado de exportar la página visible. La persistencia del renderer entre módulos sigue pendiente como mejora del espacio de trabajo.
-
-## Cierre: exportación completa de bitácora
-
-- [x] CSV de intervalo completo con filtros aplicados, independiente de página.
-- [x] Consulta única privada, protección de fórmulas y límite explícito de 2000 registros.
-- [x] Pruebas de contenido descargado, aislamiento y rechazo de intervalos demasiado grandes.
-
-El bloque de fecha pasada y exportaciones personales queda cerrado para el piloto. Sigue conservar renderer/cámara entre herramientas del espacio de trabajo; después proyectos/sesiones y visuales 3D compartibles.
-
-## Cierre: persistencia del espacio 3D
-
-- [x] Renderer/canvas compartido por catálogo, cuenta, bitácora y editores.
-- [x] Memoria de cámara por ruta/captura y reutilización de asset cuando se conserva la captura.
-- [x] Pruebas de identidad de canvas, valores de cámara y ausencia de descargas repetidas al cambiar de módulo.
-
-Siguiente bloque: proyectos personales y sesiones de escalada; después visuales 3D compartibles. Sigue pendiente validar el editor con Crux/dispositivos físicos y continuidad con dos capturas reales.
-
-## Implementación integral — 13 de octubre de 2026
-
-Fuente de estado actual: [continuación integral](continuacion-integral.md). Los candidatos descritos en cierres anteriores ya se implementaron localmente donde se indica abajo.
-
-- [x] E1 — Estado de conexión/permisos, Reintentar y comando conjunto de desarrollo.
-- [x] E2 — Proyectos privados versionados y agrupación diaria por zona del gimnasio.
-- [x] E3 — PNG 3D, atribución y preparación histórica con privacidad explícita.
-- [x] E4 — Barrido de video, detección de formato, cancelación y recuperación del visor.
-- [ ] E5 — Piloto remoto/validación física completa. Preparación, Crux de escritorio y restauración D1 local probados; faltan recursos/datos/dispositivos externos.
-- [x] E6 — Socios, credenciales QR revocables, recepción, visitas y consumo/corrección auditados.
-- [x] E7 — Planes, vigencias, cobros manuales, historial, dashboard y CSV.
-- [x] E8 — Productos/variantes, catálogo público, ventas e inventario atómicos.
-
-No hay despliegue remoto ni cambios de facturación. [Pasos externos y publicación](piloto-remoto.md). Antes de operar con clientes/dinero real se exige QA físico y servicio sin mocks. Checkout, suscripciones, facturación fiscal, gastos y conciliación con proveedor mantienen su etapa posterior.
+| **L0 — Demo local integral** | Un operador instala/arranca el gimnasio ficticio con datos coherentes y muestra recorridos principales | Setup y reset seguros, catálogo real D1, poster/3D disponible o fallback honesto, scripts de verificación y guion; no depende de interceptar API con mocks |
+| **L1 — Demo web compartible** | Visitante abre una URL pública del único gimnasio ejemplo en teléfono externo | Frontend/API/asset publicados, DNS/HTTPS, QR correcto, lectura anónima y estados de error comprobados; no requiere cuenta de visitante |
+| **L2 — Demo interactiva controlada** | Escalador y staff prueban acciones persistentes desde URL real | Auth/callbacks, roles, D1/R2, medidas antiabuso, aislamiento, backup+restore y cuentas de prueba autorizadas; ninguna operación financiera real |
+| **L3 — Base canónica lista para especialización** | UX y operación estables para adoptar como referencia permanente | QA física/lector, escena real en varios equipos, errores corregidos, regresión visual/funcional y contrato de extensiones de presentación documentado |
+| **P — Sitios particulares** | Tres gimnasios diferenciados visualmente sobre el core estable | Trabajos independientes de marca, contenido/variantes y despliegue con regresiones del core; cada uno mantiene sus propios datos |
+
+**Primera meta del siguiente feature: L0.** Trabajar en preparación de L1 simultáneamente, pero **no afirmar L1/L2** sin recursos remotos y evidencias reales. L0 puede usar una captura de demostración autorizada; si falta, mostrar fallback y declarar la limitación.
+
+## 4. Prioridades restantes, en orden de retorno
+
+| Prioridad | Trabajo concreto y alcance | Qué se puede avanzar hoy | Dependencias |
+| --- | --- | --- | --- |
+| **P0-A** | **Dataset curado y bootstrap reproducible** para un gimnasio ejemplo: rutas, sectores, grados, revisiones, portada, fotos/posters permitidos, staff de prueba controlado, estados útiles | **Sí, sin recursos cloud**: fixtures seguros, migraciones locales, scripts de setup/reset, dataset y e2e integrados | Ninguna externa; assets reales solo con permiso |
+| **P0-B** | **Guion y modo de exhibición responsable:** rutas destacadas, estados coherentes, instrucciones de arranque, fallbacks, avisos de datos ficticios; que nada parezca vacío o roto | **Sí**: presentación y estados sobre componentes actuales; no rediseñar la app | P0-A |
+| **P0-C** | **Pruebas sin mocks de flujo real local** (Vite → Worker → D1/R2) y regresiones UX; automatizar smoke de portada, catálogo, QR, sesión si está disponible, staff autorizado | **Sí**: API pública, seed, 3D mock-free si hay asset local apropiado; tareas privadas requieren auth real o harness aislado | P0-A; credenciales controladas para pruebas humanas |
+| **P1-A** | **Staging público de un único gimnasio ejemplo**, Worker+Static Assets+D1+R2, origen, callbacks, semillas seguras, dominio, demo URL, backup/restauración | Preparar automatización/config sin desplegar ni cobrar | Cloudflare R2 habilitado, cuenta/DNS, identidad/roles y contenido publicable |
+| **P1-B** | **QA física y rendimiento real:** Android/iPhone, Crux, segunda captura, lectura de agarres, red móvil, QR impreso y accesibilidad | Preparar protocolo, métricas y matriz; desktop existente como baseline | Dispositivos/capturas y acceso presencial |
+| **P1-C** | **Endurecer para cuentas reales:** limites, rate limiting, rollback, auditoría, restore D1+R2, errores de sesión, monitoreo | Código/scripts y tests; no certificar remoto sin prueba | Recursos y sesiones reales |
+| **P2-A** | Ajustes ergonómicos del editor: gizmos, plano libre, oclusión/precisión, LOD/streaming | Prototipos y pruebas controladas | Evidencia de escena/dispositivos que justifique costo |
+| **P2-B** | Mejoras del core/comercial: operaciones, vídeo, checkouts/pagos, nuevas utilidades | Planificación separada; preservar lo ya implementado | Alcance, reglas de negocio y seguridad |
+| **P3** | Marcas particulares A/B/C | Solo diseñar contrato de extensión y pruebas ahora | Cierre L3, identidad y materiales de cada gimnasio |
+
+**No crear un segundo catálogo, login, editor, sistema de proyectos o gestión de socios.** Mejorar o reparar el componente existente en su sitio.
+
+## 5. Plan de siguiente entrega aprobado para planificación
+
+**Feature propuesto:** `feat/demo-integral-canonico`.  
+**Documento ejecutable:** [`docs/planes/2026-10-demo-integral-siguiente.md`](planes/2026-10-demo-integral-siguiente.md).
+
+Secuencia de implementación sugerida:
+
+1. **D01 — Definición de demo y datos:** inventario de rutas/sectores/estados, fixtures versionados, identidad del ejemplo, seed idempotente. No usar información no autorizada de gimnasios reales.
+2. **D02 — Bootstrap aislado:** un comando de preparación, arranque y verificación, sin borrar bases locales existentes; A/B conservan aislamiento y migraciones. Documentar reset seguro.
+3. **D03 — Recorrido de visitante sin mocks:** Inicio → Rutas → filtro → detalle → beta/imagen → visor bajo demanda si hay asset → QR URL correcta; estados de carga/error y móvil.
+4. **D04 — Recorrido de escalador/staff real:** cuenta/bitácora/proyectos/reportes, editor/publicación y revisiones sobre API persistente; auth real y rol local solo en entorno privado/controlado. Sin bypass de permisos.
+5. **D05 — Presentación y puerta de salida:** e2e integrado, script smoke, capturas desktop/mobile, guion, checklist para staging remoto, resultados honestos y vínculo a QA físico.
+
+### Criterio de aceptación general de L0
+
+`npm ci` + migraciones/seed/arranque documentados deben permitir reproducir **una historia completa de rutas del mismo gimnasio**: una ruta activa visible, una retirada histórica y otra apta para editar/publicar, con grados/sectores/beta legibles; usuario sin sesión puede consultar; ruta seleccionada tiene imagen o estado de fallback claro; QR abre la misma ruta; staff autorizado no es reemplazado por un toggle; escrituras en D1 quedan registradas y no cruzan a B. Si hay escena permitida, debe asociarse correctamente a la captura y no presentarse como rendimiento móvil validado.
+
+## 6. Independencia entre core canónico y futuro diseño por sitio
+
+**Establecer límites hoy, no tres implementaciones hoy:**
+
+```text
+climbing-lab (repositorio y versión canónica)
+├── lógica y servicios compartidos: dominio, API, auth, visor, flujos
+├── componentes/estados/accesibilidad compartidos
+├── demo canónico: un tema neutro + contenido del gimnasio ficticio
+└── interfaz de extensiones de presentación (progresiva)
+    ├── futuro sitio A: marca, contenido, composición y assets A
+    ├── futuro sitio B: marca, contenido, composición y assets B
+    └── futuro sitio C: marca, contenido, composición y assets C
+```
+
+- **No forks ni ramas permanentes de producto por gimnasio.** Preferir paquetes/módulos o carpetas de sitios versionados, con PR de diseño por sitio; el core se actualiza centralmente. Monorepo o distribución en paquetes se decidirá al integrar el **primer diseño real**, no como refactor anticipado.
+- **Diferenciación visual significativa:** tokens, tipografías, imágenes, secciones, layouts/slots y componentes de presentación intercambiables; no permitir copiar lógica, endpoints, permisos o estados de negocio.
+- **Contrato mínimo:** `GymSiteConfig` v1 existente en `src/site.ts`, dos temas de muestra; extraer dependencias de marca en exportaciones y shell según necesidades reales. Cambios al contrato deben versionarse y tener pruebas de retrocompatibilidad; no desarrollar CMS drag-and-drop ahora.
+- **Pruebas comunes:** mantener demo canónico como referencia de historias críticas y añadir regresiones por sitio/tema cuando A/B/C existan.
+- **Despliegues separados:** publicar solo una instancia demo ahora. A/B/C futuros con bindings/D1/R2/domino propios según ADR; usuario o frontend nunca elige otro gimnasio para una operación.
+
+## 7. Puertas, dependencias externas y calidad
+
+### Se puede avanzar independientemente
+
+Crear fixtures, scripts, documentación de instalación, tests con API/D1/R2 locales, smoke, demo narrativa y arreglos de estados/visibilidad, mejoras de accesibilidad verificables y versión de tema demo. **No se necesita esperar los tres gimnasios**.
+
+### Bloqueadores de demo pública y piloto real
+
+- Recursos y condiciones de Cloudflare/R2, DNS/URL y configuración real del Worker/D1; no reutilizar placeholders locales.
+- Callback/origen de Supabase y cuentas autorizadas para escenarios privados; scripts de seed **nunca** fabrican JWT ni privilegios públicos.
+- Captura real autorizada (Crux u otra), segundo splat para continuidad y poster/thumbnail cuya licencia permita publicarlo.
+- Android/iPhone físicos, red representativa, validación de agarres desde dos ángulos, QR impreso, lectores de pantalla y tareas de visitantes/staff.
+- Backups **D1 + archivos R2**, restauración remota aislada, límites y controles operativos. No usar dinero ni datos personales reales en demo sin aprobación.
+
+### Checklist de calidad
+
+- Tests: `npm run check`, `npm run check:api`, `npm run format:check`, `npm test`, `npm run test:api`, `npm run build`, `npm run test:e2e` y smoke integrado adicional.
+- 320/390/768/1440 px, teclado, estados sin JS de 3D, cargas lentas, error de red, 401/403, ruta inexistente/retirada y privacidad de exportación.
+- Objetivo WCAG 2.2 AA sujeto a revisión manual; las pruebas automatizadas **no** certifican cumplimiento.
+- Rendimiento GPU, LOD, formatos y bytes hasta vista útil se decidirán **tras medidas**, según [protocolo](validacion-formatos-dispositivos.md), no por promesas del prototipo.
+- Guion completo con datos **ficticios** y captura/escena **autorizada**; ningún ingreso, socio o credencial de producción alterado.
+
+## 8. Trabajo con Codex y control de cambios
+
+1. Para cada feature técnico, crear **rama nueva desde `main` actualizado** (no desde rama del gimnasio A/B/C ni desde auditorías antiguas).
+2. Mantener **un documento Markdown de planificación por commit documental** cuando la planificación se divida; después commits pequeños de implementación que correspondan a tareas/aceptación.
+3. Cada commit debe declarar qué implementa y qué verifica. No marcar etapas «listas» por pruebas interceptadas únicamente.
+4. Abrir PR a `main` con cambios, evidencias y pendientes. Actualizar el roadmap al cerrar una etapa; el core canónico conserva ejemplos y smoke.
+5. Los diseños particulares futuros tendrán PRs independientes y dependencias explícitas sobre la versión del core, sin duplicar servicios.
+
+## 9. Fuentes y decisiones a consultar
+
+- [Sitio base y auditoría de 17 hallazgos](sitio-base-ejemplo.md)
+- [Matriz UX/UI y 36 hallazgos](auditoria-ux-implementacion.md)
+- [Implementación local actual](implementacion.md)
+- [Continuación integral](continuacion-integral.md)
+- [Piloto remoto y dependencias](piloto-remoto.md)
+- [Validación de formatos/dispositivos](validacion-formatos-dispositivos.md)
+- [Producto](producto.md), [piloto](piloto.md), [interfaz](interfaz-base.md), [modelo](modelo-de-datos.md)
+- [ADR Cloudflare](decisiones/0001-backend-cloudflare.md)
+- [Plan histórico de demo](planes/2026-10-demo-web-canonico.md) — **no usar como inventario vigente**
+- [Versión histórica de este roadmap antes de corregir prioridades](https://github.com/keneth4/climbing-lab/blob/416eb32a1205287c3d96b8a3842eb1d0ca08f625/docs/roadmap.md)
+
+**Resultado de producto buscado:** una URL y un repositorio que siempre demuestren cómo funciona **Climbing Lab para un gimnasio**, mientras las futuras personalizaciones de tres marcas se desarrollan y despliegan por separado, heredando correcciones del core.
