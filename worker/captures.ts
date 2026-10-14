@@ -1,3 +1,4 @@
+import { presentationKey } from './pilot';
 import { polygonGeometry, polygonBounds } from '../shared/sections';
 import {
   align,
@@ -129,6 +130,110 @@ export async function captureApi(
   }
   const user = await identity();
   await admin(env, user);
+  const rollback = path.match(/^\/api\/captures\/([^/]+)\/rollback$/);
+  if (rollback && request.method === 'POST') {
+    const target = await capture(env, rollback[1]),
+      current = await state(env),
+      b = await body(request);
+    const reason = text(b.reason, 2000);
+    if (
+      target.status !== 'published' ||
+      target.upload_state !== 'ready' ||
+      !current ||
+      b.expectedGeneration !== current.generation ||
+      target.id === current.active_capture_id
+    )
+      throw new HttpError(
+        409,
+        'Revisa la captura y generación antes de restaurar.',
+      );
+    const rows = await env.DB.prepare(
+      "SELECT r.id,r.name,r.grade,r.sector,r.beta,r.publication_state,rr.revision,rr.snapshot FROM routes r JOIN route_revisions rr ON rr.route_id=r.id WHERE r.publication_state='public' AND rr.revision=(SELECT MAX(revision) FROM route_revisions WHERE route_id=r.id)",
+    ).all<{
+      id: string;
+      name: string;
+      grade: string;
+      sector: string;
+      beta: string;
+      revision: number;
+      snapshot: string;
+    }>();
+    if (rows.results.length > 100)
+      throw new HttpError(400, 'Hasta 100 rutas por restauración.');
+    const guard = crypto.randomUUID(),
+      now = new Date().toISOString();
+    const statements = [
+      env.DB.prepare(
+        'INSERT INTO mutation_guards VALUES(?,(SELECT CASE WHEN generation=? THEN 1 ELSE 0 END FROM gym_state WHERE id=1))',
+      ).bind(guard, current.generation),
+    ];
+    for (const row of rows.results) {
+      const prior = await env.DB.prepare(
+        'SELECT snapshot FROM route_revisions WHERE route_id=? AND capture_id=? ORDER BY revision DESC LIMIT 1',
+      )
+        .bind(row.id, target.id)
+        .first<{ snapshot: string }>();
+      const snapshot = prior
+        ? JSON.parse(prior.snapshot)
+        : JSON.parse(row.snapshot);
+      snapshot.id = row.id;
+      snapshot.name = snapshot.name || row.name;
+      snapshot.grade = snapshot.grade || row.grade;
+      snapshot.sector = snapshot.sector || row.sector;
+      snapshot.holds = snapshot.holds || [];
+      snapshot.revision = row.revision + 1;
+      snapshot.status =
+        prior && snapshot.status !== 'retirada' ? 'activa' : 'retirada';
+      statements.push(
+        env.DB.prepare('INSERT INTO route_revisions VALUES(?,?,?,?)').bind(
+          row.id,
+          snapshot.revision,
+          JSON.stringify(snapshot),
+          snapshot.captureId || null,
+        ),
+        env.DB.prepare(
+          'UPDATE routes SET name=?,grade=?,sector=?,beta=?,status=?,section_id=? WHERE id=?',
+        ).bind(
+          snapshot.name,
+          snapshot.grade,
+          snapshot.sector,
+          snapshot.beta || '',
+          snapshot.status,
+          snapshot.sectionId || null,
+          row.id,
+        ),
+        env.DB.prepare('INSERT INTO route_changes VALUES(?,?,?,?,?)').bind(
+          row.id,
+          snapshot.revision,
+          reason,
+          user,
+          now,
+        ),
+      );
+    }
+    statements.push(
+      env.DB.prepare(
+        'UPDATE gym_state SET active_capture_id=?,generation=generation+1 WHERE id=1',
+      ).bind(target.id),
+      env.DB.prepare('INSERT INTO audit_events VALUES(?,?,?,?,?)').bind(
+        crypto.randomUUID(),
+        user,
+        'capture.rollback',
+        target.id,
+        now,
+      ),
+      env.DB.prepare('DELETE FROM mutation_guards WHERE id=?').bind(guard),
+    );
+    try {
+      await env.DB.batch(statements);
+    } catch {
+      throw new HttpError(
+        409,
+        'Cambió el catálogo. Revisa antes de restaurar.',
+      );
+    }
+    return json({ state: await state(env) });
+  }
   if (path === '/api/captures' && request.method === 'GET') {
     const r = await env.DB.prepare(
       'SELECT * FROM captures ORDER BY created_at DESC LIMIT 100',
@@ -540,7 +645,7 @@ export async function captureApi(
       imports = new Set(b.importRouteIds),
       reviewed = new Set(b.reviewedRouteIds);
     const routes = await env.DB.prepare(
-      "SELECT r.id,r.section_id,r.status,rr.revision,rr.snapshot FROM routes r JOIN route_revisions rr ON rr.route_id=r.id WHERE (r.status='activa' OR r.id IN (SELECT value FROM json_each(?))) AND rr.revision=(SELECT MAX(revision) FROM route_revisions WHERE route_id=r.id)",
+      "SELECT r.id,r.section_id,r.status,rr.revision,rr.snapshot FROM routes r JOIN route_revisions rr ON rr.route_id=r.id WHERE ((r.status='activa' AND r.publication_state='public') OR r.id IN (SELECT value FROM json_each(?))) AND rr.revision=(SELECT MAX(revision) FROM route_revisions WHERE route_id=r.id)",
     )
       .bind(JSON.stringify(b.importRouteIds))
       .all<{
@@ -583,10 +688,42 @@ export async function captureApi(
         400,
         'Revisa explícitamente cada ruta que se conservará.',
       );
+    const presentations =
+      b.routePresentations &&
+      typeof b.routePresentations === 'object' &&
+      !Array.isArray(b.routePresentations)
+        ? (b.routePresentations as Record<
+            string,
+            { imageId: string; camera: unknown }
+          >)
+        : {};
+    for (const r of carried) {
+      const old = JSON.parse(r.snapshot);
+      if (!old.gradeScale) continue; // Legacy presentations stay readable and visibly incomplete.
+      const candidate = presentations[r.id];
+      const view = candidate?.camera as { captureId?: string } | undefined;
+      const image = candidate?.imageId
+        ? await env.DB.prepare(
+            'SELECT capture_id,presentation FROM route_images WHERE id=?',
+          )
+            .bind(candidate.imageId)
+            .first<{ capture_id: string; presentation: string }>()
+        : null;
+      if (
+        !image ||
+        image.capture_id !== c.id ||
+        view?.captureId !== c.id ||
+        image.presentation !== presentationKey(view, old.holds3D)
+      )
+        throw new HttpError(
+          400,
+          `Prepara cámara e imagen nuevas para ${old.name || r.id}.`,
+        );
+    }
     const now = new Date().toISOString();
     const statements = [
       env.DB.prepare(
-        "INSERT INTO publications(generation,capture_id,verified,details,created_by,created_at) VALUES(?,?,(SELECT CASE WHEN c.status='draft' AND c.version=? AND c.upload_state='ready' AND s.generation=? AND (SELECT COUNT(*) FROM routes WHERE status='activa')=? THEN 1 ELSE 0 END FROM captures c,gym_state s WHERE c.id=? AND s.id=1),?,?,?)",
+        "INSERT INTO publications(generation,capture_id,verified,details,created_by,created_at) VALUES(?,?,(SELECT CASE WHEN c.status='draft' AND c.version=? AND c.upload_state='ready' AND s.generation=? AND (SELECT COUNT(*) FROM routes WHERE status='activa' AND publication_state='public')=? THEN 1 ELSE 0 END FROM captures c,gym_state s WHERE c.id=? AND s.id=1),?,?,?)",
       ).bind(
         s.generation + 1,
         c.id,
@@ -620,9 +757,13 @@ export async function captureApi(
             ...(keep
               ? {
                   captureId: c.id,
-                  ...(old.camera
-                    ? { camera: { ...old.camera, captureId: c.id } }
-                    : {}),
+                  imageId: presentations[r.id]?.imageId,
+                  markersVerified: old.gradeScale ? true : false,
+                  ...(presentations[r.id]
+                    ? { camera: presentations[r.id].camera }
+                    : old.camera
+                      ? { camera: { ...old.camera, captureId: c.id } }
+                      : {}),
                 }
               : {}),
           },

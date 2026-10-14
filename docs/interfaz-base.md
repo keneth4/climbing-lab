@@ -74,3 +74,7 @@ Pruebas: 12 flujos de navegador con auth/API simulados, tipos frontend y build. 
 La memoria de cámara no es una escritura en base de datos y se pierde al recargar la página. Guardar cámaras de ruta/gimnasio mantiene los flujos explícitos previos. Los paneles todavía pueden reconstruir formularios al cambiar de módulo; esta entrega conserva renderer y encuadre.
 
 Verificación: 12 flujos de navegador escritorio/móvil con auth/API simulados y splat sintético; tipos y build. Se comprueba identidad DOM del canvas, valores numéricos de cámara después de desplazarla y ausencia de solicitudes nuevas al archivo. Una comparación de PNG idénticos no se utiliza como prueba de cámara porque los overlays/render GPU pueden variar. Falta QA ergonómico con Crux y dispositivos físicos.
+
+## Sitio base de ejemplo — 13 de octubre de 2026
+
+La navegación pública actual es Inicio, Rutas y El gimnasio, con Mi cuenta como acceso a la superficie personal. Cuenta agrupa actividad/proyectos/privacidad; staff autorizado tiene Rutas y reportes, Capturas (admin) y Recepción. El catálogo ya no muestra una ficha seleccionada implícitamente: abrir una tarjeta lleva a `?ruta=ID`. El área fija de visor/panel descrita anteriormente solo se activa al usar una herramienta 3D; la consulta normal utiliza lectura y scroll de documento. Marca, contenido y FAQ se definen en `GymSiteConfig`, sin CMS ni selección de gimnasio. Véase [implementación y comparación](sitio-base-ejemplo.md).

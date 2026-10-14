@@ -15,7 +15,7 @@ D1 guarda versiones, secciones, referencias, rutas y auditoría. R2 guarda los a
 3. Ajusta la vista y usa **Guardar cámara inicial del gimnasio**. Puedes recuperar el encuadre estimado con **Enfocar contenido principal** o revisar **Ver límites completos**.
 4. Usa **Preparar sección visual** para ajustar centro y dimensiones de una caja con contorno visible. **Seleccionar punto** permite centrarla en un centro gaussiano aproximado. Confirma con **Crear sección**; los límites quedan en el sistema de coordenadas del gimnasio.
 5. Las rutas antiguas/de prueba sin sección ni captura no bloquean la publicación: se mantienen intactas y fuera de la migración de rutas. Después de publicar, asígnales una sección en **Staff** o **Editar ruta** y guarda nuevas cámaras. Una ruta ya vinculada a una captura pero sin sección sí requiere corregirse antes de publicar.
-6. Revisa las rutas que conservarás y confirma la revisión visual de la captura. Publica. El catálogo carga automáticamente esta captura y el staff puede guardar cámaras para sus rutas.
+6. Revisa las rutas que conservarás y confirma la revisión visual de la captura. Publica. El catálogo ofrece esta captura al activar **Explorar en 3D**; el staff prepara cámaras y respaldos desde el editor de rutas.
 
 ## Referencias y futuras capturas
 
@@ -36,7 +36,7 @@ La publicación es atómica y detecta cambios concurrentes. Las capturas publica
 - No hay LOD por ruta ni soporte SPZv4 en esta etapa. El visor descarga y decodifica el archivo completo; cambiar de ruta reutiliza la captura ya cargada en ese visor.
 - El límite de archivo es 1 GiB. La subida valida tamaño y cabecera; la vista previa exige que el renderer pueda abrir el archivo antes de habilitar publicación. No sustituye una validación exhaustiva del contenido.
 - Falta reanudación y limpieza automática de subidas interrumpidas.
-- Cada publicación admite hasta 100 rutas afectadas. El catálogo administrativo muestra hasta 50 activas y 50 retiradas; la lista de capturas muestra las 100 más recientes. La paginación completa queda pendiente antes de ampliar el piloto.
+- Cada publicación admite hasta 100 rutas afectadas. El catálogo pagina listas de 100 en 100 hasta el límite de offset 10 000; la lista de capturas muestra las 100 más recientes.
 - Se probó el flujo visual con el PLY real de Crux de 186 MB en Chrome y un viewport móvil. Auth y API se simularon en esa prueba, sin publicar datos. Falta medir memoria, red real y dispositivos físicos del piloto.
 
 ## Verificación
@@ -50,3 +50,7 @@ La [revisión de la Spray Wall](revision-capturas-crux.md) identifica problemas 
 ## Contornos y áreas
 
 Además de cajas, el administrador puede crear [regiones por vértices con cuadrícula](secciones-y-cuadricula.md). Se guardan como polígonos proyectados a un plano con espesor y clasificación de pared/área accesible. Son anotaciones manuales estables; no modifican el splat ni determinan automáticamente transitabilidad.
+
+## Actualización de UX del piloto
+
+Las rutas completas conservadas requieren cámara e imagen nuevas para cada reemplazo de captura. Las imágenes previas siguen disponibles con sus snapshots históricos. Administración puede restaurar una captura publicada anterior con motivo, generación esperada y nuevas revisiones; las rutas sin presentación en esa captura se retiran. Véase la [matriz de auditoría](auditoria-ux-implementacion.md) para mínimos de publicación y puerta física pendiente.

@@ -47,6 +47,7 @@ beforeAll(async () => {
       '0006_entry_history.sql',
       '0007_projects.sql',
       '0008_operations.sql',
+      '0009_pilot_ux.sql',
     ]) {
       const sql = await readFile(
         new URL('../migrations/' + file, import.meta.url),
@@ -515,4 +516,157 @@ it('revises a section atomically, preserves route snapshots and restores through
       .first('COUNT(*)'),
   ).toBe(2);
   expect((await get(`/api/sections/${id}/revisions/99`)).status).toBe(404);
+});
+it('stores bounded PNG route images in R2, keeps drafts private and publishes matching presentations', async () => {
+  const current = await a.DB.prepare(
+    'SELECT active_capture_id FROM gym_state WHERE id=1',
+  ).first<string>('active_capture_id');
+  const section = await a.DB.prepare(
+    'SELECT id FROM sections LIMIT 1',
+  ).first<string>('id');
+  const camera = {
+    captureId: current,
+    yaw: 0,
+    pitch: 0,
+    distance: 4,
+    target: [0, 0, 0],
+  };
+  const holds = [
+    { id: 'start-image', role: 'inicio', position: [0, 0, 0] },
+    { id: 'end-image', role: 'final', position: [1, 1, 0] },
+  ];
+  const bytes = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jAZ0AAAAASUVORK5CYII=',
+    'base64',
+  );
+  const imageRequest = () =>
+    new Request('https://local.test/api/route-images', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'image/png',
+        'X-Capture-Id': current!,
+        'X-Presentation': JSON.stringify({ camera, holds }),
+      },
+      body: bytes,
+    });
+  expect((await handle(imageRequest(), a, identity('visitor'))).status).toBe(
+    403,
+  );
+  const uploaded = await handle(imageRequest(), a, identity('editor'));
+  expect(uploaded.status).toBe(201);
+  const image = await uploaded.json();
+  expect(
+    (await get(`/api/route-images/${image.id}`, a, 'visitor')).status,
+  ).toBe(403);
+  const payload = {
+    name: 'Route with image',
+    grade: 'V2',
+    gradeScale: 'V',
+    sector: 'Wall',
+    sectionId: section,
+    captureId: current,
+    camera,
+    holds: [],
+    holds3D: holds,
+    imageId: image.id,
+    markersVerified: true,
+    beta: '',
+    status: 'borrador',
+  };
+  const draft = await post('/api/routes', payload, a, 'editor');
+  expect(draft.status).toBe(201);
+  const route = await draft.json();
+  const publish = new Request(`https://local.test/api/routes/${route.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...payload, status: 'activa', expectedRevision: 1 }),
+  });
+  expect((await handle(publish, a, identity('editor'))).status).toBe(200);
+  const publicImage = await get(`/api/route-images/${image.id}`, a, 'visitor');
+  expect(publicImage.status).toBe(200);
+  expect(Buffer.from(await publicImage.arrayBuffer())).toEqual(bytes);
+  expect((await get(`/api/route-images/${image.id}`, b, 'editor')).status).toBe(
+    404,
+  );
+});
+it('restores a previous published capture with new revisions and preserves the activity snapshot', async () => {
+  const target = await a.DB.prepare(
+    "SELECT id FROM captures WHERE status='published' ORDER BY created_at LIMIT 1",
+  ).first<string>('id');
+  const active = await a.DB.prepare(
+    'SELECT active_capture_id FROM gym_state WHERE id=1',
+  ).first<string>('active_capture_id');
+  expect(target).not.toBe(active);
+  const now = new Date().toISOString();
+  await a.DB.prepare(
+    "INSERT INTO routes(id,name,grade,sector,status) VALUES('rollback-route','Current','V2','Wall','activa')",
+  ).run();
+  for (const [revision, captureId, name] of [
+    [1, target, 'Old'],
+    [2, active, 'Current'],
+  ] as const)
+    await a.DB.prepare('INSERT INTO route_revisions VALUES(?,?,?,?)')
+      .bind(
+        'rollback-route',
+        revision,
+        JSON.stringify({
+          id: 'rollback-route',
+          name,
+          grade: 'V2',
+          sector: 'Wall',
+          status: 'activa',
+          holds: [],
+          captureId,
+        }),
+        captureId,
+      )
+      .run();
+  const entry = await post(
+    '/api/entries',
+    { routeId: 'rollback-route', attempts: 1, result: 'ascenso' },
+    a,
+    'rollback-climber',
+  );
+  expect(entry.status).toBe(201);
+  const e = await entry.json();
+  const generation = await a.DB.prepare(
+    'SELECT generation FROM gym_state WHERE id=1',
+  ).first<number>('generation');
+  expect(
+    (
+      await post(
+        `/api/captures/${target}/rollback`,
+        { reason: 'Confirm restore', expectedGeneration: generation },
+        a,
+        'editor',
+      )
+    ).status,
+  ).toBe(403);
+  const restored = await post(`/api/captures/${target}/rollback`, {
+    reason: 'Confirmed earlier capture',
+    expectedGeneration: generation,
+  });
+  expect(restored.status).toBe(200);
+  const route = await (await get('/api/routes/rollback-route')).json();
+  expect(route.revision).toBe(3);
+  expect(route.snapshot.name).toBe('Old');
+  expect(route.snapshot.captureId).toBe(target);
+  const historical = await (
+    await get(`/api/entries/${e.id}/presentation`, a, 'rollback-climber')
+  ).json();
+  expect(historical.revision).toBe(2);
+  expect(historical.snapshot.name).toBe('Current');
+  expect(
+    await a.DB.prepare(
+      "SELECT reason FROM route_changes WHERE route_id='rollback-route' AND revision=3",
+    ).first<string>('reason'),
+  ).toBe('Confirmed earlier capture');
+  expect(
+    (
+      await post(`/api/captures/${target}/rollback`, {
+        reason: 'Repeat',
+        expectedGeneration: generation,
+      })
+    ).status,
+  ).toBe(409);
 });

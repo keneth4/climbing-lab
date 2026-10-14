@@ -17,6 +17,11 @@ export type CameraView = {
   target: [number, number, number];
 };
 export type Route = {
+  gradeScale?: string;
+  rules?: string;
+  imageId?: string;
+  markersVerified?: boolean;
+  updatedAt?: string;
   sectionId?: string;
   sectionRevision?: number;
   captureId?: string;
@@ -26,7 +31,7 @@ export type Route = {
   grade: string;
   sector: string;
   beta: string;
-  status: 'activa' | 'retirada';
+  status: 'activa' | 'retirada' | 'borrador';
   holds: Hold[];
   holds3D?: Hold3D[];
   camera?: CameraView;
@@ -46,6 +51,9 @@ export type Entry = {
   holds?: Hold[];
 };
 export type Report = {
+  category?: string;
+  assignedTo?: string;
+  resolution?: string;
   id: string;
   routeId: string;
   revision: number;
@@ -111,6 +119,7 @@ export function createEntry(
 }
 export function routeUrl(id: string): string {
   const url = new URL(window.location.href);
+  url.pathname = '/';
   url.search = '';
   url.hash = '';
   url.searchParams.set('ruta', id);

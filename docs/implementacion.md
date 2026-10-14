@@ -1,66 +1,60 @@
-# Primera base funcional
+# Implementación local del piloto
 
-Fecha: 12 de octubre de 2026. Esta entrega inicia el piloto; no lo completa.
-
-Actualización: ya existe una [API local con D1 y pruebas de aislamiento](api-local.md). La interfaz descrita aquí sigue usando localStorage y todavía no se conecta a esa API.
+Actualizado el 13 de octubre de 2026. El piloto tiene frontend conectado a API, autenticación y almacenamiento local; aún requiere validación física y preparación de producción.
 
 ## Ejecutar
 
-Requiere Node.js 22.12 o posterior compatible con Vite 7 y npm.
+Requiere Node.js 22.12 o posterior y npm. Usa las versiones del lockfile.
 
 ```sh
 npm ci
-npm run dev
+npm run db:migrate
+npm run db:migrate:b
+npm run dev:local
 ```
 
-Abrir la dirección que muestra Vite (por defecto http://127.0.0.1:5173).
+El frontend abre en http://127.0.0.1:5173 y la API local A en 127.0.0.1:8787. `dev:api:b` ejecuta B en 8788 cuando se requiera comprobar el otro gimnasio. El login usa Supabase Auth; los datos del gimnasio usan D1/R2 locales. No se otorga staff automáticamente al registrarse.
+
+## Estado vigente
+
+- Svelte 5, TypeScript, Vite y PlayCanvas 2.23.2 como base del experimento.
+- Catálogo público, enlaces QR estables, detalle inmediato, búsqueda/filtros y rutas retiradas.
+- API de Worker conectada al frontend, permisos derivados de JWT y asignaciones locales de staff/admin.
+- Bitácora propia con fecha de actividad, filtros, CSV, corrección/retiro e historial; proyectos separados de ascensos.
+- Capturas completas administradas en R2 local, secciones y revisiones; cámaras/marcadores 3D vinculados a captura y revisión.
+- Borradores privados de rutas, mínimos de publicación, respaldo PNG anotado, previsualización y restauración auditada de capturas.
+- 3D bajo demanda, controles táctiles/teclado y continuidad de escena; consulta esencial disponible sin canvas.
+- Tarjetas con presentación histórica, vista previa exacta y privacidad independiente por campo.
+- Reportes operativos con categoría, responsable y respuesta al autor; métricas agregadas sin notas ni identidad.
+
+La [matriz de la auditoría UX/UI](auditoria-ux-implementacion.md) define el comportamiento y la evidencia vigente. Los módulos comerciales y el barrido de video experimental ya existentes no se amplían en esta entrega.
+
+## Verificar
 
 ```sh
 npm run check
+npm run check:api
+npm run format:check
 npm test
+npm run test:api
 npm run build
 npm run test:e2e
 ```
 
-Las pruebas de navegador usan Google Chrome instalado y viewports de escritorio y móvil. Si se cambia a Chromium de Playwright, hay que ajustar el canal en playwright.config.ts e instalar el navegador correspondiente.
+Worker/D1/R2 se prueban en bases aisladas. Las pruebas de navegador usan Google Chrome instalado y Auth/API simulados en escritorio y viewport móvil. Las capturas sintéticas comprueban integración, no precisión ni desempeño del muro real.
 
-## Implementado
+## Límites y siguiente puerta
 
-- Svelte 5, TypeScript y Vite; CSS sencillo separado de la lógica.
-- Catálogo de demostración con búsqueda, grado y rutas retiradas.
-- Enlaces directos y QR descargables por ruta.
-- Beta desplegable y esquema 2D de agarres de demostración.
-- Bitácora local con intentos, ascensos y notas.
-- Exportación PNG de esquema de ruta y tarjeta personal de ascenso con opciones de divulgación.
-- Reportes locales y resolución en modo staff de demostración.
-- Creación de rutas y edición básica de nombre/beta/estado.
-- Visor PlayCanvas de archivos PLY/SOG locales, órbita, desplazamiento y zoom.
-- Guardado local de cámara por ruta y descarga PNG de la vista del visor.
-- Validación de datos persistidos y snapshots de identidad/agarres en nuevos registros de bitácora.
+No hay despliegue remoto de esta entrega. La migración 0009 se aplicó únicamente en bases locales A/B; deben prepararse migraciones y objetos R2 de producción dentro del proceso de despliegue autorizado.
 
-## Límites actuales
+El archivo de escena sigue descargándose completo. SPZv4 y Streamed SOG/LOD no están habilitados. El bundle de PlayCanvas conserva la advertencia de tamaño; su carga está diferida hasta activar 3D. La elección de formato y los presupuestos de rendimiento requieren [mediciones en dispositivos](validacion-formatos-dispositivos.md).
 
-No hay backend, autenticación, aislamiento entre usuarios/gimnasios ni permisos efectivos. El selector de staff demuestra interfaces; no es autorización. Todo se guarda en localStorage del navegador y puede perderse al limpiar sus datos.
+El picking de centros gaussianos y las superposiciones son aproximados. La revisión de staff desde dos ángulos no sustituye validación física de profundidad/oclusión. No se segmentan agarres automáticamente. La emulación tampoco certifica ergonomía táctil ni accesibilidad.
 
-El archivo local no se publica ni se guarda entre sesiones. La referencia de cámara usa nombre, tamaño y fecha del archivo como identificador provisional, no un hash de contenido. Volver al catálogo después de otra pestaña requiere cargar nuevamente el archivo. Las posiciones del esquema 2D no representan posiciones dentro del splat.
+Las rutas heredadas permanecen consultables y pueden mostrar respaldo/reglas pendientes; una publicación nueva debe cumplir los mínimos. Los borradores se conservan durante navegación de la sesión, no constituyen almacenamiento offline indefinido. La importación de demo no mezcla revisiones incompatibles ni crea datos automáticamente.
 
-Las tarjetas se exportan con el esquema de demostración; la descarga de vista 3D es separada. Combinar captura 3D, marcadores y tarjeta histórica requiere el modelo de revisiones y assets persistentes.
+Un QR de localhost no es un destino distribuible. Validar dominio público, impresiones, teléfonos y acceso sin sesión antes de abrir el piloto. Conservar tanto D1 como los objetos históricos R2 en backups y restauraciones.
 
-SPZv4, LOD/carga progresiva, región de interés, marcadores 3D, edición de revisiones completas, videos, proyectos personales, visitas QR y módulos comerciales no están implementados.
+## Sitio público de ejemplo
 
-El QR apunta a la URL del entorno actual. Un localhost no sirve como destino público para otros dispositivos.
-
-## Validación de esta entrega
-
-Pruebas de dominio: intentos válidos, preservación histórica, snapshots de agarres y rechazo de almacenamiento malformado.
-
-Pruebas de Chrome en escritorio y móvil: enlace de ruta, ascenso y persistencia, tarjeta descargable, reporte y resolución, QR descargable, ruta inexistente, carga PLY sintética, guardado de cámara y captura del visor. Se verifica ausencia de errores de ejecución y desbordamiento horizontal en los flujos probados.
-
-La prueba PLY usa 100 gaussianos sintéticos para comprobar integración. No mide el rendimiento de los 751 mil gaussianos del spray wall. SOG es una capacidad del cargador, todavía sin prueba con una captura real en esta entrega. El bundle del motor 3D sigue siendo grande; se evaluará carga bajo demanda y reducción de módulos junto con las mediciones reales.
-
-## Próximo incremento
-
-1. Probar el archivo real del spray wall y medir los formatos de entrega.
-2. Introducir captura/versiones y marcadores en coordenadas 3D.
-3. Completar el editor y la exportación de la ruta sobre la captura.
-4. Elegir servicios para cuentas, permisos, almacenamiento y publicación antes de invitar usuarios reales.
+La entrega de portada y navegación está documentada en [Sitio base de ejemplo](sitio-base-ejemplo.md). `/` abre Inicio y los enlaces heredados de catálogo/QR conservan su comportamiento. La configuración editorial versionada está en `src/site.ts`; no requiere cambios de D1/R2 ni despliegue.

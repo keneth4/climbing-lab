@@ -157,7 +157,7 @@ test('API outage is distinct from lost admin and retry restores permissions', as
         : { userId: 'feature-user', staff: 'admin' }
       : undefined,
   );
-  await page.goto('/');
+  await page.goto('/?vista=Catálogo');
   await expect(
     page.getByText('API no disponible. No se pudieron verificar tus permisos.'),
   ).toBeVisible();
@@ -167,6 +167,7 @@ test('API outage is distinct from lost admin and retry restores permissions', as
   offline = false;
   await page.getByRole('button', { name: 'Reintentar', exact: true }).click();
   await expect(page.getByText('Permisos confirmados · Admin')).toBeVisible();
+  await page.getByRole('button', { name: 'Staff', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Capturas', exact: true }),
   ).toBeVisible();
@@ -220,8 +221,9 @@ test('private projects can be explicitly completed and daily activity stays sepa
         ],
       };
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Bitácora', exact: true }).click();
+  await page.goto('/?vista=Catálogo');
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await page.getByText('Mis proyectos de escalada', { exact: true }).click();
   await page.getByLabel('Ruta del proyecto').selectOption('route-f');
   await page
@@ -253,11 +255,15 @@ test('3D PNG and sweep video export preserve camera and support cancellation', a
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await routes(page, () => undefined);
-  await page.goto('/');
+  await page.goto('/?ruta=route-f');
+  await page.getByRole('button', { name: 'Explorar en 3D' }).click();
   await expect(
     page.getByText('fixture.ply · 0 MB · captura del gimnasio'),
   ).toBeVisible({ timeout: 30000 });
   await page.getByText('Compartir visual 3D', { exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Preparar tarjeta 3D (PNG)', exact: true })
+    .click();
   const png = page.waitForEvent('download');
   await page
     .getByRole('button', { name: 'Descargar tarjeta 3D (PNG)', exact: true })
@@ -269,14 +275,14 @@ test('3D PNG and sweep video export preserve camera and support cancellation', a
     .getByRole('button', { name: 'Grabar barrido de 6 segundos' })
     .click();
   await expect(
-    page.getByRole('button', { name: 'Cuenta', exact: true }),
+    page.getByRole('button', { name: 'Mi cuenta', exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole('button', { name: 'Cancelar video' }),
   ).toBeFocused();
   await page.getByRole('button', { name: 'Cancelar video' }).press('Escape');
   await expect(
-    page.getByRole('button', { name: 'Cuenta', exact: true }),
+    page.getByRole('button', { name: 'Mi cuenta', exact: true }),
   ).toBeEnabled();
   expect(await canvas.getAttribute('data-camera-view')).toBe(before);
   const video = page.waitForEvent('download', { timeout: 20000 });
@@ -285,7 +291,7 @@ test('3D PNG and sweep video export preserve camera and support cancellation', a
     .click();
   expect((await video).suggestedFilename()).toMatch(/ruta-barrido\.(webm|mp4)/);
   await expect(
-    page.getByRole('button', { name: 'Cuenta', exact: true }),
+    page.getByRole('button', { name: 'Mi cuenta', exact: true }),
   ).toBeEnabled();
   expect(await canvas.getAttribute('data-camera-view')).toBe(before);
   expect(errors).toEqual([]);
@@ -432,8 +438,9 @@ test('admin reception confirms membership, QR visit and manual sale while public
       };
     }
   });
-  await page.goto('/');
+  await page.goto('/?vista=Catálogo');
   await expect(page.getByText('Permisos confirmados · Admin')).toBeVisible();
+  await page.getByRole('button', { name: 'Staff', exact: true }).click();
   await page.getByRole('button', { name: 'Recepción', exact: true }).click();
   await page.getByText('Socios y tarjetas QR', { exact: true }).click();
   await page.getByLabel('Nombre del socio').fill('Socio piloto');
@@ -553,7 +560,8 @@ test('unsupported video retains image export and historical cards reject missing
         revision: 3,
       };
   });
-  await page.goto('/');
+  await page.goto('/?ruta=route-f');
+  await page.getByRole('button', { name: 'Explorar en 3D' }).click();
   await page.getByText('Compartir visual 3D', { exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Grabar barrido de 6 segundos' }),
@@ -566,10 +574,14 @@ test('unsupported video retains image export and historical cards reject missing
       'Este navegador no permite grabar video. Descarga una imagen 3D.',
     ),
   ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Preparar tarjeta 3D (PNG)', exact: true })
+    .click();
   await expect(
     page.getByRole('button', { name: 'Descargar tarjeta 3D (PNG)' }),
   ).toBeEnabled();
-  await page.getByRole('button', { name: 'Bitácora', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await page
     .getByRole('button', { name: 'Preparar tarjeta histórica 3D' })
     .click();
@@ -639,8 +651,9 @@ test('historical 3D cards use the stored capture and camera with personal data o
         },
       };
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Bitácora', exact: true }).click();
+  await page.goto('/?vista=Catálogo');
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await page
     .getByRole('button', { name: 'Preparar tarjeta histórica 3D' })
     .click();
@@ -648,6 +661,9 @@ test('historical 3D cards use the stored capture and camera with personal data o
     page.getByText('history.ply · 0 MB · captura del gimnasio'),
   ).toBeVisible();
   await page.getByText('Compartir visual 3D', { exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Preparar tarjeta 3D (PNG)', exact: true })
+    .click();
   await expect(
     page.getByRole('button', { name: 'Descargar tarjeta 3D (PNG)' }),
   ).toBeEnabled();
@@ -662,8 +678,12 @@ test('historical 3D cards use the stored capture and camera with personal data o
   const anonFile = await anonymous;
   const fs = await import('node:fs/promises');
   const anonymousBytes = await fs.readFile((await anonFile.path())!);
-  await page.getByLabel('Incluir nombre e intentos en tarjeta').check();
+  await page.getByLabel('Incluir nombre', { exact: true }).check();
+  await page.getByLabel('Incluir intentos', { exact: true }).check();
   await page.getByLabel('Nombre para la tarjeta').fill('Nombre elegido');
+  await page
+    .getByRole('button', { name: 'Preparar tarjeta 3D (PNG)', exact: true })
+    .click();
   const personal = page.waitForEvent('download');
   await page
     .getByRole('button', { name: 'Descargar tarjeta 3D (PNG)' })

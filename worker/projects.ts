@@ -48,6 +48,15 @@ export async function projectApi(
       throw new HttpError(409, 'El proyecto cambió. Recarga.');
   }
   const routeId = isNew ? text(b.routeId, 100) : previous.route_id;
+  if (isNew) {
+    const route = await env.DB.prepare(
+      'SELECT publication_state FROM routes WHERE id=?',
+    )
+      .bind(routeId)
+      .first<{ publication_state: string }>();
+    if (!route || route.publication_state === 'draft')
+      throw new HttpError(404, 'Ruta no encontrada.');
+  }
   const revision = isNew
     ? await env.DB.prepare(
         'SELECT MAX(revision) AS n FROM route_revisions WHERE route_id=?',

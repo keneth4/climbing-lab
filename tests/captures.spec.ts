@@ -160,7 +160,8 @@ test('admin uploads one complete scene, previews and publishes it', async ({
     }
     await route.fulfill({ json });
   });
-  await page.goto('/');
+  await page.goto('/?vista=Catálogo');
+  await page.getByRole('button', { name: 'Staff', exact: true }).click();
   await page.getByRole('button', { name: 'Capturas', exact: true }).click();
   await page.getByLabel('Subir un splat completo').setInputFiles({
     name: 'fixture.ply',
@@ -186,6 +187,7 @@ test('admin uploads one complete scene, previews and publishes it', async ({
   expect(capture.initialCamera.distance).toBeGreaterThan(0);
   const initialCamera = structuredClone(capture.initialCamera);
   await page.reload();
+  await page.getByRole('button', { name: 'Staff', exact: true }).click();
   await page.getByRole('button', { name: 'Capturas', exact: true }).click();
   await expect(
     page.getByText('Cámara inicial del gimnasio guardada.', { exact: true }),

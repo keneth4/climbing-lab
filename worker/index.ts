@@ -1,3 +1,4 @@
+import { pilotApi, requestKey, writeOnce, presentationKey } from './pilot';
 import { operationsApi } from './operations';
 import { projectApi } from './projects';
 import { journalCsv } from '../shared/journal-csv';
@@ -99,16 +100,36 @@ function routePayload(b: Record<string, unknown>) {
     'expectedRevision',
     'sectionId',
     'captureId',
+    'gradeScale',
+    'rules',
+    'imageId',
+    'markersVerified',
+    'changeReason',
   ];
   if (Object.keys(b).some((k) => !allowed.includes(k)))
     throw new HttpError(400, 'Campo no permitido.');
-  const name = text(b.name, 80),
-    grade = text(b.grade, 15),
-    sector = text(b.sector, 80);
+  const drafting = b.status === 'borrador';
+  const field = (value: unknown, max: number) =>
+    drafting && (value === '' || value === undefined) ? '' : text(value, max);
+  const name = field(b.name, 80),
+    grade = field(b.grade, 15),
+    sector = field(b.sector, 80);
+  if (
+    b.gradeScale !== undefined &&
+    !['V', 'Font', 'Otra'].includes(String(b.gradeScale))
+  )
+    throw new HttpError(400, 'Escala inválida.');
+  if (
+    b.rules !== undefined &&
+    (typeof b.rules !== 'string' || b.rules.length > 2000)
+  )
+    throw new HttpError(400, 'Reglas inválidas.');
+  if (b.markersVerified !== undefined && typeof b.markersVerified !== 'boolean')
+    throw new HttpError(400, 'Verificación inválida.');
   if (
     typeof b.beta !== 'string' ||
     b.beta.length > 2000 ||
-    !['activa', 'retirada'].includes(String(b.status))
+    !['activa', 'retirada', 'borrador'].includes(String(b.status))
   )
     throw new HttpError(400, 'Datos de ruta inválidos.');
   if (
@@ -179,6 +200,11 @@ function routePayload(b: Record<string, unknown>) {
   )
     throw new HttpError(400, 'Cámara inválida.');
   return {
+    gradeScale: b.gradeScale as string | undefined,
+    rules: b.rules as string | undefined,
+    imageId: b.imageId ? text(b.imageId, 100) : undefined,
+    markersVerified: b.markersVerified === true,
+    updatedAt: new Date().toISOString(),
     sectionRevision: undefined as number | undefined,
     name,
     grade,
@@ -200,6 +226,10 @@ export async function handle(
   try {
     const url = new URL(request.url);
     const path = url.pathname;
+    const pilotResponse = await pilotApi(request, env, () =>
+      authenticate(request, env),
+    );
+    if (pilotResponse) return pilotResponse;
     const operationResponse = await operationsApi(request, env, () =>
       authenticate(request, env),
     );
@@ -243,11 +273,14 @@ export async function handle(
     )
       throw new HttpError(400, 'Paginación inválida.');
     if (path === '/api/routes' && request.method === 'GET') {
+      const draft = url.searchParams.get('status') === 'borrador';
+      if (draft) await editor(env, await authenticate(request, env));
       const rows = await env.DB.prepare(
-        'SELECT * FROM routes WHERE status=? ORDER BY id LIMIT ? OFFSET ?',
+        "SELECT r.*,rr.revision,rr.snapshot,CASE WHEN r.publication_state='draft' THEN 'borrador' ELSE r.status END AS status FROM routes r JOIN route_revisions rr ON rr.route_id=r.id AND rr.revision=(SELECT MAX(revision) FROM route_revisions WHERE route_id=r.id) WHERE r.status=? AND r.publication_state=? ORDER BY r.rowid DESC LIMIT ? OFFSET ?",
       )
         .bind(
           url.searchParams.get('status') === 'retirada' ? 'retirada' : 'activa',
+          draft ? 'draft' : 'public',
           limit,
           offset,
         )
@@ -256,12 +289,19 @@ export async function handle(
     }
     const routeMatch = path.match(/^\/api\/routes\/([^/]+)$/);
     if (routeMatch && request.method === 'GET') {
+      const state = await env.DB.prepare(
+        'SELECT publication_state FROM routes WHERE id=?',
+      )
+        .bind(routeMatch[1])
+        .first<{ publication_state: string }>();
+      if (state?.publication_state === 'draft')
+        await editor(env, await authenticate(request, env));
       const r = await revision(env, routeMatch[1]);
       return json({
         gymId: env.GYM_ID,
         revision: r.revision,
         snapshot: JSON.parse(r.snapshot),
-        status: r.status,
+        status: state?.publication_state === 'draft' ? 'borrador' : r.status,
       });
     }
     const user = await authenticate(request, env);
@@ -291,10 +331,14 @@ export async function handle(
             .bind(payload.sectionId)
             .first<{ revision: number }>()
         : null;
-      if (!section)
+      if (!section && payload.status !== 'borrador')
         throw new HttpError(400, 'Selecciona una sección del gimnasio.');
-      payload.sectionRevision = section.revision;
-      if (!routeMatch && !gym.active_capture_id)
+      payload.sectionRevision = section?.revision;
+      if (
+        !routeMatch &&
+        !gym.active_capture_id &&
+        payload.status !== 'borrador'
+      )
         throw new HttpError(409, 'Publica primero una captura del gimnasio.');
       if (payload.holds3D.length && !payload.captureId)
         throw new HttpError(
@@ -316,6 +360,19 @@ export async function handle(
       let next = 1;
       if (routeMatch) {
         const current = await revision(env, id);
+        const state = await env.DB.prepare(
+          'SELECT publication_state FROM routes WHERE id=?',
+        )
+          .bind(id)
+          .first<{ publication_state: string }>();
+        if (
+          state?.publication_state === 'public' &&
+          payload.status === 'borrador'
+        )
+          throw new HttpError(
+            400,
+            'Una ruta publicada conserva su enlace. Prepara sus cambios en el editor y publícalos como nueva revisión.',
+          );
         if (
           !Number.isInteger(b.expectedRevision) ||
           b.expectedRevision !== current.revision
@@ -328,6 +385,57 @@ export async function handle(
         next = current.revision + 1;
       } else if (b.expectedRevision !== undefined)
         throw new HttpError(400, 'No hay revisión anterior.');
+      if (payload.imageId) {
+        const image = await env.DB.prepare(
+          'SELECT capture_id,presentation FROM route_images WHERE id=?',
+        )
+          .bind(payload.imageId)
+          .first<{ capture_id: string; presentation: string }>();
+        if (
+          !image ||
+          image.capture_id !== payload.captureId ||
+          image.presentation !==
+            presentationKey(payload.camera, payload.holds3D)
+        )
+          throw new HttpError(
+            400,
+            'La imagen debe pertenecer a la captura de la ruta.',
+          );
+      }
+      if (payload.status === 'activa') {
+        const missing = [];
+        if (!payload.gradeScale) missing.push('escala');
+        const publishedCapture = await env.DB.prepare(
+          "SELECT id FROM captures WHERE id=? AND status='published' AND upload_state='ready'",
+        )
+          .bind(payload.captureId || '')
+          .first();
+        if (!publishedCapture) missing.push('captura publicada');
+        if (!payload.camera) missing.push('cámara');
+        if (!payload.imageId) missing.push('imagen de respaldo');
+        if (!payload.markersVerified) missing.push('verificación de agarres');
+        if (
+          !payload.holds3D.some((h) => h.role === 'inicio') ||
+          !payload.holds3D.some((h) => h.role === 'final')
+        )
+          missing.push('inicio y final');
+        if (missing.length)
+          throw new HttpError(
+            400,
+            `Antes de publicar completa: ${missing.join(', ')}.`,
+          );
+      }
+      if (routeMatch) {
+        const old = await revision(env, id);
+        if (
+          (old.status === 'retirada') !== (payload.status === 'retirada') &&
+          !b.changeReason
+        )
+          throw new HttpError(
+            400,
+            'Indica el motivo del retiro o reactivación.',
+          );
+      }
       const snapshot = JSON.stringify({ ...payload, id, revision: next });
       const now = new Date().toISOString();
       const statements = routeMatch
@@ -342,8 +450,8 @@ export async function handle(
               payload.grade,
               payload.sector,
               payload.beta,
-              payload.status,
-              payload.sectionId,
+              payload.status === 'borrador' ? 'activa' : payload.status,
+              payload.sectionId || null,
               id,
             ),
           ]
@@ -356,13 +464,29 @@ export async function handle(
               payload.grade,
               payload.sector,
               payload.beta,
-              payload.status,
-              payload.sectionId,
+              payload.status === 'borrador' ? 'activa' : payload.status,
+              payload.sectionId || null,
             ),
             env.DB.prepare(
               'INSERT INTO route_revisions(route_id,revision,snapshot,capture_id) VALUES(?,?,?,?)',
             ).bind(id, next, snapshot, payload.captureId || null),
           ];
+      statements.push(
+        env.DB.prepare('UPDATE routes SET publication_state=? WHERE id=?').bind(
+          payload.status === 'borrador' ? 'draft' : 'public',
+          id,
+        ),
+      );
+      if (b.changeReason)
+        statements.push(
+          env.DB.prepare('INSERT INTO route_changes VALUES(?,?,?,?,?)').bind(
+            id,
+            next,
+            text(b.changeReason, 2000),
+            user,
+            now,
+          ),
+        );
       const guardId = crypto.randomUUID();
       statements.unshift(
         env.DB.prepare(
@@ -582,14 +706,34 @@ export async function handle(
       if (
         Object.keys(b).some(
           (k) =>
-            !['routeId', 'attempts', 'result', 'notes', 'occurredAt'].includes(
-              k,
-            ),
+            ![
+              'routeId',
+              'attempts',
+              'result',
+              'notes',
+              'occurredAt',
+              'requestId',
+              'expectedRevision',
+            ].includes(k),
         )
       )
         throw new HttpError(400, 'Campo no permitido.');
+      const key = await requestKey(env, user, 'entry', b);
+      if (key?.previous) return json({ id: key.previous }, 201);
       const id = text(b.routeId, 100);
+      const pub = await env.DB.prepare(
+        'SELECT publication_state FROM routes WHERE id=?',
+      )
+        .bind(id)
+        .first<{ publication_state: string }>();
+      if (pub?.publication_state === 'draft')
+        throw new HttpError(404, 'Ruta no disponible.');
       const r = await revision(env, id, true);
+      if (b.expectedRevision !== undefined && b.expectedRevision !== r.revision)
+        throw new HttpError(
+          409,
+          'La revisión cambió. Revisa la ruta antes de guardar.',
+        );
       if (
         !Number.isInteger(b.attempts) ||
         Number(b.attempts) < 1 ||
@@ -627,7 +771,11 @@ export async function handle(
         deletedAt: null,
         entryVersion: 1,
       });
-      await env.DB.batch([
+      const guard = crypto.randomUUID();
+      const savedId = await writeOnce(env, user, 'entry', key, entryId, [
+        env.DB.prepare(
+          "INSERT INTO mutation_guards VALUES(?,COALESCE((SELECT CASE WHEN status='activa' AND publication_state='public' AND (SELECT MAX(revision) FROM route_revisions WHERE route_id=routes.id)=? THEN 1 ELSE 0 END FROM routes WHERE id=?),0))",
+        ).bind(guard, r.revision, id),
         env.DB.prepare(
           'INSERT INTO entries(id,user_id,route_id,revision,attempts,result,notes,created_at) VALUES(?,?,?,?,?,?,?,?)',
         ).bind(
@@ -655,39 +803,111 @@ export async function handle(
           entryId,
           now,
         ),
+        env.DB.prepare('DELETE FROM mutation_guards WHERE id=?').bind(guard),
       ]);
-      return json({ id: entryId }, 201);
+      return json({ id: savedId }, 201);
     }
     if (path === '/api/reports' && request.method === 'POST') {
       const b = await body(request);
-      if (Object.keys(b).some((k) => !['routeId', 'description'].includes(k)))
+      if (
+        Object.keys(b).some(
+          (k) =>
+            ![
+              'routeId',
+              'description',
+              'category',
+              'expectedRevision',
+              'requestId',
+            ].includes(k),
+        )
+      )
         throw new HttpError(400, 'Campo no permitido.');
       const id = text(b.routeId, 100);
-      const description = text(b.description, 2000);
-      const r = await revision(env, id);
-      const reportId = crypto.randomUUID();
-      await env.DB.prepare(
-        'INSERT INTO reports (id,user_id,route_id,revision,description,created_at) VALUES (?,?,?,?,?,?)',
+      const key = await requestKey(env, user, 'report', b);
+      if (key?.previous) return json({ id: key.previous }, 201);
+      const reportRoute = await env.DB.prepare(
+        'SELECT publication_state FROM routes WHERE id=?',
       )
-        .bind(
+        .bind(id)
+        .first<{ publication_state: string }>();
+      if (reportRoute?.publication_state === 'draft') await editor(env, user);
+      const description = text(b.description, 2000);
+      const category = b.category || 'contenido';
+      if (!['contenido', 'agarre_suelto', 'otro'].includes(String(category)))
+        throw new HttpError(400, 'Categoría inválida.');
+      const r = await revision(env, id);
+      if (b.expectedRevision !== undefined && b.expectedRevision !== r.revision)
+        throw new HttpError(409, 'La revisión cambió. Revisa el reporte.');
+      const reportId = crypto.randomUUID();
+      const savedId = await writeOnce(env, user, 'report', key, reportId, [
+        env.DB.prepare(
+          'INSERT INTO reports (id,user_id,route_id,revision,description,created_at,category) VALUES (?,?,?,?,?,?,?)',
+        ).bind(
           reportId,
           user,
           id,
           r.revision,
           description,
           new Date().toISOString(),
-        )
-        .run();
-      return json({ id: reportId }, 201);
+          category,
+        ),
+      ]);
+      return json({ id: savedId }, 201);
+    }
+    if (path === '/api/reports' && request.method === 'GET') {
+      const rows = await env.DB.prepare(
+        'SELECT id,route_id,revision,category,description,status,resolution,created_at,resolved_at FROM reports WHERE user_id=? ORDER BY created_at DESC LIMIT 100',
+      )
+        .bind(user)
+        .all();
+      return json({ reports: rows.results });
     }
     if (path === '/api/staff/reports' && request.method === 'GET') {
       await editor(env, user);
       const rows = await env.DB.prepare(
-        'SELECT * FROM reports ORDER BY created_at DESC,id LIMIT ? OFFSET ?',
+        "SELECT * FROM reports ORDER BY (status='pendiente' AND category='agarre_suelto') DESC,status,created_at DESC,id LIMIT ? OFFSET ?",
       )
         .bind(limit, offset)
         .all();
       return json({ reports: rows.results });
+    }
+    const assignment = path.match(/^\/api\/staff\/reports\/([^/]+)\/assign$/);
+    if (assignment && request.method === 'POST') {
+      await editor(env, user);
+      const b = await body(request);
+      if (Object.keys(b).length)
+        throw new HttpError(400, 'Campo no permitido.');
+      const r = await env.DB.prepare(
+        'SELECT id,assigned_to,status FROM reports WHERE id=?',
+      )
+        .bind(assignment[1])
+        .first<{ id: string; assigned_to: string | null; status: string }>();
+      if (!r) throw new HttpError(404, 'Reporte no encontrado.');
+      if (r.status !== 'pendiente' || (r.assigned_to && r.assigned_to !== user))
+        throw new HttpError(
+          409,
+          'El reporte ya tiene responsable o está resuelto.',
+        );
+      if (r.assigned_to === user) return json({ assigned: true });
+      const guard = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO mutation_guards VALUES(?,COALESCE((SELECT CASE WHEN assigned_to IS NULL AND status='pendiente' THEN 1 ELSE 0 END FROM reports WHERE id=?),0))",
+        ).bind(guard, r.id),
+        env.DB.prepare('UPDATE reports SET assigned_to=? WHERE id=?').bind(
+          user,
+          r.id,
+        ),
+        env.DB.prepare('INSERT INTO audit_events VALUES(?,?,?,?,?)').bind(
+          crypto.randomUUID(),
+          user,
+          'report.assign',
+          r.id,
+          new Date().toISOString(),
+        ),
+        env.DB.prepare('DELETE FROM mutation_guards WHERE id=?').bind(guard),
+      ]);
+      return json({ assigned: true });
     }
     const resolve = path.match(/^\/api\/staff\/reports\/([^/]+)\/resolve$/);
     if (resolve && request.method === 'POST') {
@@ -696,14 +916,23 @@ export async function handle(
         .bind(resolve[1])
         .first();
       if (!r) throw new HttpError(404, 'Reporte no encontrado.');
+      const b = await body(request);
+      if (Object.keys(b).some((k) => k !== 'resolution'))
+        throw new HttpError(400, 'Campo no permitido.');
+      const reason = text(b.resolution, 2000);
+      const guard = crypto.randomUUID();
       const now = new Date().toISOString();
       await env.DB.batch([
         env.DB.prepare(
-          "UPDATE reports SET status='resuelto',resolved_by=? WHERE id=?",
-        ).bind(user, resolve[1]),
+          "INSERT INTO mutation_guards VALUES(?,COALESCE((SELECT CASE WHEN status='pendiente' THEN 1 ELSE 0 END FROM reports WHERE id=?),0))",
+        ).bind(guard, resolve[1]),
+        env.DB.prepare(
+          "UPDATE reports SET status='resuelto',resolved_by=?,assigned_to=?,resolution=?,resolved_at=? WHERE id=?",
+        ).bind(user, user, reason, now, resolve[1]),
         env.DB.prepare(
           'INSERT INTO audit_events (id,user_id,action,object_id,created_at) VALUES (?,?,?,?,?)',
         ).bind(crypto.randomUUID(), user, 'report.resolve', resolve[1], now),
+        env.DB.prepare('DELETE FROM mutation_guards WHERE id=?').bind(guard),
       ]);
       return json({ status: 'resuelto' });
     }
@@ -711,6 +940,14 @@ export async function handle(
   } catch (error) {
     if (error instanceof HttpError)
       return json({ error: error.message }, error.status);
+    if (String(error).includes('CHECK constraint failed: verified'))
+      return json(
+        {
+          error:
+            'La ruta o el registro cambió. Recarga y revisa antes de continuar.',
+        },
+        409,
+      );
     console.error(JSON.stringify({ event: 'api.error', gymId: env.GYM_ID }));
     return json({ error: 'Error interno.' }, 500);
   }

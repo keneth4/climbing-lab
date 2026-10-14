@@ -97,6 +97,16 @@ test('private journal filters, paginates and exports historical records, then cl
         e = entries.find((e) => e.id === id)!;
       expect(route.request().headers().authorization).toBe('Bearer ' + token);
       if (path.endsWith('/history')) json = { history: histories[id] };
+      else if (path.endsWith('/presentation'))
+        json = {
+          snapshot: {
+            id: e.route_id,
+            name: e.route_name,
+            grade: e.grade,
+            holds: [],
+          },
+          revision: e.revision,
+        };
       else {
         const value = route.request().postDataJSON();
         expect(value.expectedVersion).toBe(e.entry_version);
@@ -190,11 +200,12 @@ test('private journal filters, paginates and exports historical records, then cl
     }
     await route.fulfill({ json });
   });
-  await page.goto('/');
+  await page.goto('/?vista=Catálogo');
   await expect(
     page.getByRole('button', { name: 'Cerrar sesión' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Bitácora', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await expect(
     page.locator('.summary').getByText('55', { exact: true }),
   ).toHaveCount(2);
@@ -249,12 +260,16 @@ test('private journal filters, paginates and exports historical records, then cl
       exact: true,
     }),
   ).toBeVisible();
-  const cardDownload = page.waitForEvent('download');
+
   await page
     .getByRole('button', { name: 'Exportar tarjeta personal' })
     .first()
     .click();
-  expect((await cardDownload).suggestedFilename()).toMatch(/\.png$/);
+  await expect(
+    page
+      .getByRole('alert')
+      .filter({ hasText: 'Esta revisión no tiene imagen de respaldo' }),
+  ).toBeVisible();
   await page
     .getByRole('button', { name: 'Añadir registro', exact: true })
     .click();

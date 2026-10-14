@@ -1,6 +1,27 @@
 <script lang="ts">
+  import SiteHeader from './SiteHeader.svelte';
+  import SitePublic from './SitePublic.svelte';
+  import SiteFooter from './SiteFooter.svelte';
+  import RouteCatalog from './RouteCatalog.svelte';
+  import { site, viewFromUrl, pageTitle } from './site';
   import QRCode from 'qrcode';
-  import { onMount, setContext } from 'svelte';
+  import RoutePresentation from './RoutePresentation.svelte';
+  import SharePreview from './SharePreview.svelte';
+  import PilotMetrics from './PilotMetrics.svelte';
+  import MyReports from './MyReports.svelte';
+  import DemoImport from './DemoImport.svelte';
+  import {
+    normalize,
+    gradeScale,
+    gradeRank,
+    newDraft,
+    privateFields,
+    sharedPersonal,
+    measure,
+    type ActivityDraft,
+    type EditorDraft,
+  } from './pilot';
+  import { onMount, setContext, untrack } from 'svelte';
   import SplatRuntime from './SplatRuntime.svelte';
   import { VIEWER_CONTEXT, ViewerWorkspace } from './viewer-context.svelte';
   const viewerWorkspace = new ViewerWorkspace();
@@ -24,8 +45,7 @@
   import RouteEditor from './RouteEditor.svelte';
   import CaptureManager from './CaptureManager.svelte';
   import type { Capture, Section } from './twin';
-  import type { CameraView } from './domain';
-  import { supabase, api, ApiError } from './auth';
+  import { supabase, api, ApiError, setApiOwner } from './auth';
   import SplatViewer from './SplatViewer.svelte';
   import { loadState, routeUrl, type Entry } from './domain';
   let db = $state(loadState());
@@ -33,6 +53,7 @@
   db.entries = [];
   db.reports = [];
   let userEmail = $state('');
+  let userId = $state('');
   let gymConfig = $state({
     name: 'Gimnasio piloto',
     currency: 'MXN',
@@ -57,6 +78,7 @@
   let journalEntryOpen = $state(false),
     journalNotice = $state('');
   let routePreparing = $state(false);
+  let editorDrafts = $state<Record<string, EditorDraft>>({});
   let historicalSection = $state<Section | undefined>();
   let sectionTicket = 0;
   $effect(() => {
@@ -85,13 +107,13 @@
   >('checking');
   let accessError = $state('');
   let generation = 0;
+  let routesTicket = 0;
   async function refreshSession() {
     const ticket = ++generation;
     sessionReady = false;
     accessState = 'checking';
     accessError = '';
     historyEntryId = '';
-    mediaEntry = undefined;
     db.entries = [];
     db.reports = [];
     staff = false;
@@ -102,18 +124,50 @@
         throw new ApiError('Sesión inválida. Inicia sesión nuevamente.', 401);
       if (ticket !== generation) return;
       const nextEmail = data.session?.user.email || '';
-      if (nextEmail !== userEmail) {
+      const nextUserId = data.session?.user.id || '';
+      if (nextUserId !== userId) {
+        routesTicket++;
+        db.routes = db.routes.filter((r) => r.status !== 'borrador');
+        viewerWorkspace.reset();
+        show3D = false;
         journalEntryOpen = false;
         editingEntry = undefined;
         retiringEntry = undefined;
         historyEntryId = '';
+        mediaEntry = undefined;
         journalNotice = '';
-        privacy = false;
+        shareFields = privateFields();
+        shareOpen = false;
+        shareEntry = undefined;
+        drafts = {};
+        editorDrafts = {};
+        activityNotice = '';
+        reportNotice = '';
+        savedActivity = undefined;
+        requestOwner++;
+        if (nextUserId && loginReturn) {
+          try {
+            const pending = JSON.parse(
+              sessionStorage.getItem('climbing-login-draft') || 'null',
+            );
+            if (
+              pending?.routeId === loginReturn &&
+              pending.draft &&
+              (!pending.sourceOwner || pending.sourceOwner === nextUserId)
+            )
+              drafts[`${nextUserId}:${pending.routeId}:${pending.revision}`] =
+                pending.draft;
+          } catch {}
+          sessionStorage.removeItem('climbing-login-draft');
+        }
         name = '';
       }
       userEmail = nextEmail;
+      userId = nextUserId;
+      setApiOwner(nextUserId);
       if (!data.session) {
         accessState = 'anonymous';
+        void refreshRoutes();
         return;
       }
       const me = await api('/me');
@@ -122,6 +176,14 @@
       adminRole = me.staff === 'admin';
       accessState = 'confirmed';
       sessionReady = true;
+      if (tab === 'Cuenta' && loginReturn) {
+        const target = loginReturn;
+        loginReturn = '';
+        sessionStorage.removeItem('climbing-login-return');
+        sessionStorage.removeItem('climbing-login-draft');
+        navigate('Catálogo', target);
+      }
+      void refreshRoutes();
       const dataEntries = await api('/entries');
       if (ticket !== generation) return;
       db.entries = dataEntries.entries.map((e: any) => ({
@@ -145,6 +207,9 @@
           revision: r.revision,
           description: r.description,
           status: r.status,
+          category: r.category,
+          assignedTo: r.assigned_to,
+          resolution: r.resolution,
         }));
       }
     } catch (e) {
@@ -165,16 +230,48 @@
           accessState === 'confirmed' || accessState === 'anonymous';
     }
   }
+  let catalogLoading = $state(true),
+    catalogError = $state('');
   async function refreshRoutes(id?: string) {
+    catalogLoading = true;
+    catalogError = '';
+    const ticket = ++routesTicket,
+      owner = userId,
+      authorized = staff;
     try {
+      const list = async (status: string) => {
+        const rows = [];
+        for (let offset = 0; offset <= 10000; offset += 100) {
+          const d = await api(
+            `/routes?status=${status}&limit=100&offset=${offset}`,
+          );
+          rows.push(...d.routes);
+          if (d.routes.length < 100) break;
+        }
+        return { routes: rows };
+      };
       const lists = await Promise.all([
-        api('/routes'),
-        api('/routes?status=retirada'),
+        list('activa'),
+        list('retirada'),
+        ...(staff ? [list('borrador')] : []),
       ]);
-      const rows = lists.flatMap((d) => d.routes);
+      const rows = [
+        ...new Map(
+          lists.flatMap((d) => d.routes).map((r) => [r.id, r]),
+        ).values(),
+      ];
       const routes = await Promise.all(
         rows.map(async (r: any) => {
-          const detail = await api(`/routes/${r.id}`);
+          const detail = r.snapshot
+            ? {
+                snapshot:
+                  typeof r.snapshot === 'string'
+                    ? JSON.parse(r.snapshot)
+                    : r.snapshot,
+                revision: r.revision,
+                status: r.status,
+              }
+            : await api(`/routes/${r.id}`);
           return {
             ...detail.snapshot,
             id: r.id,
@@ -188,26 +285,41 @@
           };
         }),
       );
+      if (ticket !== routesTicket || owner !== userId || (authorized && !staff))
+        return;
       db.routes = routes;
       if (id) select(id);
       else if (!selectedId) selectedId = routes[0]?.id || '';
+      else if (!routes.some((r) => r.id === selectedId)) {
+        const requestedId = selectedId;
+        try {
+          const d = await api(`/routes/${encodeURIComponent(requestedId)}`);
+          if (
+            ticket !== routesTicket ||
+            owner !== userId ||
+            selectedId !== requestedId
+          )
+            return;
+          db.routes = [
+            ...routes,
+            {
+              ...d.snapshot,
+              id: requestedId,
+              revision: d.revision,
+              status: d.status,
+              holds: d.snapshot.holds || [],
+            },
+          ];
+        } catch {
+          if (selectedId === requestedId && ticket === routesTicket)
+            routeError = 'Ruta no encontrada o no disponible.';
+        }
+      }
     } catch (e) {
-      message = (e as Error).message;
-    }
-  }
-  async function saveCamera(view: CameraView) {
-    if (!selected) return;
-    try {
-      const { id, revision, sectionRevision, ...values } = selected;
-      await api(
-        `/routes/${id}`,
-        { ...values, camera: view, expectedRevision: revision },
-        'PUT',
-      );
-      await refreshRoutes(id);
-      message = 'Cámara guardada en una nueva revisión.';
-    } catch (e) {
-      message = (e as Error).message;
+      if (ticket === routesTicket && owner === userId)
+        catalogError = (e as Error).message;
+    } finally {
+      if (ticket === routesTicket) catalogLoading = false;
     }
   }
   async function refreshTwin() {
@@ -243,13 +355,34 @@
     const { data } = supabase.auth.onAuthStateChange(() => {
       setTimeout(() => refreshSession(), 0);
     });
+    const expired = () => {
+      accessState = 'invalid';
+      sessionReady = false;
+      staff = false;
+      adminRole = false;
+      accessError =
+        'Tu sesión venció. Inicia sesión para continuar; el borrador se conserva.';
+    };
+    window.addEventListener('climbing-session-expired', expired);
     return () => {
+      window.removeEventListener('climbing-session-expired', expired);
       generation++;
       data.subscription.unsubscribe();
     };
   });
   let chrome: HTMLDivElement;
+  let theme = $state(
+    localStorage.getItem('climbing-theme') || site.brand.defaultTheme,
+  );
+  $effect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('climbing-theme', theme);
+  });
   let toolsOpen = $state(true);
+  let viewerStarted = $state(false);
+  $effect(() => {
+    if (viewerWorkspace.active) viewerStarted = true;
+  });
   onMount(() => {
     const resize = new ResizeObserver(() => {
       document.documentElement.style.setProperty(
@@ -260,32 +393,246 @@
     resize.observe(chrome);
     return () => resize.disconnect();
   });
-  let tab = $state(
-    location.pathname.startsWith('/auth/') ? 'Cuenta' : 'Catálogo',
-  );
+  const pageStarted = performance.now();
+  let sceneStarted = 0,
+    activityStarted = 0,
+    lastSceneKey = '';
+  const initialUrl = new URL(location.href);
+  let tab = $state(viewFromUrl(initialUrl));
   let staff = $state(false);
-  let selectedId = $state(
-    new URLSearchParams(location.search).get('ruta') || '',
-  );
-  let selected = $derived(db.routes.find((r) => r.id === selectedId));
-  let query = $state('');
-  let grade = $state('');
-  let showRetired = $state(false);
-  let filtered = $derived(
-    db.routes.filter(
-      (r) =>
-        (showRetired || r.status === 'activa') &&
-        (!grade || r.grade === grade) &&
-        r.name.toLowerCase().includes(query.toLowerCase()),
+  let selectedId = $state(initialUrl.searchParams.get('ruta') || '');
+  let detailMode = $state(initialUrl.searchParams.has('ruta'));
+  let routeError = $state('');
+  let selected = $derived(
+    db.routes.find(
+      (r) => r.id === selectedId && (r.status !== 'borrador' || staff),
     ),
   );
-  let attempts = $state(1);
-  let result = $state<Entry['result']>('intento');
-  let notes = $state('');
-  let report = $state('');
+  let query = $state(initialUrl.searchParams.get('buscar') || '');
+  let grade = $state(initialUrl.searchParams.get('grado') || '');
+  let sectorFilter = $state(initialUrl.searchParams.get('sector') || '');
+  let scaleFilter = $state(initialUrl.searchParams.get('escala') || '');
+  let minGrade = $state(initialUrl.searchParams.get('desde') || '');
+  let maxGrade = $state(initialUrl.searchParams.get('hasta') || '');
+  let order = $state(initialUrl.searchParams.get('orden') || 'recientes');
+  let showRetired = $state(initialUrl.searchParams.get('retiradas') === '1');
+  let filtered = $derived(
+    db.routes
+      .filter(
+        (r) =>
+          (r.status === 'activa' || (showRetired && r.status === 'retirada')) &&
+          (!grade || r.grade === grade) &&
+          (!sectorFilter || r.sector === sectorFilter) &&
+          (!scaleFilter ||
+            (r.gradeScale || gradeScale(r.grade)) === scaleFilter) &&
+          (!minGrade ||
+            (gradeRank(r.grade, scaleFilter) ?? -Infinity) >=
+              (gradeRank(minGrade, scaleFilter) ?? Infinity)) &&
+          (!maxGrade ||
+            (gradeRank(r.grade, scaleFilter) ?? Infinity) <=
+              (gradeRank(maxGrade, scaleFilter) ?? -Infinity)) &&
+          normalize(`${r.name} ${r.sector}`).includes(normalize(query)),
+      )
+      .sort((a, b) =>
+        order === 'nombre'
+          ? a.name.localeCompare(b.name)
+          : (b.updatedAt || '').localeCompare(a.updatedAt || ''),
+      ),
+  );
+  $effect(() => {
+    const filters = {
+      buscar: query,
+      grado: grade,
+      sector: sectorFilter,
+      escala: scaleFilter,
+      desde: minGrade,
+      hasta: maxGrade,
+      orden: order,
+      retiradas: showRetired ? '1' : '',
+    };
+    if (tab !== 'Catálogo') return;
+    const url = new URL(location.href);
+    for (const [key, value] of Object.entries(filters)) {
+      url.searchParams.delete(key);
+      if (value) url.searchParams.set(key, value);
+    }
+    history.replaceState(history.state, '', url);
+  });
+  let drafts = $state<Record<string, ActivityDraft>>({});
+  let draft = $derived.by(
+    () =>
+      drafts[`${userId}:${selectedId}:${selected?.revision || 0}`] ||
+      newDraft(selected?.revision || 0),
+  );
+  $effect(() => {
+    if (!selected) return;
+    const key = `${userId}:${selected.id}:${selected.revision}`;
+    if (!drafts[key]) {
+      const previous = Object.entries(drafts).find(
+        ([k, v]) =>
+          k.startsWith(`${userId}:${selected!.id}:`) &&
+          v.approvedRevision !== selected!.revision,
+      );
+      drafts[key] = previous
+        ? {
+            ...previous[1],
+            activityKey: crypto.randomUUID(),
+            reportKey: crypto.randomUUID(),
+          }
+        : newDraft(selected.revision);
+    }
+  });
   let message = $state('');
+  let activityNotice = $state(''),
+    reportNotice = $state('');
+  let activityError = $state(false),
+    reportError = $state(false);
+  let recordingActivity = $state(false),
+    reporting = $state(false),
+    projectBusy = $state(false);
+  let savedActivity = $state<
+    | {
+        id: string;
+        routeId: string;
+        revision: number;
+        owner: string;
+        requestId: string;
+      }
+    | undefined
+  >();
+  let betaOpen = $state(false),
+    show3D = $state(false),
+    shareOpen = $state(false);
+  let shareFields = $state(privateFields());
+  let shareEntry = $state<Entry | undefined>();
+  let requestOwner = 0;
+  let loginReturn = $state(
+    sessionStorage.getItem('climbing-login-return') || '',
+  );
+  function navigate(view: string, id?: string, push = true) {
+    const previous = new URL(location.href);
+    for (const [k, v] of Object.entries({
+      buscar: query,
+      grado: grade,
+      sector: sectorFilter,
+      escala: scaleFilter,
+      desde: minGrade,
+      hasta: maxGrade,
+      orden: order,
+      retiradas: showRetired ? '1' : '',
+    })) {
+      previous.searchParams.delete(k);
+      if (v && tab === 'Catálogo') previous.searchParams.set(k, v);
+    }
+    history.replaceState(
+      {
+        ...history.state,
+        scroll:
+          document.getElementById('tools-panel')?.scrollTop || window.scrollY,
+      },
+      '',
+      previous,
+    );
+    tab = view;
+    if (id) selectedId = id;
+    detailMode = !!id;
+    toolsOpen = true;
+    routeError = '';
+    const url = new URL(location.href);
+    url.pathname = '/';
+    url.search = '';
+    if (view !== 'Inicio') url.searchParams.set('vista', view);
+    if (id) url.searchParams.set('ruta', id);
+    for (const [k, v] of Object.entries({
+      buscar: query,
+      grado: grade,
+      sector: sectorFilter,
+      escala: scaleFilter,
+      desde: minGrade,
+      hasta: maxGrade,
+      orden: order,
+      retiradas: showRetired ? '1' : '',
+    }))
+      if (v && view === 'Catálogo') url.searchParams.set(k, v);
+    if (push) history.pushState({ scroll: 0 }, '', url);
+    else history.replaceState({ scroll: 0 }, '', url);
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      const panel = document.getElementById('tools-panel');
+      if (panel) {
+        panel.scrollTop = 0;
+        const heading =
+          panel.querySelector<HTMLElement>(
+            id ? 'section[aria-label="Ficha de ruta"] h2' : 'h1, h2',
+          ) || panel;
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+      }
+    });
+  }
+  onMount(() => {
+    if (initialUrl.searchParams.has('ruta')) measure('qr_open');
+    const pop = () => {
+      const url = new URL(location.href);
+      tab = viewFromUrl(url);
+      selectedId = url.searchParams.get('ruta') || selectedId;
+      detailMode = url.searchParams.has('ruta');
+      query = url.searchParams.get('buscar') || '';
+      grade = url.searchParams.get('grado') || '';
+      sectorFilter = url.searchParams.get('sector') || '';
+      scaleFilter = url.searchParams.get('escala') || '';
+      minGrade = url.searchParams.get('desde') || '';
+      maxGrade = url.searchParams.get('hasta') || '';
+      order = url.searchParams.get('orden') || 'recientes';
+      showRetired = url.searchParams.get('retiradas') === '1';
+      requestAnimationFrame(() => {
+        const panel = document.getElementById('tools-panel');
+        if (panel) {
+          panel.scrollTop = history.state?.scroll || 0;
+          panel.focus({ preventScroll: true });
+        }
+        window.scrollTo(0, history.state?.scroll || 0);
+      });
+    };
+    window.addEventListener('popstate', pop);
+    return () => window.removeEventListener('popstate', pop);
+  });
+  const selectionKey = $derived(`${selectedId}:${selected?.revision || 0}`);
+  $effect(() => {
+    selectionKey;
+    betaOpen = false;
+    activityNotice = '';
+    reportNotice = '';
+    shareOpen = false;
+    shareEntry = undefined;
+    if (untrack(() => !!selected))
+      measure('detail_ready', performance.now() - pageStarted);
+  });
+  function login() {
+    sessionStorage.setItem(
+      'climbing-login-draft',
+      JSON.stringify({
+        routeId: selectedId,
+        revision: selected?.revision,
+        draft,
+        sourceOwner: userId,
+      }),
+    );
+    loginReturn = detailMode && tab === 'Catálogo' ? selectedId : '';
+    sessionStorage.setItem('climbing-login-return', loginReturn);
+    navigate('Cuenta');
+  }
+  function clearFilters() {
+    query = '';
+    grade = '';
+    sectorFilter = '';
+    scaleFilter = '';
+    minGrade = '';
+    maxGrade = '';
+    showRetired = false;
+    order = 'recientes';
+  }
   let qr = $state('');
-  let privacy = $state(false);
   let name = $state('');
   $effect(() => {
     const id = selectedId;
@@ -299,35 +646,176 @@
       });
   });
   function select(id: string) {
-    selectedId = id;
-    history.replaceState(null, '', routeUrl(id));
-    message = '';
+    navigate('Catálogo', id);
   }
   async function record() {
-    if (!selected) return;
+    if (
+      !selected ||
+      recordingActivity ||
+      draft.approvedRevision !== selected.revision ||
+      savedActivity?.requestId === draft.activityKey
+    )
+      return;
+    const route = { ...selected },
+      d = draft,
+      owner = userId,
+      ticket = requestOwner;
+    const content = JSON.stringify({
+      attempts: d.attempts,
+      result: d.result,
+      notes: d.notes,
+    });
+    recordingActivity = true;
+    activityError = false;
+    activityStarted = performance.now();
+    activityNotice = 'Guardando actividad…';
     try {
-      await api('/entries', { routeId: selected.id, attempts, result, notes });
-      notes = '';
+      const result = await api(
+        '/entries',
+        {
+          routeId: route.id,
+          expectedRevision: route.revision,
+          attempts: d.attempts,
+          result: d.result,
+          notes: d.notes,
+          requestId: d.activityKey,
+        },
+        undefined,
+        owner,
+      );
+      if (ticket !== requestOwner) return;
+      savedActivity = {
+        id: result.id,
+        routeId: route.id,
+        revision: route.revision,
+        owner,
+        requestId: d.activityKey,
+      };
+      if (
+        JSON.stringify({
+          attempts: d.attempts,
+          result: d.result,
+          notes: d.notes,
+        }) === content
+      ) {
+        d.notes = '';
+      }
+      if (selectedId === route.id) activityNotice = 'Actividad guardada.';
+      measure('activity_saved', performance.now() - activityStarted);
       await refreshSession();
-      message = 'Actividad guardada en D1.';
     } catch (e) {
-      message = (e as Error).message;
+      if (
+        e instanceof ApiError &&
+        e.status === 401 &&
+        ticket === requestOwner
+      ) {
+        accessState = 'invalid';
+        accessError = e.message;
+        sessionReady = false;
+      }
+      if (ticket === requestOwner && selectedId === route.id) {
+        measure('activity_error');
+        activityError = true;
+        activityNotice = (e as Error).message;
+        if (e instanceof ApiError && e.status === 409) await refreshRoutes();
+      }
+    } finally {
+      recordingActivity = false;
+    }
+  }
+  async function undoRecord() {
+    const entry = savedActivity;
+    if (!entry || entry.owner !== userId || recordingActivity) return;
+    recordingActivity = true;
+    try {
+      await api(`/entries/${entry.id}`, { expectedVersion: 1 }, 'DELETE');
+      savedActivity = undefined;
+      if (selectedId === entry.routeId) draft.activityKey = crypto.randomUUID();
+      activityNotice =
+        'Registro retirado. Puedes volver a registrar la actividad.';
+      await refreshSession();
+    } catch (e) {
+      activityError = true;
+      activityNotice = (e as Error).message;
+    } finally {
+      recordingActivity = false;
+    }
+  }
+  async function saveProject() {
+    if (!selected || projectBusy) return;
+    projectBusy = true;
+    try {
+      await api('/projects', { routeId: selected.id, notes: '' });
+      activityError = false;
+      activityNotice = 'Proyecto guardado. No se registró actividad.';
+    } catch (e) {
+      activityError = true;
+      activityNotice = (e as Error).message;
+    } finally {
+      projectBusy = false;
     }
   }
   async function sendReport() {
-    if (!selected) return;
+    if (!selected || reporting || draft.approvedRevision !== selected.revision)
+      return;
+    const route = { ...selected },
+      d = draft,
+      owner = userId,
+      ticket = requestOwner;
+    reporting = true;
+    reportError = false;
+    reportNotice = 'Enviando reporte…';
     try {
-      await api('/reports', { routeId: selected.id, description: report });
-      report = '';
+      await api(
+        '/reports',
+        {
+          routeId: route.id,
+          expectedRevision: route.revision,
+          description: d.report,
+          category: d.category,
+          requestId: d.reportKey,
+        },
+        undefined,
+        owner,
+      );
+      if (ticket !== requestOwner) return;
+      d.report = '';
+      d.reportKey = crypto.randomUUID();
+      if (selectedId === route.id) reportNotice = 'Reporte enviado al staff.';
       await refreshSession();
-      message = 'Reporte enviado al staff.';
+    } catch (e) {
+      if (
+        e instanceof ApiError &&
+        e.status === 401 &&
+        ticket === requestOwner
+      ) {
+        accessState = 'invalid';
+        accessError = e.message;
+        sessionReady = false;
+      }
+      if (ticket === requestOwner && selectedId === route.id) {
+        reportError = true;
+        reportNotice = (e as Error).message;
+        if (e instanceof ApiError && e.status === 409) await refreshRoutes();
+      }
+    } finally {
+      reporting = false;
+    }
+  }
+  let resolutions = $state<Record<string, string>>({});
+  async function takeReport(id: string) {
+    try {
+      await api(`/staff/reports/${id}/assign`, {});
+      await refreshSession();
     } catch (e) {
       message = (e as Error).message;
     }
   }
   async function resolveReport(id: string) {
     try {
-      await api(`/staff/reports/${id}/resolve`, {});
+      await api(`/staff/reports/${id}/resolve`, {
+        resolution: resolutions[id],
+      });
       await refreshSession();
     } catch (e) {
       message = (e as Error).message;
@@ -340,89 +828,30 @@
     a.click();
   }
   function exportImage(entry?: Entry) {
-    const route = entry
-      ? db.routes.find((r) => r.id === entry.routeId) || {
-          id: entry.routeId,
-          revision: entry.revision,
-          name: entry.routeName,
-          grade: entry.grade,
-          holds: entry.holds || [],
-        }
-      : selected;
-    if (!route) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1350;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#f4f6f8';
-    ctx.fillRect(0, 0, 1080, 1350);
-    ctx.fillStyle = '#172c3e';
-    ctx.font = 'bold 48px sans-serif';
-    ctx.fillText('Climbing Lab · Gimnasio demo', 60, 100);
-    ctx.font = 'bold 60px sans-serif';
-    ctx.fillText((entry?.routeName || route.name).slice(0, 27), 60, 195);
-    ctx.font = '36px sans-serif';
-    ctx.fillText(entry?.grade || route.grade, 60, 255);
-    ctx.fillStyle = '#d9dfe5';
-    ctx.fillRect(60, 310, 960, 650);
-    // Historical cards must not silently use a newer route presentation.
-    for (const h of entry?.holds ||
-      (!entry || entry.revision === route.revision ? route.holds : [])) {
-      ctx.beginPath();
-      ctx.arc(60 + h.x * 9.6, 310 + h.y * 6.5, 20, 0, Math.PI * 2);
-      ctx.fillStyle =
-        h.role === 'inicio'
-          ? '#137a58'
-          : h.role === 'final'
-            ? '#b34c0b'
-            : '#2867ad';
-      ctx.fill();
-    }
-    ctx.fillStyle = '#172c3e';
-    ctx.font = '30px sans-serif';
-    ctx.fillText('Esquema de demostración · sin captura 3D', 60, 1020);
-    if (entry) {
-      ctx.fillText(
-        `Ascenso · ${new Date(entry.date).toLocaleDateString('es-MX')}`,
-        60,
-        1090,
-      );
-      if (privacy)
-        ctx.fillText(
-          `${name.slice(0, 35)} · ${entry.attempts} intentos`,
-          60,
-          1140,
-        );
-    }
-    ctx.font = '22px sans-serif';
-    ctx.fillText(routeUrl(route.id).slice(0, 78), 60, 1220);
-    ctx.fillText('Por Creativivid', 60, 1280);
-    download(
-      canvas.toDataURL('image/png'),
-      `${route.id}${entry ? '-ascenso' : ''}.png`,
-    );
+    shareEntry = entry;
+    shareOpen = true;
   }
+  $effect(() => {
+    document.title = pageTitle(tab, detailMode ? selected?.name : undefined);
+  });
 </script>
 
 <div bind:this={chrome}>
-  <header>
-    <div>
-      <strong>Climbing Lab</strong><span>{gymConfig.name}</span>
-    </div>
-    <div>
-      {#if userEmail}<span>{userEmail}</span><button
-          disabled={viewerWorkspace.locked}
-          onclick={() => supabase.auth.signOut()}>Cerrar sesión</button
-        >{:else}<button
-          onclick={() => {
-            tab = 'Cuenta';
-            toolsOpen = true;
-          }}>Iniciar sesión</button
-        >{/if}
-    </div>
-  </header>
+  <SiteHeader
+    {tab}
+    {staff}
+    admin={adminRole}
+    email={userEmail}
+    locked={viewerWorkspace.locked}
+    bind:theme
+    {navigate}
+    {login}
+    logout={() => {
+      supabase.auth.signOut();
+    }}
+  />
   <div class="notice">
-    API D1 local · Cuenta Supabase · Capturas y tarjetas 3D en desarrollo.
+    Consulta rutas, reconoce sus agarres y registra tu actividad.
   </div>
   {#if accessState === 'checking'}<p role="status" class="connection-status">
       Verificando sesión y permisos…
@@ -436,6 +865,9 @@
           : 'API no disponible. No se pudieron verificar tus permisos.'}</strong
       >
       <p>{accessError}</p>
+      {#if accessState === 'invalid'}<button onclick={login}
+          >Iniciar sesión para continuar</button
+        >{/if}
       <button
         onclick={() => {
           refreshSession();
@@ -452,27 +884,27 @@
           ? 'Staff'
           : 'Escalador'}
     </p>{/if}
-  <nav aria-label="Principal">
-    {#each ['Catálogo', 'Bitácora', 'Productos', 'Cuenta', ...(staff ? ['Staff', 'Recepción'] : []), ...(adminRole ? ['Capturas'] : [])] as item}<button
-        disabled={viewerWorkspace.locked}
-        class:active={tab === item}
-        onclick={() => {
-          tab = item;
-          toolsOpen = true;
-        }}>{item}</button
-      >{/each}
-  </nav>
 </div>
 <button
   class="drawer-toggle"
+  hidden={!viewerWorkspace.active}
   disabled={viewerWorkspace.locked}
   aria-expanded={toolsOpen}
   aria-controls="tools-panel"
   onclick={() => (toolsOpen = !toolsOpen)}
   >{toolsOpen ? 'Plegar herramientas' : 'Abrir herramientas'}</button
 >
+{#if viewerWorkspace.active && tab === 'Catálogo' && show3D && !routePreparing}<button
+    class="scene-exit"
+    disabled={viewerWorkspace.locked}
+    onclick={() => {
+      show3D = false;
+      toolsOpen = true;
+    }}>Salir del 3D</button
+  >{/if}
 <div
   class="workspace"
+  class:reading={!viewerWorkspace.active}
   class:tools-closed={!toolsOpen}
   onpointerdowncapture={(e) => {
     if (
@@ -493,35 +925,53 @@
     }
   }}
 >
-  <div class="scene-backdrop" aria-hidden="true"></div>
+  {#if viewerWorkspace.active}<div
+      class="scene-backdrop"
+      aria-hidden="true"
+    ></div>{/if}
   <div bind:this={viewerHome} class="viewer-home">
-    <SplatRuntime
-      {...viewerWorkspace.active?.options || {
-        capture: currentCapture,
-        staff: false,
-        routeId: 'gym-overview',
-        onSave: () => {},
-      }}
-      onRecording={(active) => (viewerWorkspace.locked = active)}
-      mount={placeViewer}
-    />
+    {#if viewerStarted}<SplatRuntime
+        {...viewerWorkspace.active?.options ||
+          viewerWorkspace.lastOptions || {
+            capture: currentCapture,
+            staff: false,
+            routeId: 'gym-overview',
+            onSave: () => {},
+          }}
+        visible={!!viewerWorkspace.active}
+        onRecording={(active) => (viewerWorkspace.locked = active)}
+        mount={placeViewer}
+      />{/if}
   </div>
   <main
     id="tools-panel"
     class="tools-panel"
-    aria-label="Herramientas del gimnasio"
+    aria-label="Contenido del gimnasio"
+    tabindex="-1"
   >
-    {#if !['Catálogo', 'Capturas'].includes(tab)}<SplatViewer
-        capture={currentCapture}
-        staff={false}
-        routeId="gym-overview"
-        onSave={() => {}}
-      />{/if}
-    {#if tab === 'Productos'}<StorePanel
+    {#if tab === 'Inicio' || tab === 'El gimnasio'}<SitePublic
+        view={tab}
+        {navigate}
+      />
+    {:else if tab === 'Proyectos'}{#if userEmail && sessionReady}{#key userEmail}<ProjectsPanel
+            routes={db.routes.filter((r) => r.status !== 'borrador')}
+          />{/key}{:else}<p>Inicia sesión para consultar tus proyectos.</p>{/if}
+    {:else if tab === 'Productos'}<StorePanel
       />{:else if tab === 'Recepción' && staff && sessionReady}<OperationsPanel
         admin={adminRole}
-      />{:else if tab === 'Cuenta'}<AuthPanel
-      />{:else if tab === 'Capturas' && adminRole}<CaptureManager
+      />{:else if tab === 'Cuenta'}<h1 tabindex="-1">Mi cuenta</h1>
+      <p>
+        Tu actividad y tus proyectos son privados. Las tarjetas solo incluyen
+        los campos que selecciones antes de descargar.
+      </p>
+      {#if userEmail && sessionReady && location.pathname !== '/auth/reset-password'}<p
+        >
+          Sesión iniciada: {userEmail}
+        </p>
+        <button onclick={() => navigate('Bitácora')}>Ver mi actividad</button
+        >{:else}<AuthPanel
+        />{/if}{:else if tab === 'Capturas' && adminRole}<CaptureManager
+        owner={userId}
         {currentCapture}
         routes={db.routes}
         onPublished={async () => {
@@ -529,178 +979,309 @@
           await refreshRoutes();
         }}
       />{:else if tab === 'Catálogo'}
-      <div class="layout">
-        <aside>
-          <h1>Rutas</h1>
-          <label
-            >Buscar<input
-              bind:value={query}
-              placeholder="Nombre de ruta"
-            /></label
-          ><label
-            >Grado<select bind:value={grade}
-              ><option value="">Todos</option
-              >{#each [...new Set(db.routes.map((r) => r.grade))] as g}<option
-                  >{g}</option
-                >{/each}</select
-            ></label
-          ><label class="toggle"
-            ><input type="checkbox" bind:checked={showRetired} /> Incluir retiradas</label
-          >
-          <div class="route-list">
-            {#each filtered as r}<button
-                class:selected={selectedId === r.id}
-                onclick={() => select(r.id)}
-                ><strong>{r.name}</strong><span
-                  >{r.grade} · {r.sector} · {r.status}</span
-                ></button
-              >{/each}{#if !filtered.length}<p>
-                No hay rutas con estos filtros.
-              </p>{/if}
-          </div>
-        </aside>
-        <section>
-          {#if selected}<h2>{selected.name} <small>{selected.grade}</small></h2>
-            <p>
-              {selected.sector} · Revisión {selected.revision} · {selected.status}
-            </p>
-            {#if !routePreparing}<SplatViewer
-                exportInfo={{
-                  title: selected.name,
-                  grade: selected.grade,
-                  gym: gymConfig.name,
-                }}
-                capture={selectedCapture}
-                section={historicalSection ||
-                  sections.find(
-                    (s) =>
-                      s.id === selected.sectionId &&
-                      (s.revision || 1) === (selected.sectionRevision || 1),
-                  )}
-                holds3D={selected.holds3D}
-                routeId={selected.id}
-                saved={selected.camera}
-                {staff}
-                onSave={(view) => {
-                  saveCamera(view);
-                }}
-              />
-            {/if}{#if staff}{#key selected.id + ':' + selected.revision}<details
-                >
-                  <summary>Editar ruta</summary><RouteEditor
-                    route={selected}
-                    onPreparing={(active) => (routePreparing = active)}
-                    onSaved={(id) => refreshRoutes(id)}
-                  />
-                </details>{/key}{/if}
-            <div class="wall" aria-label="Esquema de agarres de la ruta">
-              <span class="wall-label"
-                >Esquema de ruta · captura 3D pendiente</span
-              >{#each selected.holds as hold}<span
-                  class="hold {hold.role}"
-                  style:left="{hold.x}%"
-                  style:top="{hold.y}%"
-                  title={hold.role}
-                  >{hold.role === 'inicio'
-                    ? 'I'
-                    : hold.role === 'final'
-                      ? 'F'
-                      : ''}</span
-                >{/each}
-            </div>
-            <p class="legend">
-              Verde: inicio · Azul: intermedio · Naranja: final
-            </p>
-            <details>
-              <summary>Ver beta</summary>
-              <p>{selected.beta || 'El staff aún no ha añadido una beta.'}</p>
-            </details>
-            <div class="actions">
-              <button onclick={() => exportImage()}
-                >Exportar imagen de ruta</button
-              ><a href={routeUrl(selected.id)}>Enlace de ruta</a>
-            </div>
-            <details>
-              <summary>QR de la ruta</summary>{#if qr}<img
-                  src={qr}
-                  alt="QR del enlace a esta ruta"
-                  width="220"
-                  height="220"
-                /><button onclick={() => download(qr, `${selectedId}-qr.png`)}
-                  >Descargar QR</button
-                >{/if}
+      <div class="layout" class:route-detail={detailMode}>
+        {#if !detailMode}<RouteCatalog
+            routes={db.routes.filter((r) => r.status !== 'borrador')}
+            {filtered}
+            bind:query
+            bind:grade
+            bind:sectorFilter
+            bind:scaleFilter
+            bind:minGrade
+            bind:maxGrade
+            bind:order
+            bind:showRetired
+            {select}
+            {clearFilters}
+            loading={catalogLoading}
+            loadError={catalogError}
+            retry={() => {
+              refreshRoutes();
+            }}
+          />{/if}
+        {#if detailMode}
+          <section aria-label="Ficha de ruta">
+            {#if detailMode}<button onclick={() => navigate('Catálogo')}
+                >Volver al catálogo</button
+              >{/if}
+            {#if routeError}<p role="alert">{routeError}</p>{:else if selected}
+              <h2 tabindex="-1">
+                {selected.name} <small>{selected.grade}</small>
+              </h2>
               <p>
-                Este enlace apunta al sitio actual; para compartirlo fuera del
-                equipo necesita una publicación accesible.
+                {selected.sector} · Revisión {selected.revision} · {selected.status}
               </p>
-            </details>
-            <div class="forms">
+              {#if selected.status === 'retirada'}<p role="status">
+                  Ruta retirada. El enlace y su historial se conservan. Consulta
+                  otras rutas en el catálogo.
+                </p>{/if}
+              <div class="actions">
+                <button
+                  class="primary"
+                  onclick={() => {
+                    measure('activity_start');
+                    document
+                      .getElementById('activity-form')
+                      ?.scrollIntoView({ block: 'start' });
+                  }}>Registrar actividad</button
+                ><button
+                  disabled={!userEmail ||
+                    !sessionReady ||
+                    projectBusy ||
+                    selected.status === 'borrador'}
+                  onclick={saveProject}>Guardar proyecto</button
+                >
+              </div>
+              <RoutePresentation route={selected} />
+              {#if selected.captureId}<button
+                  id="explore-3d"
+                  aria-expanded={show3D}
+                  onclick={() => {
+                    show3D = !show3D;
+                    if (show3D) sceneStarted = performance.now();
+                  }}>{show3D ? 'Seguir con imagen' : 'Explorar en 3D'}</button
+                >{/if}
+              {#if show3D && !routePreparing}<SplatViewer
+                  capture={selectedCapture}
+                  section={historicalSection ||
+                    sections.find((s) => s.id === selected.sectionId)}
+                  holds3D={selected.holds3D}
+                  routeId={selected.id}
+                  saved={selected.camera}
+                  staff={false}
+                  onReady={() => {
+                    const key = `${selected?.id}:${selected?.revision}:${selectedCapture?.id}`;
+                    if (lastSceneKey !== key) {
+                      measure('scene_ready', performance.now() - sceneStarted);
+                      lastSceneKey = key;
+                    }
+                  }}
+                  onSave={() => {}}
+                  exportInfo={{
+                    title: selected.name,
+                    grade: selected.grade,
+                    gym: site.brand.attribution,
+                    revision: selected.revision,
+                    url: routeUrl(selected.id),
+                  }}
+                />{/if}
+              {#if staff}{#key selected.id + ':' + selected.revision}<details>
+                    <summary>Editar ruta</summary><RouteEditor
+                      route={selected}
+                      draft={editorDrafts[
+                        `${userId}:${selected.id}:${selected.revision}`
+                      ]}
+                      owner={userId}
+                      sourceRoutes={db.routes}
+                      onDraft={(owner, id, revision, values) => {
+                        if (owner === userId)
+                          editorDrafts[`${owner}:${id}:${revision}`] = values;
+                      }}
+                      onPreparing={(active) => (routePreparing = active)}
+                      onSaved={(id) => refreshRoutes(id)}
+                    />
+                  </details>{/key}{/if}
+              <details bind:open={betaOpen}>
+                <summary>Ver beta</summary>
+                <p>{selected.beta || 'El staff aún no ha añadido una beta.'}</p>
+              </details>
+              <details>
+                <summary>Compartir</summary><button
+                  onclick={() => exportImage()}>Preparar imagen de ruta</button
+                ><a href={routeUrl(selected.id)}>Enlace de ruta</a>
+                <details>
+                  <summary>QR de la ruta</summary>{#if qr}<img
+                      src={qr}
+                      alt="QR del enlace a esta ruta"
+                      width="220"
+                      height="220"
+                    /><button
+                      onclick={() => download(qr, `${selectedId}-qr.png`)}
+                      >Descargar QR</button
+                    >{/if}
+                  <p>
+                    Destino: {routeUrl(selected.id)}. Comprueba que sea
+                    accesible en los teléfonos del gimnasio antes de imprimir.
+                  </p>
+                </details>
+                {#if shareOpen}<SharePreview
+                    route={selected}
+                    fields={shareFields}
+                    {name}
+                    gym={site.brand.attribution}
+                  />{/if}
+              </details>
               <form
+                id="activity-form"
+                aria-label="Registrar actividad"
                 onsubmit={(e) => {
                   e.preventDefault();
                   record();
                 }}
               >
                 <h3>Registrar actividad</h3>
+                <p>
+                  {selected.name} · Revisión {selected.revision}. Los intentos
+                  corresponden a esta actividad.
+                </p>
+                {#if draft.approvedRevision !== selected.revision}<p
+                    role="alert"
+                  >
+                    La ruta tiene una revisión nueva. Revisa sus agarres y
+                    reglas antes de enviar el borrador.
+                  </p>
+                  <button
+                    type="button"
+                    onclick={() =>
+                      (draft.approvedRevision = selected!.revision)}
+                    >Revisé la nueva revisión</button
+                  >{/if}
                 <label
                   >Intentos<input
                     type="number"
                     min="1"
+                    max="10000"
                     step="1"
-                    bind:value={attempts}
+                    aria-describedby={activityNotice
+                      ? 'activity-result'
+                      : undefined}
+                    aria-invalid={activityError}
+                    bind:value={draft.attempts}
                     required
+                    disabled={recordingActivity}
+                    oninput={() => (draft.activityKey = crypto.randomUUID())}
                   /></label
-                ><label
-                  >Resultado<select bind:value={result}
+                >
+                <label
+                  >Resultado<select
+                    bind:value={draft.result}
+                    disabled={recordingActivity}
+                    onchange={() => (draft.activityKey = crypto.randomUUID())}
                     ><option value="intento">Intento</option><option
                       value="ascenso">Ascenso</option
                     ></select
                   ></label
-                ><label>Notas<textarea bind:value={notes}></textarea></label
-                ><button
+                >
+                <label
+                  >Notas<textarea
+                    aria-describedby={activityNotice
+                      ? 'activity-result'
+                      : undefined}
+                    bind:value={draft.notes}
+                    maxlength="2000"
+                    disabled={recordingActivity}
+                    oninput={() => (draft.activityKey = crypto.randomUUID())}
+                  ></textarea></label
+                >
+                <button
+                  class="primary"
                   disabled={selected.status !== 'activa' ||
                     !userEmail ||
-                    !sessionReady}>Guardar actividad</button
+                    !sessionReady ||
+                    recordingActivity ||
+                    draft.approvedRevision !== selected.revision ||
+                    savedActivity?.requestId === draft.activityKey}
+                  >{recordingActivity
+                    ? 'Guardando…'
+                    : 'Guardar actividad'}</button
                 >
+                {#if !userEmail}<button type="button" onclick={login}
+                    >Iniciar sesión para registrar</button
+                  >{/if}
+                {#if activityNotice}<p
+                    id="activity-result"
+                    class:error={activityError}
+                    class="message"
+                    role={activityError ? 'alert' : 'status'}
+                  >
+                    {activityNotice}
+                  </p>{/if}
+                {#if savedActivity?.requestId === draft.activityKey}<button
+                    type="button"
+                    onclick={() => {
+                      const key = `${userId}:${selected!.id}:${selected!.revision}`;
+                      drafts[key] = newDraft(selected!.revision);
+                      savedActivity = undefined;
+                      activityNotice = '';
+                    }}>Registrar otra actividad</button
+                  >{/if}
+                {#if savedActivity?.routeId === selected.id && savedActivity.owner === userId}<button
+                    type="button"
+                    onclick={() => navigate('Bitácora')}>Ver registro</button
+                  ><button
+                    type="button"
+                    disabled={recordingActivity}
+                    onclick={undoRecord}>Deshacer</button
+                  >{/if}
               </form>
-              <form
-                onsubmit={(e) => {
-                  e.preventDefault();
-                  sendReport();
-                }}
-              >
-                <h3>Reportar un error</h3>
-                <label
-                  >Descripción<textarea
-                    bind:value={report}
-                    required
-                    maxlength="2000"></textarea></label
-                ><button disabled={!userEmail || !sessionReady}
-                  >Enviar reporte</button
+              <details>
+                <summary>Reportar un error</summary>
+                <form
+                  onsubmit={(e) => {
+                    e.preventDefault();
+                    sendReport();
+                  }}
                 >
-              </form>
-            </div>
-          {:else}<SplatViewer
-              capture={currentCapture}
-              staff={false}
-              routeId="gym-overview"
-              onSave={() => {}}
-            />
-            <h2>Selecciona una ruta</h2>
-            <p>Selecciona una ruta del catálogo.</p>{/if}
-        </section>
+                  <h3>Reportar un error</h3>
+                  <p>{selected.name} · Revisión {selected.revision}</p>
+                  <label
+                    >Categoría<select
+                      bind:value={draft.category}
+                      disabled={reporting}
+                      onchange={() => (draft.reportKey = crypto.randomUUID())}
+                      ><option value="contenido">Contenido incorrecto</option
+                      ><option value="agarre_suelto">Agarre suelto</option
+                      ><option value="otro">Otro</option></select
+                    ></label
+                  >
+                  {#if draft.category === 'agarre_suelto'}<p role="alert">
+                      Avisa directamente al staff y evita usar ese agarre. El
+                      reporte digital no garantiza atención inmediata.
+                    </p>{/if}
+                  <label
+                    >Descripción<textarea
+                      aria-describedby={reportNotice
+                        ? 'report-result'
+                        : undefined}
+                      aria-invalid={reportError}
+                      bind:value={draft.report}
+                      required
+                      maxlength="2000"
+                      disabled={reporting}
+                      oninput={() => (draft.reportKey = crypto.randomUUID())}
+                    ></textarea></label
+                  >
+                  <button
+                    disabled={!userEmail ||
+                      !sessionReady ||
+                      reporting ||
+                      draft.approvedRevision !== selected.revision}
+                    >{reporting ? 'Enviando…' : 'Enviar reporte'}</button
+                  >
+                  {#if reportNotice}<p
+                      class="message"
+                      id="report-result"
+                      class:error={reportError}
+                      role={reportError ? 'alert' : 'status'}
+                    >
+                      {reportNotice}
+                    </p>{/if}
+                </form>
+              </details>
+            {:else}<h2>
+                {detailMode ? 'Buscando ruta…' : 'Selecciona una ruta'}
+              </h2>
+              <p>
+                Consulta una ruta del catálogo para ver sus agarres y registrar
+                actividad.
+              </p>{/if}
+          </section>{/if}
       </div>
     {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
       {#if mediaEntry && userEmail && sessionReady}{#key mediaEntry.id}<HistoricalExport
             entry={mediaEntry}
-            gym={gymConfig.name}
-            personal={privacy
-              ? {
-                  name,
-                  result: mediaEntry.result,
-                  attempts: mediaEntry.attempts,
-                }
-              : undefined}
+            gym={site.brand.attribution}
+            personal={sharedPersonal(mediaEntry, shareFields, name)}
             onClose={() => (mediaEntry = undefined)}
           />{/key}{/if}
       {#if userEmail && sessionReady}<ProjectsPanel routes={db.routes} />{/if}
@@ -741,19 +1322,44 @@
             onEntries={(entries) => (db.entries = entries)}
           />{/key}
 
-        <label class="toggle"
-          ><input type="checkbox" bind:checked={privacy} /> Incluir nombre e intentos
-          en tarjeta</label
-        >{#if privacy}<label
-            >Nombre para la tarjeta<input
-              bind:value={name}
-              maxlength="35"
-            /></label
-          >{/if}{#each db.entries as entry (entry.id)}<article>
+        <fieldset>
+          <legend>Campos de la tarjeta personal (privados por defecto)</legend>
+          {#each [{ key: 'name', label: 'Nombre' }, { key: 'date', label: 'Fecha' }, { key: 'attempts', label: 'Intentos' }, { key: 'notes', label: 'Notas' }] as f}<label
+              class="toggle"
+              ><input
+                type="checkbox"
+                checked={shareFields[f.key as keyof typeof shareFields]}
+                onchange={(e) =>
+                  (shareFields[f.key as keyof typeof shareFields] =
+                    e.currentTarget.checked)}
+              />Incluir {f.label.toLowerCase()}</label
+            >{/each}
+          {#if shareFields.name}<label
+              >Nombre para la tarjeta<input
+                bind:value={name}
+                maxlength="80"
+              /></label
+            >{/if}
+        </fieldset>
+        {#if shareOpen && shareEntry}<SharePreview
+            entry={shareEntry}
+            fields={shareFields}
+            {name}
+            gym={site.brand.attribution}
+          />{/if}
+        {#key userId}<MyReports />{/key}
+        <DemoImport
+          routes={db.routes}
+          owner={userEmail}
+          onImported={refreshSession}
+        />
+        {#each db.entries as entry (entry.id)}<article>
             <h2>{entry.routeName} · {entry.grade}</h2>
             <p>
               {entry.result === 'ascenso' ? 'Ascenso' : 'Intento'} · {entry.attempts}
-              intentos · {new Date(entry.date).toLocaleDateString('es-MX')}
+              {entry.attempts === 1 ? 'intento' : 'intentos'} · {new Date(
+                entry.date,
+              ).toLocaleDateString('es-MX')}
             </p>
             <p>{entry.notes}</p>
             {#if entry.deletedAt}<p>
@@ -791,12 +1397,36 @@
           </article>{/each}
       {:else}<p>Inicia sesión para consultar tu bitácora personal.</p>{/if}
     {:else if tab === 'Staff' && staff}<h1>Panel del staff</h1>
+      <PilotMetrics />
       <RouteEditor
+        draft={editorDrafts[`${userId}:new:0`]}
+        owner={userId}
+        sourceRoutes={db.routes}
+        onDraft={(owner, id, revision, values) => {
+          if (owner === userId)
+            editorDrafts[`${owner}:${id}:${revision}`] = values;
+        }}
         onSaved={async (id) => {
           await refreshRoutes(id);
-          tab = 'Catálogo';
+          navigate('Catálogo', id);
         }}
       />
+      <h2>Rutas publicadas</h2>
+      <p>
+        Selecciona una ruta para consultar su ficha, editarla y revisar su
+        historial.
+      </p>
+      <div class="route-list">
+        {#each db.routes.filter((r) => r.status !== 'borrador') as r}<button
+            onclick={() => select(r.id)}
+            >{r.name} · {r.grade} · {r.status}</button
+          >{/each}
+      </div>
+      <h2>Borradores de rutas</h2>
+      {#each db.routes.filter((r) => r.status === 'borrador') as r}<button
+          onclick={() => select(r.id)}
+          >{r.name || 'Sin nombre'} · Borrador</button
+        >{/each}
       <h2>Reportes</h2>
       {#each db.reports as r}<article>
           <strong
@@ -804,14 +1434,36 @@
               r.routeId}</strong
           >
           <p>{r.description}</p>
-          <p>{r.status}</p>
-          {#if r.status === 'pendiente'}<button
+          <p>
+            {r.status} · {r.category || 'contenido'} · Revisión {r.revision}
+          </p>
+          {#if r.resolution}<p>Resolución: {r.resolution}</p>{/if}
+          {#if r.status === 'pendiente'}<p>
+              {r.assignedTo
+                ? r.assignedTo === userId
+                  ? 'Asignado a ti'
+                  : 'Asignado a otro integrante del staff'
+                : 'Sin responsable'}
+            </p>
+            {#if !r.assignedTo}<button onclick={() => takeReport(r.id)}
+                >Tomar reporte</button
+              >{/if}<label
+              >Motivo de resolución<textarea
+                bind:value={resolutions[r.id]}
+                maxlength="2000"></textarea></label
+            ><button
+              disabled={!resolutions[r.id]?.trim()}
               onclick={() => resolveReport(r.id)}>Marcar resuelto</button
             >{/if}
         </article>{/each}{#if !db.reports.length}<p>No hay reportes.</p>{/if}
     {:else}<p>
         Inicia sesión con una cuenta autorizada para consultar el panel.
       </p>{/if}
-    {#if message}<p class="message" role="status">{message}</p>{/if}
+    {#if message}<p class="message error" role="alert">{message}</p>{/if}
   </main>
 </div>
+
+{#if !viewerWorkspace.active}<SiteFooter
+    {navigate}
+    locked={viewerWorkspace.locked}
+  />{/if}

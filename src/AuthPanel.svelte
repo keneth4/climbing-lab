@@ -1,14 +1,18 @@
 <script lang="ts">
+  import { site } from './site';
   import { supabase } from './auth';
   let email = $state(''),
     password = $state(''),
     message = $state(''),
+    failed = $state(false),
     busy = $state(false);
   let recovery = $state(location.pathname === '/auth/reset-password');
   async function run(
     action: 'login' | 'signup' | 'reset' | 'update' | 'google',
   ) {
+    if (busy) return;
     busy = true;
+    failed = false;
     message = '';
     try {
       let error;
@@ -47,6 +51,7 @@
       }
       if (error) throw error;
     } catch (e) {
+      failed = true;
       message = (e as Error).message;
     } finally {
       busy = false;
@@ -55,7 +60,7 @@
 </script>
 
 <section class="auth">
-  <h2>{recovery ? 'Nueva contraseña' : 'Acceder a Climbing Lab'}</h2>
+  <h2>{recovery ? 'Nueva contraseña' : `Acceder a ${site.brand.name}`}</h2>
   <form
     onsubmit={(e) => {
       e.preventDefault();
@@ -64,6 +69,8 @@
   >
     {#if !recovery}<label
         >Correo<input
+          aria-invalid={failed}
+          aria-describedby={message ? 'auth-result' : undefined}
           type="email"
           bind:value={email}
           autocomplete="email"
@@ -72,6 +79,8 @@
       >{/if}
     <label
       >Contraseña<input
+        aria-invalid={failed}
+        aria-describedby={message ? 'auth-result' : undefined}
         type="password"
         bind:value={password}
         minlength="8"
@@ -92,5 +101,7 @@
     ><button disabled={busy || !email} onclick={() => run('reset')}
       >Recuperar contraseña</button
     >{/if}
-  {#if message}<p role="status">{message}</p>{/if}
+  {#if message}<p id="auth-result" role={failed ? 'alert' : 'status'}>
+      {message}
+    </p>{/if}
 </section>

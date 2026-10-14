@@ -90,7 +90,7 @@ Verificación: 27 pruebas backend, 9 de dominio/geometría y 10 de navegador; ti
 
 ## Continuación fuera del editor de secciones
 
-La mejora de UX/UI, gizmos y orientación libre de secciones se mantiene pendiente por indicación del usuario. Se implementó el [flujo de agarres 3D de rutas](rutas-3d.md): preparación, cámara, beta y visualización con revisiones. El siguiente trabajo funcional es mejorar la relación entre beta/agarres y exportaciones, junto con la validación de continuidad usando dos capturas reales.
+La mejora UX/UI de los incrementos A–C está implementada según la [matriz de auditoría](auditoria-ux-implementacion.md); queda pendiente su validación física. Gizmos y orientación libre de secciones siguen fuera de esta entrega. Se implementó el [flujo de agarres 3D de rutas](rutas-3d.md): preparación, cámara, beta y visualización con revisiones. El siguiente trabajo funcional es mejorar la relación entre beta/agarres y exportaciones, junto con la validación de continuidad usando dos capturas reales.
 
 ## Corrección de arranque del piloto
 

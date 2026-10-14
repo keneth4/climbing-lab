@@ -76,7 +76,7 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
   const errors: string[] = [];
   const appErrors: string[] = [];
   page.on('pageerror', (e) => appErrors.push(e.message));
-  await page.goto('/');
+  await page.goto('/?ruta=route-a');
   await expect(page.getByRole('heading', { name: 'Ruta A V2' })).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Guardar actividad' }),
@@ -84,6 +84,8 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
   await expect(
     page.getByRole('button', { name: 'Staff', exact: true }),
   ).toHaveCount(0);
+  await expect(page.getByLabel('Visor de Gaussian Splatting')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Explorar en 3D' }).click();
   const canvas = page.getByLabel('Visor de Gaussian Splatting');
   await expect(canvas).toBeVisible();
   const expanded = await canvas.boundingBox();
@@ -104,11 +106,12 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
   await page.screenshot({
     path: `/tmp/workspace-open-${test.info().project.name}.png`,
   });
+  await page.getByText('Compartir', { exact: true }).click();
   await page.getByText('QR de la ruta', { exact: true }).click();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Descargar QR' }).click();
   expect((await download).suggestedFilename()).toBe('route-a-qr.png');
-  await page.getByRole('button', { name: 'Cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Continuar con Google' }),
   ).toBeVisible();
@@ -174,8 +177,8 @@ test('password login → protected request → logout clears personal data', asy
       },
     });
   });
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Cuenta', exact: true }).click();
+  await page.goto('/?vista=Catálogo');
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
   await page.getByLabel('Correo', { exact: true }).fill('test@example.com');
   await page
     .getByLabel('Contraseña', { exact: true })
@@ -184,7 +187,8 @@ test('password login → protected request → logout clears personal data', asy
   await expect(
     page.getByRole('button', { name: 'Cerrar sesión' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Bitácora', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await expect(page.getByText('Mi registro privado')).toBeVisible();
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
   await expect(page.getByText('Mi registro privado')).toHaveCount(0);
@@ -192,11 +196,12 @@ test('password login → protected request → logout clears personal data', asy
     page.getByRole('button', { name: 'Iniciar sesión' }),
   ).toBeVisible();
 });
-test('published capture loads automatically without a route file input', async ({
+test('published capture loads on demand and preserves scene context', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/?ruta=route-a');
   await expect(page.getByRole('heading', { name: 'Ruta A V2' })).toBeVisible();
+  await page.getByRole('button', { name: 'Explorar en 3D' }).click();
   await expect(
     page.getByText('fixture.ply · 0 MB · captura del gimnasio'),
   ).toBeVisible({ timeout: 30000 });
@@ -217,14 +222,16 @@ test('published capture loads automatically without a route file input', async (
   page.on('request', (request) => {
     if (request.url().includes('/file')) requests.push(request.url());
   });
-  await page.getByRole('button', { name: 'Cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
   await expect(canvas).toHaveAttribute('data-persistent-test', 'original');
   await expect(
     page.getByRole('button', { name: 'Continuar con Google' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Bitácora', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await expect(canvas).toHaveAttribute('data-persistent-test', 'original');
-  await page.getByRole('button', { name: 'Catálogo', exact: true }).click();
+  await page.getByRole('button', { name: 'Rutas', exact: true }).click();
+  await page.getByRole('button', { name: /Ruta A V2/ }).click();
   await expect(canvas).toHaveAttribute('data-persistent-test', 'original');
   expect(requests).toEqual([]);
   await page.evaluate(
@@ -293,6 +300,10 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     const url = new URL(route.request().url());
     const path = url.pathname;
     let json: any = {};
+    if (path === '/api/route-images') {
+      await route.fulfill({ json: { id: 'image-test' } });
+      return;
+    }
     if (path.includes('/file/scene.ply')) {
       await route.fulfill({
         body: gaussianFixture(),
@@ -361,7 +372,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     }
     await route.fulfill({ json });
   });
-  await page.goto('/');
+  await page.goto('/?ruta=route-a');
   await expect(
     page.getByRole('button', { name: 'Staff', exact: true }),
   ).toBeVisible();
@@ -401,6 +412,19 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await markerEditor
     .getByRole('button', { name: 'Añadir agarre a la ruta' })
     .click();
+  await markerEditor
+    .getByRole('button', { name: 'Seleccionar punto', exact: true })
+    .click();
+  await markerEditor.locator('canvas').click({
+    position: {
+      x: bounds!.width / 2 + 0.1 * ratio,
+      y: bounds!.height / 2 - 0.1 * ratio,
+    },
+  });
+  await markerEditor.getByLabel('Función del agarre').selectOption('final');
+  await markerEditor
+    .getByRole('button', { name: 'Añadir agarre a la ruta' })
+    .click();
   expect(current.revision).toBe(1);
   expect(current.holds3D).toEqual([]);
   await markerEditor
@@ -410,23 +434,43 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await markerEditor
     .locator('canvas')
     .screenshot({ path: `/tmp/route-markers-${test.info().project.name}.png` });
-  await page.getByRole('button', { name: 'Guardar ruta en D1' }).click();
+  await markerEditor
+    .getByLabel(
+      'Confirmé todos los agarres desde dos ángulos y el inicio/final son legibles',
+    )
+    .check();
+  await markerEditor
+    .getByRole('button', { name: 'Usar vista anotada como respaldo' })
+    .click();
+  await expect(
+    markerEditor.getByText(
+      'Imagen preparada para esta revisión. Guarda el borrador o publica.',
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Publicar ruta', exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole('button', { name: 'Publicar ruta', exact: true })
+    .click();
   await expect(
     page.getByRole('heading', { name: 'Ruta revisada V2' }),
   ).toBeVisible();
   await expect(
     page.getByText('Spray wall · Revisión 2 · activa', { exact: true }),
   ).toBeVisible();
-  expect(current.holds3D).toHaveLength(1);
+  expect(current.holds3D).toHaveLength(2);
+  await page.getByRole('button', { name: 'Explorar en 3D' }).click();
   expect(current.holds3D[0].role).toBe('inicio');
-  await expect(page.getByLabel('Mostrar agarres 3D (1)')).toBeVisible();
-  await page.getByLabel('Mostrar agarres 3D (1)').uncheck();
-  await page.getByLabel('Mostrar agarres 3D (1)').check();
+  await expect(page.getByLabel('Mostrar agarres 3D (2)')).toBeVisible();
+  await page.getByLabel('Mostrar agarres 3D (2)').uncheck();
+  await page.getByLabel('Mostrar agarres 3D (2)').check();
   await page.locator('summary').filter({ hasText: 'Editar ruta' }).click();
   await page
     .getByRole('combobox', { name: 'Estado', exact: true })
     .selectOption('retirada');
-  await page.getByRole('button', { name: 'Guardar ruta en D1' }).click();
+  await page.getByLabel('Motivo del cambio').fill('Armado retirado');
+  await page.getByRole('button', { name: 'Confirmar retiro' }).click();
   await expect(
     page.getByText('Spray wall · Revisión 3 · retirada', { exact: true }),
   ).toBeVisible();

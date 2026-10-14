@@ -4,7 +4,7 @@ Herramienta de Creativivid para publicar sitios de gimnasios y zonas de escalada
 
 Estado: primera base funcional local. El piloto completo está en desarrollo; el acceso usa Supabase Auth y los datos y capturas del gimnasio usan servicios locales de Cloudflare. El gimnasio todavía no está desplegado en producción.
 
-Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](docs/implementacion.md).
+Para ejecutar: `npm ci`, `npm run db:migrate` y `npm run dev:local`. Consulta [implementación y límites](docs/implementacion.md).
 
 ## Documentación
 
@@ -24,6 +24,9 @@ Para ejecutar: `npm ci` y `npm run dev`. Consulta [implementación y límites](d
 - [Secciones por vértices y cuadrícula](docs/secciones-y-cuadricula.md)
 - [Preparación de capturas: requisitos, tareas y logros](docs/preparacion-capturas.md)
 - [Clon digital: capturas completas, secciones y alineación](docs/clon-digital.md)
+- [Implementación de la auditoría UX/UI y matriz de 36 hallazgos](docs/auditoria-ux-implementacion.md)
+- [Sitio base de ejemplo y comparación de los 17 hallazgos](docs/sitio-base-ejemplo.md)
+- [Validación de formatos y dispositivos antes del piloto](docs/validacion-formatos-dispositivos.md)
 
 Primero se construirá una interfaz base enfocada en funcionalidad. El diseño particular de cada sitio se trabajará después, siguiendo el enfoque de MenuMaker y el sitio de AMPM.
 

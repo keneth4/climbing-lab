@@ -2,6 +2,7 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { readFile } from 'node:fs/promises';
 import { handle } from './index';
+import { presentationKey } from './pilot';
 let mf: Miniflare;
 let a: Env;
 let b: Env;
@@ -73,6 +74,12 @@ beforeAll(async () => {
     '\n' +
     (await readFile(
       new URL('../migrations/0008_operations.sql', import.meta.url),
+      'utf8',
+    ));
+  migration +=
+    '\n' +
+    (await readFile(
+      new URL('../migrations/0009_pilot_ux.sql', import.meta.url),
       'utf8',
     ));
   const envs = [];
@@ -239,7 +246,9 @@ describe('per-gym D1 isolation', () => {
     expect(
       (
         await handle(
-          req(`/api/staff/reports/${result.id}/resolve`, {}),
+          req(`/api/staff/reports/${result.id}/resolve`, {
+            resolution: 'Agarre revisado por staff',
+          }),
           a,
           asUser('bob'),
         )
@@ -248,7 +257,9 @@ describe('per-gym D1 isolation', () => {
     expect(
       (
         await handle(
-          req(`/api/staff/reports/${result.id}/resolve`, {}),
+          req(`/api/staff/reports/${result.id}/resolve`, {
+            resolution: 'Agarre revisado por staff',
+          }),
           b,
           asUser('bob'),
         )
@@ -257,7 +268,9 @@ describe('per-gym D1 isolation', () => {
     expect(
       (
         await handle(
-          req(`/api/staff/reports/${result.id}/resolve`, {}),
+          req(`/api/staff/reports/${result.id}/resolve`, {
+            resolution: 'Agarre revisado por staff',
+          }),
           a,
           asUser('alice'),
         )
@@ -312,8 +325,43 @@ describe('per-gym D1 isolation', () => {
     ).toBe(401);
   });
 });
+async function presentation<T extends Record<string, any>>(
+  input: T,
+): Promise<T & Record<string, any>> {
+  const camera = input.camera || {
+    captureId: 'cap-gym-a',
+    yaw: 0,
+    pitch: 0,
+    distance: 4,
+    target: [0, 0, 0],
+  };
+  const holds3D = input.holds3D || [
+    { id: 'start', position: [0, 0, 0], role: 'inicio' },
+    { id: 'finish', position: [1, 1, 0], role: 'final' },
+  ];
+  const imageId = crypto.randomUUID();
+  await a.DB.prepare('INSERT INTO route_images VALUES(?,?,?,?,?,?)')
+    .bind(
+      imageId,
+      'cap-gym-a',
+      'images/' + imageId,
+      'alice',
+      new Date().toISOString(),
+      presentationKey(camera, holds3D),
+    )
+    .run();
+  return {
+    ...input,
+    captureId: 'cap-gym-a',
+    camera,
+    holds3D,
+    imageId,
+    gradeScale: 'V',
+    markersVerified: true,
+  };
+}
 it('only local staff can create routes and snapshot the camera', async () => {
-  const payload = {
+  const payload = await presentation({
     name: 'Nueva ruta',
     sectionId: 'section-gym-a',
     grade: 'V4',
@@ -328,7 +376,7 @@ it('only local staff can create routes and snapshot the camera', async () => {
       distance: 4,
       target: [0, 0, 0],
     },
-  };
+  });
   expect(
     (await handle(req('/api/routes', payload), a, asUser('visitor'))).status,
   ).toBe(403);
@@ -348,7 +396,7 @@ it('only local staff can create routes and snapshot the camera', async () => {
   expect((await handle(req(`/api/routes/${created.id}`), b)).status).toBe(404);
 });
 it('revision changes preserve ascent identity and reject stale edits', async () => {
-  const payload = {
+  const payload = await presentation({
     name: 'Ruta renombrada',
     grade: 'V5',
     sector: 'Spray wall',
@@ -356,7 +404,7 @@ it('revision changes preserve ascent identity and reject stale edits', async () 
     status: 'activa',
     holds: [],
     expectedRevision: 1,
-  };
+  });
   const update = () =>
     new Request('https://local.test/api/routes/route-a', {
       method: 'PUT',
@@ -400,7 +448,7 @@ it('validates camera geometry before storing a revision', async () => {
   expect(response.status).toBe(400);
 });
 it('validates 3D markers and preserves their positions in historical ascents', async () => {
-  const payload = {
+  const payload = await presentation({
     name: '3D route',
     grade: 'V2',
     sector: 'Wall',
@@ -409,8 +457,11 @@ it('validates 3D markers and preserves their positions in historical ascents', a
     beta: 'Start with both hands',
     status: 'activa',
     holds: [],
-    holds3D: [{ id: 'hold-3d', position: [1, 2, 3], role: 'inicio' }],
-  };
+    holds3D: [
+      { id: 'hold-3d', position: [1, 2, 3], role: 'inicio' },
+      { id: 'finish-3d', position: [2, 4, 3], role: 'final' },
+    ],
+  });
   const post = (v: unknown, user = 'alice') =>
     handle(req('/api/routes', v), a, asUser(user));
   expect((await post(payload, 'visitor')).status).toBe(403);
@@ -448,14 +499,20 @@ it('validates 3D markers and preserves their positions in historical ascents', a
       )
     ).status,
   ).toBe(201);
+  const moved = await presentation({
+    ...payload,
+    holds3D: [
+      { ...payload.holds3D[0], position: [2, 3, 4] },
+      payload.holds3D[1],
+    ],
+  });
   const updated = await handle(
     new Request('https://local.test/api/routes/' + created.id, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ...payload,
+        ...moved,
         expectedRevision: 1,
-        holds3D: [{ ...payload.holds3D[0], position: [2, 3, 4] }],
       }),
     }),
     a,
@@ -467,7 +524,7 @@ it('validates 3D markers and preserves their positions in historical ascents', a
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        ...payload,
+        ...moved,
         expectedRevision: 2,
         holds3D: undefined,
       }),
@@ -1105,4 +1162,268 @@ it('a multi-line sale rolls back all stock when one line is unavailable', async 
       .bind(sale.paymentId)
       .first('status'),
   ).toBe('pending');
+});
+
+it('keeps incomplete drafts private and rejects publishing without the complete presentation', async () => {
+  const draft = {
+    name: '',
+    grade: '',
+    sector: '',
+    beta: '',
+    status: 'borrador',
+    holds: [],
+  };
+  const created = await handle(req('/api/routes', draft), a, asUser('alice'));
+  expect(created.status).toBe(201);
+  const d = await created.json();
+  const visitor = async () => {
+    throw new Error('An unauthenticated request must not read a draft');
+  };
+  expect(
+    (await handle(req(`/api/routes/${d.id}`), a, asUser('visitor'))).status,
+  ).toBe(403);
+  const pub = await (await handle(req('/api/routes'), a, visitor)).json();
+  expect(pub.routes.some((r: any) => r.id === d.id)).toBe(false);
+  expect(
+    (await handle(req('/api/routes?status=borrador'), a, asUser('visitor')))
+      .status,
+  ).toBe(403);
+  expect(
+    (
+      await handle(
+        req('/api/projects', { routeId: d.id, notes: '' }),
+        a,
+        asUser('visitor'),
+      )
+    ).status,
+  ).toBe(404);
+  const list = await (
+    await handle(req('/api/routes?status=borrador'), a, asUser('alice'))
+  ).json();
+  expect(list.routes.some((r: any) => r.id === d.id)).toBe(true);
+  expect(
+    (
+      await handle(
+        req('/api/entries', { routeId: d.id, attempts: 1, result: 'intento' }),
+        a,
+        asUser('visitor'),
+      )
+    ).status,
+  ).toBe(404);
+  const request = new Request(`https://local.test/api/routes/${d.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...draft,
+      name: 'Incomplete',
+      grade: 'V2',
+      sector: 'Wall',
+      sectionId: 'section-gym-a',
+      status: 'activa',
+      expectedRevision: 1,
+    }),
+  });
+  expect((await handle(request, a, asUser('alice'))).status).toBe(400);
+});
+it('idempotent concurrent activity requests preserve ownership and reject changed payloads and stale revisions', async () => {
+  const row = await a.DB.prepare(
+    "SELECT MAX(revision) AS n FROM route_revisions WHERE route_id='route-a'",
+  ).first<{ n: number }>();
+  const payload = {
+    routeId: 'route-a',
+    expectedRevision: row!.n,
+    attempts: 2,
+    result: 'intento',
+    notes: 'Private note',
+    requestId: 'request-test-1234',
+  };
+  const responses = await Promise.all([
+    handle(req('/api/entries', payload), a, asUser('retry-owner')),
+    handle(req('/api/entries', payload), a, asUser('retry-owner')),
+  ]);
+  expect(responses.map((r) => r.status)).toEqual([201, 201]);
+  const ids = await Promise.all(responses.map((r) => r.json()));
+  expect(ids[0].id).toBe(ids[1].id);
+  expect(
+    await a.DB.prepare(
+      "SELECT COUNT(*) AS n FROM entries WHERE user_id='retry-owner'",
+    ).first<number>('n'),
+  ).toBe(1);
+  expect(
+    (
+      await handle(
+        req('/api/entries', { ...payload, notes: 'Changed' }),
+        a,
+        asUser('retry-owner'),
+      )
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await handle(
+        req('/api/entries', {
+          ...payload,
+          requestId: 'stale-request',
+          expectedRevision: 0,
+        }),
+        a,
+        asUser('retry-owner'),
+      )
+    ).status,
+  ).toBe(409);
+  expect(
+    (await handle(req('/api/entries', payload), b, asUser('retry-owner')))
+      .status,
+  ).toBe(404);
+  const other = await handle(
+    req('/api/entries', payload),
+    a,
+    asUser('another-owner'),
+  );
+  expect(other.status).toBe(201);
+  expect((await other.json()).id).not.toBe(ids[0].id);
+  const undo = new Request('https://local.test/api/entries/' + ids[0].id, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion: 1 }),
+  });
+  expect((await handle(undo, a, asUser('retry-owner'))).status).toBe(200);
+  expect(
+    (await handle(req('/api/entries', payload), a, asUser('retry-owner')))
+      .status,
+  ).toBe(201);
+  expect(
+    await a.DB.prepare(
+      "SELECT COUNT(*) AS n FROM entries WHERE user_id='retry-owner' AND deleted_at IS NULL",
+    ).first<number>('n'),
+  ).toBe(0);
+});
+it('reports retain categories, idempotency and a private resolution response without changing routes', async () => {
+  const current = await a.DB.prepare(
+    "SELECT MAX(revision) AS n FROM route_revisions WHERE route_id='route-a'",
+  ).first<number>('n');
+  const payload = {
+    routeId: 'route-a',
+    expectedRevision: current,
+    description: 'Loose hold',
+    category: 'agarre_suelto',
+    requestId: 'report-retry-123',
+  };
+  const first = await (
+    await handle(req('/api/reports', payload), a, asUser('report-author'))
+  ).json();
+  const repeat = await (
+    await handle(req('/api/reports', payload), a, asUser('report-author'))
+  ).json();
+  expect(repeat.id).toBe(first.id);
+  expect(
+    (
+      await handle(
+        req(`/api/staff/reports/${first.id}/assign`, {}),
+        a,
+        asUser('visitor'),
+      )
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await handle(
+        req(`/api/staff/reports/${first.id}/assign`, {}),
+        a,
+        asUser('alice'),
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await handle(
+        req(`/api/staff/reports/${first.id}/resolve`, {}),
+        a,
+        asUser('alice'),
+      )
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await handle(
+        req(`/api/staff/reports/${first.id}/resolve`, {
+          resolution: 'Agarre fijado y revisado',
+        }),
+        a,
+        asUser('alice'),
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await handle(
+        req(`/api/staff/reports/${first.id}/resolve`, {
+          resolution: 'Overwrite',
+        }),
+        a,
+        asUser('alice'),
+      )
+    ).status,
+  ).toBe(409);
+  const author = await (
+    await handle(req('/api/reports'), a, asUser('report-author'))
+  ).json();
+  expect(author.reports[0].resolution).toBe('Agarre fijado y revisado');
+  expect(author.reports[0].category).toBe('agarre_suelto');
+  const other = await (
+    await handle(req('/api/reports'), a, asUser('other-reader'))
+  ).json();
+  expect(other.reports).toEqual([]);
+  expect(
+    await a.DB.prepare(
+      "SELECT MAX(revision) AS n FROM route_revisions WHERE route_id='route-a'",
+    ).first<number>('n'),
+  ).toBe(current);
+});
+it('aggregate events reject personal fields and unsupported event names', async () => {
+  expect(
+    (await handle(req('/api/ux-events', { event: 'detail_ready' }), a)).status,
+  ).toBe(200);
+  expect(
+    (
+      await handle(
+        req('/api/ux-events', { event: 'detail_ready', notes: 'private' }),
+        a,
+      )
+    ).status,
+  ).toBe(400);
+  expect(
+    (await handle(req('/api/ux-events', { event: 'unknown' }), a)).status,
+  ).toBe(400);
+  expect(
+    await a.DB.prepare(
+      "SELECT count FROM ux_events WHERE event='detail_ready'",
+    ).first<number>('count'),
+  ).toBe(1);
+});
+it('rejects a stale image when publishing a new camera or marker presentation', async () => {
+  const payload = await presentation({
+    name: 'Image integrity',
+    grade: 'V2',
+    sector: 'Wall',
+    sectionId: 'section-gym-a',
+    status: 'activa',
+    beta: '',
+    holds: [],
+  });
+  expect(
+    (
+      await handle(
+        req('/api/routes', {
+          ...payload,
+          camera: { ...payload.camera, yaw: 0.3 },
+        }),
+        a,
+        asUser('alice'),
+      )
+    ).status,
+  ).toBe(400);
+  expect(
+    (await handle(req('/api/routes', payload), a, asUser('alice'))).status,
+  ).toBe(201);
 });

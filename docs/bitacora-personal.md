@@ -25,7 +25,7 @@ Inicia sesión y abre **Bitácora**. **Añadir registro** abre el formulario par
 
 El resumen cuenta todos los registros que cumplen esos filtros. **Rutas distintas** cuenta IDs de ruta, no sus revisiones. **Registros con ascenso** cuenta declaraciones de ascenso, incluyendo repeticiones. **Intentos registrados** suma el campo de intentos de cada registro, incluidos los que terminaron en ascenso. No constituye control de visitas ni verificación deportiva.
 
-**Página anterior/siguiente** conserva el intervalo aplicado. **Exportar esta página (CSV)** descarga hasta 50 registros visibles, con fecha UTC, nombre y grado históricos, revisión, resultado, intentos y notas. No exporta otras páginas silenciosamente ni transmite datos a otro servicio. Las tarjetas personales mantienen la inclusión de nombre/intentos como opción explícita.
+**Página anterior/siguiente** conserva el intervalo aplicado. **Exportar esta página (CSV)** descarga hasta 50 registros visibles, con fecha UTC, nombre y grado históricos, revisión, resultado, intentos y notas. No exporta otras páginas silenciosamente ni transmite datos a otro servicio. Las tarjetas personales ofrecen nombre, fecha, intentos y notas como opciones independientes, desactivadas inicialmente, con vista previa exacta.
 
 ## Seguridad y persistencia
 
@@ -40,7 +40,7 @@ La migración 0006 agrega versión de registro, retiro lógico e historial inmut
 - [x] J8 — Corregir intentos, resultado y notas propios con versión esperada e historial.
 - [x] J9 — Retirar registros con confirmación, excluirlos de actividad vigente y consultar los retirados.
 - [ ] Consultar cámara/captura histórica desde un registro.
-- [ ] Incorporar vistas 3D en tarjetas compartibles; las tarjetas actuales usan el esquema 2D histórico cuando existe.
+- [x] Incorporar vistas 3D y respaldo anotado históricos en tarjetas compartibles, con vista previa y campos privados por defecto.
 - [ ] Validar flujo con usuarios y dispositivos físicos.
 
 La paginación actual conserva el límite de offset 10 000 del API; filtros más acotados permiten consultar intervalos menores. Si se agregan registros durante una consulta paginada, conviene aplicar los filtros nuevamente. No hay ranking de grados ni estadísticas financieras en esta entrega.

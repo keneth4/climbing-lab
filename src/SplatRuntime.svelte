@@ -3,6 +3,7 @@
   import { planeAxes } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
   import { onMount, tick } from 'svelte';
+  import { measure } from './pilot';
   import { supabase } from './auth';
   import type { Capture, Section, Fiducial } from './twin';
   import {
@@ -13,6 +14,9 @@
   import type { CameraView, Hold3D } from './domain';
   let {
     exportInfo,
+    visible = true,
+    onImage,
+    onExit,
     onRecording,
     mount,
     saved,
@@ -31,6 +35,9 @@
     holds3D = [],
   }: {
     exportInfo?: CardInfo;
+    visible?: boolean;
+    onImage?: (blob: Blob, view: CameraView) => void;
+    onExit?: () => void;
     onRecording?: (active: boolean) => void;
     mount?: (node: HTMLElement) => void;
     holds3D?: Hold3D[];
@@ -63,11 +70,16 @@
   let recordedCaptureId = '';
   let cancelButton = $state<HTMLButtonElement>();
   let canvas: HTMLCanvasElement;
+  let cardPreview = $state(''),
+    cardBlob = $state<Blob | undefined>();
   function exportPng() {
     if (!ready || loading || !exportInfo) return;
-    const card = renderCard(canvas, exportInfo);
+    const card = renderCard(controller?.annotated() || canvas, exportInfo);
     card.toBlob((blob) => {
-      if (blob) downloadBlob(blob, 'ruta-3d.png');
+      if (blob) {
+        cardBlob = blob;
+        cardPreview = card.toDataURL('image/png');
+      }
     }, 'image/png');
   }
   async function recordSweep() {
@@ -175,6 +187,7 @@
 
   let status = $state('Selecciona una captura para explorarla.');
   let showRouteHolds = $state(true);
+  let quality = $state('auto');
   let navigation = $state<'orbit' | 'pan'>('orbit');
   let picking = $state(false);
   let selectedPoint = $state<Point | undefined>();
@@ -185,6 +198,11 @@
   let controller:
     | {
         clear: () => void;
+        visibility: (visible: boolean) => void;
+        quality: (value: string) => void;
+        cancel: () => void;
+        retry: () => void;
+        annotated: () => HTMLCanvasElement;
         load: (file: File, managed?: Capture) => Promise<void>;
         loadManaged: (capture: Capture) => Promise<void>;
         section: (section?: Section) => void;
@@ -205,6 +223,16 @@
       }
     | undefined;
   $effect(() => {
+    if (initialized) controller?.visibility(visible);
+  });
+  $effect(() => {
+    exportInfo;
+    capture?.id;
+    routeId;
+    cardBlob = undefined;
+    cardPreview = '';
+  });
+  $effect(() => {
     if (!continuousPick) picking = false;
   });
   const cameras = new Map<string, CameraView>();
@@ -215,7 +243,10 @@
     if (!initialized || !controller) return;
     if (viewKey !== key) {
       const previous = controller.save();
-      if (viewKey) cameras.set(viewKey, previous);
+      if (viewKey) {
+        cameras.set(viewKey, previous);
+        if (cameras.size > 50) cameras.delete(cameras.keys().next().value!);
+      }
       const restored = cameras.get(key);
       if (restored) controller.apply(restored);
       else if (view) controller.apply(view);
@@ -446,9 +477,28 @@
           onPoint?.(raw, selectedPoint);
         };
         let drag: { x: number; y: number } | undefined;
+        const pointers = new Map<number, { x: number; y: number }>();
+        let pinchDistance = 0,
+          pinchCenter = { x: 0, y: 0 };
+        const gesture = () => {
+          const [a, b] = [...pointers.values()];
+          return {
+            distance: Math.hypot(a.x - b.x, a.y - b.y),
+            center: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+          };
+        };
         canvas.addEventListener(
           'pointerdown',
           (e) => {
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (pointers.size === 2) {
+              const g = gesture();
+              pinchDistance = g.distance;
+              pinchCenter = g.center;
+              drag = undefined;
+              canvas.setPointerCapture(e.pointerId);
+              return;
+            }
             if (picking) {
               choosePoint(e);
               return;
@@ -461,6 +511,17 @@
         canvas.addEventListener(
           'pointermove',
           (e) => {
+            if (!pointers.has(e.pointerId)) return;
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (pointers.size === 2) {
+              const g = gesture();
+              if (g.distance > 0 && pinchDistance > 0)
+                zoom(pinchDistance / g.distance);
+              move(g.center.x - pinchCenter.x, g.center.y - pinchCenter.y);
+              pinchDistance = g.distance;
+              pinchCenter = g.center;
+              return;
+            }
             if (!drag) return;
             const dx = e.clientX - drag.x,
               dy = e.clientY - drag.y;
@@ -475,10 +536,15 @@
           },
           { signal: abort.signal },
         );
-        canvas.addEventListener('pointerup', () => (drag = undefined), {
+        const endPointer = (e: PointerEvent) => {
+          pointers.delete(e.pointerId);
+          drag = undefined;
+          pinchDistance = 0;
+        };
+        canvas.addEventListener('pointerup', endPointer, {
           signal: abort.signal,
         });
-        canvas.addEventListener('pointercancel', () => (drag = undefined), {
+        canvas.addEventListener('pointercancel', endPointer, {
           signal: abort.signal,
         });
         canvas.addEventListener(
@@ -497,6 +563,7 @@
           'keydown',
           (e) => {
             if (e.key === 'Escape') {
+              if (!picking) onExit?.();
               picking = false;
               return;
             }
@@ -524,6 +591,69 @@
           { signal: abort.signal },
         );
         controller = {
+          quality: (value) => {
+            app.graphicsDevice.maxPixelRatio =
+              value === 'low'
+                ? 1
+                : value === 'high'
+                  ? Math.min(devicePixelRatio, 2)
+                  : Math.min(devicePixelRatio, 1.5);
+            const rect = canvas.getBoundingClientRect();
+            app.graphicsDevice.resizeCanvas(rect.width, rect.height);
+          },
+          visibility: (value) => {
+            app.autoRender = value && !document.hidden;
+            app.renderNextFrame = value;
+          },
+          cancel: () => {
+            downloadAbort?.abort();
+            generation++;
+            requestedId = '';
+            loading = false;
+            status = 'Carga cancelada. Puedes reintentar o seguir con imagen.';
+          },
+          retry: () => {
+            requestedId = '';
+            if (capture) void controller?.loadManaged(capture);
+          },
+          annotated: () => {
+            const out = document.createElement('canvas');
+            out.width = canvas.width;
+            out.height = canvas.height;
+            const c = out.getContext('2d')!;
+            c.drawImage(canvas, 0, 0);
+            for (const [i, h] of holds3D.entries()) {
+              const p = camera.camera!.worldToScreen(
+                new pc.Vec3(...h.position),
+              );
+              if (
+                p.z <= 0 ||
+                p.x < 0 ||
+                p.y < 0 ||
+                p.x > out.width ||
+                p.y > out.height
+              )
+                continue;
+              const label =
+                h.role === 'inicio'
+                  ? 'I'
+                  : h.role === 'final'
+                    ? 'F'
+                    : String(i + 1);
+              c.beginPath();
+              c.arc(p.x, p.y, 16, 0, Math.PI * 2);
+              c.fillStyle = '#172c3e';
+              c.fill();
+              c.lineWidth = 3;
+              c.strokeStyle = 'white';
+              c.stroke();
+              c.fillStyle = 'white';
+              c.font = 'bold 18px system-ui';
+              c.textAlign = 'center';
+              c.fillText(label, p.x, p.y + 6);
+            }
+            return out;
+          },
           clear: () => {
             if (!managedModel && !requestedId) return;
             generation++;
@@ -636,12 +766,13 @@
             }
             if (requestedId === source.id) return;
             requestedId = source.id;
+            const loadTicket = ++generation;
             downloadAbort?.abort();
             downloadAbort = new AbortController();
             if (entity) entity.enabled = false;
             ready = false;
             loading = true;
-            status = 'Cargando captura del gimnasio…';
+            status = `Descargando captura (${Math.round(source.size / 1024 / 1024)} MB)…`;
             try {
               const { data } = await supabase.auth.getSession();
               const response = await fetch(source.fileUrl, {
@@ -652,11 +783,23 @@
               });
               if (!response.ok) throw new Error('Captura no disponible.');
               const blob = await response.blob();
-              if (disposed || capture?.id !== source.id) return;
+              if (
+                disposed ||
+                capture?.id !== source.id ||
+                loadTicket !== generation
+              )
+                return;
+              status = 'Preparando escena 3D…';
               await controller?.load(new File([blob], source.filename), source);
             } catch {
-              if (!disposed && capture?.id === source.id)
+              if (
+                !disposed &&
+                capture?.id === source.id &&
+                loadTicket === generation
+              ) {
                 status = 'No se pudo cargar la captura del gimnasio.';
+                measure('scene_error');
+              }
             } finally {
               if (requestedId === source.id) requestedId = '';
               if (!disposed && capture?.id === source.id) loading = false;
@@ -675,7 +818,7 @@
             const ticket = ++generation;
             ready = false;
             loading = true;
-            status = 'Cargando captura…';
+            status = 'Preparando escena 3D…';
             const url = URL.createObjectURL(file);
             try {
               const next = await new Promise<InstanceType<typeof pc.Asset>>(
@@ -715,6 +858,9 @@
               app.root.addChild(entity);
               fileId = `${file.name}:${file.size}:${file.lastModified}`;
               frame();
+              const remembered = cameras.get(`${managed?.id || ''}:${routeId}`);
+              if (remembered) apply(remembered);
+              else if (saved) apply(saved);
               ready = true;
               if (managed) onReady?.(managed.id, managed.version);
               status = `${file.name} · ${Math.round(file.size / 1024 / 1024)} MB · ${managed ? 'captura del gimnasio' : 'vista local'}`;
@@ -722,6 +868,7 @@
               if (!disposed && ticket === generation)
                 status =
                   'No se pudo cargar. Usa un PLY de Gaussian Splatting o SOG válido.';
+              measure('scene_error');
             } finally {
               URL.revokeObjectURL(url);
               if (!disposed && ticket === generation) loading = false;
@@ -729,6 +876,7 @@
           },
         };
         app.on('update', () => {
+          if (!visible || document.hidden) return;
           if (
             grid &&
             Number.isFinite(grid.step) &&
@@ -821,6 +969,28 @@
                   : h.role === 'final'
                     ? new pc.Color(1, 0.5, 0.1)
                     : new pc.Color(0.2, 0.6, 1);
+              const right = camera.right.clone().mulScalar(r),
+                up = camera.up.clone().mulScalar(r);
+              const stroke = (
+                a: InstanceType<typeof pc.Vec3>,
+                b: InstanceType<typeof pc.Vec3>,
+              ) =>
+                app.drawLine(p.clone().add(a), p.clone().add(b), color, false);
+              if (h.role === 'inicio') {
+                stroke(up.clone().mulScalar(-1), up);
+                stroke(up.clone().add(right), up.clone().sub(right));
+                stroke(
+                  up.clone().mulScalar(-1).add(right),
+                  up.clone().mulScalar(-1).sub(right),
+                );
+              } else if (h.role === 'final') {
+                stroke(
+                  up.clone().mulScalar(-1).sub(right),
+                  up.clone().sub(right),
+                );
+                stroke(up.clone().sub(right), up.clone().add(right));
+                stroke(right.clone().mulScalar(-1), right);
+              }
               for (const offset of [
                 camera.right.clone().mulScalar(r),
                 camera.up.clone().mulScalar(r),
@@ -848,6 +1018,14 @@
               );
           }
         });
+        document.addEventListener(
+          'visibilitychange',
+          () => {
+            if (controller) controller.visibility(visible);
+          },
+          { signal: abort.signal },
+        );
+        app.autoRender = visible;
         app.start();
         update();
         initialized = true;
@@ -866,8 +1044,10 @@
         };
       })
       .catch(() => {
-        if (!disposed)
+        if (!disposed) {
           status = 'El visor 3D no está disponible en este navegador.';
+          measure('scene_error');
+        }
       });
     return () => {
       disposed = true;
@@ -883,7 +1063,20 @@
       No hay una captura publicada. El administrador debe subirla desde
       Capturas.
     </p>{:else}<p>{capture.filename} · Versión del gimnasio</p>{/if}
+  <label
+    >Calidad 3D<select
+      bind:value={quality}
+      onchange={() => controller?.quality(quality)}
+      ><option value="auto">Automática</option><option value="low">Baja</option
+      ><option value="high">Alta</option></select
+    ></label
+  >
   <p role="status">{status}</p>
+  {#if loading}<button onclick={() => controller?.cancel()}
+      >Cancelar carga 3D</button
+    >{:else if initialized && !ready && capture}<button
+      onclick={() => controller?.retry()}>Reintentar 3D</button
+    >{/if}
   <canvas
     class="workspace-canvas"
     bind:this={canvas}
@@ -892,7 +1085,8 @@
   ></canvas>
   <p>
     Arrastra para {navigation === 'orbit' ? 'orbitar' : 'desplazar'} · Rueda para
-    acercar · Flechas para desplazar · + / − para zoom
+    acercar · Dos dedos para desplazar y pinza para acercar · Flechas para desplazar
+    · + / − para zoom
   </p>
   <div class="actions">
     <button
@@ -927,6 +1121,15 @@
       type="button"
       disabled={!ready}
       onclick={() => controller?.frameAll()}>Ver límites completos</button
+    >
+    <button
+      type="button"
+      disabled={!ready}
+      onclick={() =>
+        controller?.apply(saved || capture?.initialCamera || undefined)}
+      >Ver ruta</button
+    ><button type="button" disabled={!ready} onclick={() => controller?.reset()}
+      >Ver gimnasio</button
     >
     {#if section}<button
         type="button"
@@ -988,6 +1191,16 @@
       }}>Descargar vista 3D</button
     >
   </div>
+  {#if onImage}<button
+      disabled={!ready || loading}
+      onclick={() => {
+        if (!controller) return;
+        const view = controller.save();
+        controller.annotated().toBlob((b) => {
+          if (b) onImage?.(b, view);
+        }, 'image/png');
+      }}>Usar vista anotada como respaldo</button
+    >{/if}
   {#if exportInfo}<details>
       <summary>Compartir visual 3D</summary>
       <p>
@@ -995,9 +1208,21 @@
         datos que hayas elegido.
       </p>
       <button disabled={!ready || loading || recording} onclick={exportPng}
-        >Descargar tarjeta 3D (PNG)</button
-      ><button disabled={!ready || loading || recording} onclick={recordSweep}
-        >Grabar barrido de 6 segundos</button
+        >Preparar tarjeta 3D (PNG)</button
+      >{#if cardPreview}<img
+          src={cardPreview}
+          alt="Vista previa exacta de la tarjeta 3D"
+        /><button
+          onclick={() => {
+            if (cardBlob) {
+              downloadBlob(cardBlob, 'ruta-3d.png');
+              measure('export_done');
+              mediaNotice = 'Descarga preparada.';
+            }
+          }}>Descargar tarjeta 3D (PNG)</button
+        >{/if}<button
+        disabled={!ready || loading || recording}
+        onclick={recordSweep}>Grabar barrido de 6 segundos</button
       >
     </details>{/if}
   {#if recording}<button

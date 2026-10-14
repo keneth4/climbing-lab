@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { api, supabase } from './auth';
   import SplatViewer from './SplatViewer.svelte';
   import type { Capture, Section, Fiducial } from './twin';
@@ -16,8 +16,14 @@
     routes,
     onPublished,
     currentCapture,
-  }: { routes: Route[]; onPublished: () => void; currentCapture?: Capture } =
-    $props();
+    owner,
+  }: {
+    routes: Route[];
+    onPublished: () => void;
+    currentCapture?: Capture;
+    owner: string;
+  } = $props();
+  const captureOwner = untrack(() => owner);
   let captures = $state<Capture[]>([]),
     sections = $state<Section[]>([]),
     fiducials = $state<Fiducial[]>([]),
@@ -216,7 +222,10 @@
         size: file.size,
       });
       const { data } = await supabase.auth.getSession();
-      if (!data.session) throw new Error('Inicia sesión.');
+      if (!data.session || data.session.user.id !== captureOwner)
+        throw new Error(
+          'La sesión cambió. Revisa la cuenta antes de subir la captura.',
+        );
       for (
         let offset = 0, n = 1;
         offset < file.size;
@@ -283,10 +292,68 @@
           ),
         ),
         reviewedAlignment,
+        routePresentations: presentations,
       });
       await refresh();
       onPublished();
       message = 'Captura publicada. Las rutas se actualizaron por sección.';
+    });
+  }
+  let reviewingRoute = $state('');
+  const reviewRoute = $derived(routes.find((r) => r.id === reviewingRoute));
+  let presentations = $state<
+    Record<string, { imageId: string; camera: CameraView }>
+  >({});
+  let reviewCamera = $state<CameraView | undefined>();
+  let rollbackReason = $state('');
+  $effect(() => {
+    selected?.version;
+    selected?.id;
+    presentations = {};
+    reviewingRoute = '';
+    reviewCamera = undefined;
+  });
+  async function prepareRouteImage(blob: Blob) {
+    if (!selected || !reviewRoute || !reviewCamera) return;
+    const capture = selected,
+      r = reviewRoute,
+      view = reviewCamera;
+    await operation(async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session || data.session.user.id !== captureOwner)
+        throw new Error(
+          'La sesión cambió. Revisa la cuenta antes de guardar el respaldo.',
+        );
+      const response = await fetch('/api/route-images', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${data.session?.access_token || ''}`,
+          'Content-Type': 'image/png',
+          'X-Capture-Id': capture.id,
+          'X-Presentation': JSON.stringify({
+            camera: view,
+            holds: r.holds3D || [],
+          }),
+        },
+        body: blob,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      presentations[r.id] = { camera: view, imageId: result.id };
+      message = 'Respaldo de ruta preparado para la captura nueva.';
+    });
+  }
+  async function rollback() {
+    if (!selected) return;
+    const id = selected.id;
+    await operation(async () => {
+      await api(`/captures/${id}/rollback`, {
+        reason: rollbackReason,
+        expectedGeneration: generation,
+      });
+      await refresh();
+      onPublished();
+      message = 'Captura anterior restaurada. El historial se conserva.';
     });
   }
 </script>
@@ -359,9 +426,20 @@
         ? polygonPreview
         : draftSection
       : sections.find((s) => s.id === previewSectionId)}
-    routeId="capture-preview"
-    staff={false}
-    onSave={() => {}}
+    routeId={reviewingRoute || 'capture-preview'}
+    saved={reviewCamera}
+    holds3D={reviewRoute?.holds3D || []}
+    staff={!!reviewRoute}
+    onSave={(view) => {
+      reviewCamera = view;
+      if (reviewingRoute) delete presentations[reviewingRoute];
+    }}
+    onImage={reviewRoute
+      ? (blob, view) => {
+          reviewCamera = view;
+          prepareRouteImage(blob);
+        }
+      : undefined}
   />
   {#if selected.initialCamera}<p>Cámara inicial del gimnasio guardada.</p>{/if}
   {#if picked}<section class="point-review">
@@ -700,11 +778,24 @@
         armado cambió</label
       >{/each}
     <h3>Rutas que se conservarán o importarán</h3>
-    {#each routes as r}<article>
+    {#each routes.filter((r) => r.status !== 'borrador') as r}<article>
         <strong
           >{r.name} · {sections.find((s) => s.id === r.sectionId)?.name ||
             'Pendiente de asignar sección'}</strong
-        >{#if !r.sectionId && !r.captureId}<p>
+        >{#if r.gradeScale}<button
+            onclick={() => {
+              reviewingRoute = r.id;
+              reviewCamera =
+                r.camera && selected
+                  ? { ...r.camera, captureId: selected.id }
+                  : undefined;
+            }}>Preparar cámara y respaldo de {r.name}</button
+          >
+          <p>
+            {presentations[r.id]
+              ? 'Respaldo nuevo preparado'
+              : 'Respaldo pendiente para la captura nueva'}
+          </p>{/if}{#if !r.sectionId && !r.captureId}<p>
             Esta ruta aún no está vinculada al clon. No bloquea la publicación y
             permanecerá intacta. Después de publicar, asígnale una sección desde
             Staff o Editar ruta.
@@ -739,6 +830,20 @@
         !reviewedAlignment ||
         readyStamp !== selected.id + ':' + selected.version}
       onclick={publish}>Publicar actualización completa</button
+    >
+  </section>{/if}
+{#if selected?.status === 'published' && selected.id !== activeId}<section>
+    <h2>Restaurar captura anterior</h2>
+    <p>
+      Se crearán revisiones nuevas desde esta captura. Las rutas sin
+      presentación compatible se retirarán. Se conservará la bitácora histórica.
+    </p>
+    <label
+      >Motivo de restauración<textarea
+        bind:value={rollbackReason}
+        maxlength="2000"></textarea></label
+    ><button disabled={busy || !rollbackReason.trim()} onclick={rollback}
+      >Confirmar restauración de captura anterior</button
     >
   </section>{/if}
 {#if message}<p role="status">{message}</p>{/if}

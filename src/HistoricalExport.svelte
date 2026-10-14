@@ -3,6 +3,7 @@
   import { api } from './auth';
   import SplatViewer from './SplatViewer.svelte';
   import type { Entry } from './domain';
+  import type { CardInfo } from './media';
   import type { Capture } from './twin';
   let {
     entry,
@@ -11,7 +12,7 @@
     gym = 'Gimnasio piloto',
   }: {
     entry: Entry;
-    personal?: { name: string; result: string; attempts: number };
+    personal?: CardInfo['personal'];
     onClose: () => void;
     gym?: string;
   } = $props();
@@ -58,7 +59,13 @@
       staff={false}
       saved={snapshot.camera}
       holds3D={snapshot.holds3D || []}
-      exportInfo={{ title: entry.routeName, grade: entry.grade, gym, personal }}
+      exportInfo={{
+        title: entry.routeName,
+        grade: entry.grade,
+        gym,
+        personal,
+        revision: entry.revision,
+      }}
       onSave={() => {}}
     />{/if}<button onclick={onClose}>Cerrar tarjeta histórica</button>
 </section>
