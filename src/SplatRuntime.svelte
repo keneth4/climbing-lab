@@ -33,6 +33,9 @@
     grid,
     continuousPick = false,
     holds3D = [],
+    previewPoint,
+    selectedHoldId,
+    onHoldSelect,
   }: {
     exportInfo?: CardInfo;
     visible?: boolean;
@@ -41,6 +44,9 @@
     onRecording?: (active: boolean) => void;
     mount?: (node: HTMLElement) => void;
     holds3D?: Hold3D[];
+    previewPoint?: Point;
+    selectedHoldId?: string;
+    onHoldSelect?: (id: string) => void;
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
@@ -70,6 +76,9 @@
   let recordedCaptureId = '';
   let cancelButton = $state<HTMLButtonElement>();
   let canvas: HTMLCanvasElement;
+  let screenMarkers = $state<
+    { id: string; label: string; x: number; y: number; role: string }[]
+  >([]);
   let cardPreview = $state(''),
     cardBlob = $state<Blob | undefined>();
   function exportPng() {
@@ -433,10 +442,9 @@
         const choosePoint = (e: PointerEvent) => {
           if (!asset || !entity) return;
           const rect = canvas.getBoundingClientRect();
-          const x =
-            ((e.clientX - rect.left) * app.graphicsDevice.width) / rect.width;
-          const y =
-            ((e.clientY - rect.top) * app.graphicsDevice.height) / rect.height;
+          // CameraComponent uses device.clientRect (CSS pixels), not framebuffer pixels.
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
           const far = camera.camera!.screenToWorld(x, y, 1);
           const worldOrigin = camera.getPosition();
           const inverse = entity.getWorldTransform().clone().invert();
@@ -450,6 +458,18 @@
             [direction.x, direction.y, direction.z],
             localTarget.distance(origin),
             (Math.tan((camera.camera!.fov * Math.PI) / 360) * 16) / rect.height,
+            section && onHoldSelect
+              ? (point) => {
+                  const aligned = entity!
+                    .getWorldTransform()
+                    .transformPoint(new pc.Vec3(...point));
+                  return [aligned.x, aligned.y, aligned.z].every(
+                    (n, i) =>
+                      n >= section!.bounds.min[i] &&
+                      n <= section!.bounds.max[i],
+                  );
+                }
+              : undefined,
           );
           if (!raw) {
             status =
@@ -626,6 +646,9 @@
               const p = camera.camera!.worldToScreen(
                 new pc.Vec3(...h.position),
               );
+              const rect = canvas.getBoundingClientRect();
+              p.x *= out.width / rect.width;
+              p.y *= out.height / rect.height;
               if (
                 p.z <= 0 ||
                 p.x < 0 ||
@@ -877,6 +900,57 @@
         };
         app.on('update', () => {
           if (!visible || document.hidden) return;
+          const rect = canvas.getBoundingClientRect();
+          const points = [
+            ...(showRouteHolds
+              ? holds3D.map((h, i) => ({
+                  ...h,
+                  label:
+                    h.role === 'inicio'
+                      ? `I${i + 1}`
+                      : h.role === 'final'
+                        ? `F${i + 1}`
+                        : String(i + 1),
+                }))
+              : []),
+            ...(previewPoint
+              ? [
+                  {
+                    id: 'candidate',
+                    position: previewPoint,
+                    role: 'candidate',
+                    label: '?',
+                  },
+                ]
+              : []),
+          ];
+          const projected = points.flatMap((h) => {
+            const p = camera.camera!.worldToScreen(new pc.Vec3(...h.position));
+            const x = p.x;
+            const y = p.y;
+            return p.z > 0 &&
+              x >= 22 &&
+              y >= 22 &&
+              x <= rect.width - 22 &&
+              y <= rect.height - 22
+              ? [
+                  {
+                    id: h.id,
+                    label: h.label,
+                    role: h.role,
+                    x: rect.left + x,
+                    y: rect.top + y,
+                  },
+                ]
+              : [];
+          });
+          if (JSON.stringify(projected) !== JSON.stringify(screenMarkers))
+            screenMarkers = projected;
+          if (onHoldSelect && !previewPoint && pickedWorld) {
+            pickedWorld = undefined;
+            pickedEntity?.destroy();
+            pickedEntity = undefined;
+          }
           if (
             grid &&
             Number.isFinite(grid.step) &&
@@ -1083,12 +1157,48 @@
     aria-label="Visor de Gaussian Splatting"
     tabindex="0"
   ></canvas>
+  {#if visible}
+    <div class="point-overlay" aria-label="Marcadores sobre el muro">
+      {#each screenMarkers as marker (marker.id)}
+        {#if marker.id === 'candidate'}
+          <span
+            role="img"
+            class="screen-marker candidate"
+            style:left={`${marker.x}px`}
+            style:top={`${marker.y}px`}
+            aria-label="Punto en preparación">?</span
+          >
+        {:else if onHoldSelect}
+          <button
+            type="button"
+            class="screen-marker"
+            class:active={selectedHoldId === marker.id}
+            data-role={marker.role}
+            style:left={`${marker.x}px`}
+            style:top={`${marker.y}px`}
+            aria-label={`Seleccionar agarre ${marker.label} · ${marker.role}`}
+            onclick={() => onHoldSelect?.(marker.id)}>{marker.label}</button
+          >
+        {:else}
+          <span
+            role="img"
+            class="screen-marker readonly"
+            data-role={marker.role}
+            style:left={`${marker.x}px`}
+            style:top={`${marker.y}px`}
+            aria-label={`Agarre ${marker.label} · ${marker.role}`}
+            >{marker.label}</span
+          >
+        {/if}
+      {/each}
+    </div>
+  {/if}
   <p>
     Arrastra para {navigation === 'orbit' ? 'orbitar' : 'desplazar'} · Rueda para
     acercar · Dos dedos para desplazar y pinza para acercar · Flechas para desplazar
     · + / − para zoom
   </p>
-  <div class="actions">
+  <div class="actions navigation-tools" aria-label="Herramientas del visor">
     <button
       type="button"
       disabled={!ready}
@@ -1104,41 +1214,52 @@
     <button
       type="button"
       disabled={!ready}
-      onclick={() => controller?.zoom(0.8)}>Acercar</button
+      aria-label="Acercar"
+      title="Acercar"
+      onclick={() => controller?.zoom(0.8)}>+</button
     >
     <button
       type="button"
       disabled={!ready}
-      onclick={() => controller?.zoom(1.25)}>Alejar</button
+      aria-label="Alejar"
+      title="Alejar"
+      onclick={() => controller?.zoom(1.25)}>−</button
     >
-    <button
-      type="button"
-      disabled={!ready}
-      onclick={() => controller?.framePrincipal()}
-      >Enfocar contenido principal</button
-    >
-    <button
-      type="button"
-      disabled={!ready}
-      onclick={() => controller?.frameAll()}>Ver límites completos</button
-    >
-    <button
-      type="button"
-      disabled={!ready}
-      onclick={() =>
-        controller?.apply(saved || capture?.initialCamera || undefined)}
-      >Ver ruta</button
-    ><button type="button" disabled={!ready} onclick={() => controller?.reset()}
-      >Ver gimnasio</button
-    >
-    {#if section}<button
-        type="button"
-        disabled={!ready}
-        onclick={() => {
-          const { min, max } = section.bounds;
-          controller?.focus(min.map((n, i) => (n + max[i]) / 2) as Point);
-        }}>Enfocar sección</button
-      >{/if}
+    <details class="view-options">
+      <summary>Encuadre y vistas</summary>
+      <div class="actions">
+        <button
+          type="button"
+          disabled={!ready}
+          onclick={() => controller?.framePrincipal()}
+          >Enfocar contenido principal</button
+        >
+        <button
+          type="button"
+          disabled={!ready}
+          onclick={() => controller?.frameAll()}>Ver límites completos</button
+        >
+        <button
+          type="button"
+          disabled={!ready}
+          onclick={() =>
+            controller?.apply(saved || capture?.initialCamera || undefined)}
+          >Ver ruta</button
+        ><button
+          type="button"
+          disabled={!ready}
+          onclick={() => controller?.reset()}>Ver gimnasio</button
+        >
+        {#if section}<button
+            type="button"
+            disabled={!ready}
+            onclick={() => {
+              const { min, max } = section.bounds;
+              controller?.focus(min.map((n, i) => (n + max[i]) / 2) as Point);
+            }}>Enfocar sección</button
+          >{/if}
+      </div>
+    </details>
     {#if onPoint}<button
         type="button"
         disabled={!ready}
@@ -1166,7 +1287,7 @@
       Haz clic o toca sobre la pared para seleccionar un centro gaussiano
       aproximado. Escape cancela.
     </p>{/if}
-  {#if selectedPoint}<p>
+  {#if selectedPoint && !onHoldSelect}<p>
       Punto aproximado del gimnasio: {selectedPoint
         .map((n) => n.toFixed(3))
         .join(', ')}. Confirma su posición antes de guardarlo.
@@ -1276,6 +1397,64 @@
     height: 360px;
     touch-action: none;
     background: #172c3e;
+  }
+  .point-overlay {
+    pointer-events: none;
+  }
+  .screen-marker {
+    position: fixed;
+    z-index: 8;
+    transform: translate(-50%, -50%);
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    border: 3px solid white;
+    border-radius: 50%;
+    background: #173e69;
+    color: white;
+    font-weight: 800;
+    box-shadow:
+      0 0 0 2px #152534,
+      0 2px 10px #0008;
+    pointer-events: auto;
+    display: grid;
+    place-items: center;
+  }
+  .screen-marker[data-role='inicio'] {
+    background: #12603b;
+  }
+  .screen-marker[data-role='final'] {
+    background: #984115;
+  }
+  .screen-marker.active,
+  .screen-marker.candidate {
+    outline: 4px solid #ffdf55;
+    outline-offset: 3px;
+  }
+  .screen-marker.readonly {
+    pointer-events: none;
+  }
+  .screen-marker.candidate {
+    background: #152534;
+    pointer-events: none;
+    border-style: dashed;
+  }
+  .navigation-tools {
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .view-options {
+    margin: 0;
+  }
+  .view-options summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+  }
+  .view-options[open] {
+    flex-basis: 100%;
   }
   p {
     font-size: 13px;

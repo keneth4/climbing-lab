@@ -396,17 +396,44 @@
           uploadImage(blob);
         }}
         {holds3D}
-        onPoint={(_, world) => (candidate = [...world])}
+        previewPoint={candidate}
+        selectedHoldId={adjustingHold}
+        onHoldSelect={(id) => {
+          adjustingHold = id;
+          requestAnimationFrame(() =>
+            document
+              .getElementById(`hold-${id}`)
+              ?.scrollIntoView({ block: 'nearest' }),
+          );
+        }}
+        onPoint={(_, world) => {
+          candidate = [...world];
+          requestAnimationFrame(() =>
+            document
+              .getElementById(`candidate-${initial?.id || 'new'}`)
+              ?.scrollIntoView({ block: 'nearest' }),
+          );
+        }}
       />
-      {#if candidate}<div>
+      {#if candidate}<div
+          id={`candidate-${initial?.id || 'new'}`}
+          class="candidate-panel"
+        >
           <h4>Confirmar agarre seleccionado</h4>
-          {#each ['X', 'Y', 'Z'] as axis, i}<label
-              >Posición del agarre {axis}<input
-                type="number"
-                step="any"
-                bind:value={candidate[i]}
-              /></label
-            >{/each}
+          <p role="status">
+            El marcador «?» muestra el punto en preparación. Elige su función y
+            confirma para añadirlo.
+          </p>
+          <details>
+            <summary>Ajuste preciso de coordenadas</summary>
+            {#each ['X', 'Y', 'Z'] as axis, i}<label
+                >Posición del agarre {axis}<input
+                  type="number"
+                  step="any"
+                  bind:value={candidate[i]}
+                /></label
+              >{/each}
+          </details>
           <label
             >Función del agarre<select bind:value={holdRole}
               ><option value="inicio">Inicio</option><option value="intermedio"
@@ -450,7 +477,10 @@
     >
   </details>
   <ol>
-    {#each holds3D as h, i}<li>
+    {#each holds3D as h, i}<li
+        id={`hold-${h.id}`}
+        class:selected={adjustingHold === h.id}
+      >
         Agarre {i + 1} · {h.role} · {h.position
           .map((n) => n.toFixed(3))
           .join(', ')}<button
@@ -567,6 +597,16 @@
 </section>
 
 <style>
+  .candidate-panel {
+    padding: 12px;
+    border: 2px solid var(--accent, #235987);
+    border-radius: 8px;
+    margin-block: 12px;
+  }
+  li.selected {
+    outline: 2px solid var(--accent, #235987);
+    outline-offset: 4px;
+  }
   .route-markers {
     border-top: 1px solid #d9dfe5;
     margin-top: 16px;

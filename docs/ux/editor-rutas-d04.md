@@ -21,3 +21,5 @@ El propietario suspendió la selección de agarres por falta de referencia visua
 Firefox nativo, demo real 5174, Crux local: modo de selección → punto provisional visible sobre el toque → confirmación local → marcador 1 → pulsación abre ajuste. Se retiró el marcador de verificación sin guardar la ruta ni declarar revisión humana. La ruta sigue en borrador.
 
 Tipos y pruebas de dominio cubren el rechazo de centros fuera de la sección. La comprobación visual en escritorio no sustituye teléfonos, lectores de pantalla, evaluación de rendimiento ni la revisión de dos ángulos. D04 privado entre cuentas continúa pendiente.
+
+Verificación final: tipos frontend, formato y build aprobados; 20 pruebas de dominio/frontend y 44 regresiones de navegador desktop/mobile aprobadas con código estable. La suite de navegador usa fixtures de autenticación y no se declara como recorrido privado real. Browser plugin ausente: interacción real en Firefox nativo mediante CUA; regresiones Playwright del plan existente. Se corrigió una regresión inicial que restringía también la selección administrativa; el filtro de sección se aplica exclusivamente al editor de rutas.

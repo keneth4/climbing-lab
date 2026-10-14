@@ -22,10 +22,13 @@ export function selectCenter(
   direction: Point,
   focusDepth: number,
   cone: number,
+  accepts?: (point: Point) => boolean,
 ): Point | undefined {
   let best = Infinity,
     selected: Point | undefined;
   for (let i = 0; i < centers.length; i += 3) {
+    if (accepts && !accepts([centers[i], centers[i + 1], centers[i + 2]]))
+      continue;
     const x = centers[i] - origin[0],
       y = centers[i + 1] - origin[1],
       z = centers[i + 2] - origin[2];
