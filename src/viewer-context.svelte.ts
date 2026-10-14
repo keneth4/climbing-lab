@@ -39,6 +39,8 @@ export class ViewerWorkspace {
         selectedHoldId: undefined,
         spatialMode: undefined,
         toolsDisabled: false,
+        editorStep: undefined,
+        focusRequest: 0,
         onReady: undefined,
         onExit: undefined,
         staff: false,

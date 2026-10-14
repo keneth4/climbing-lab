@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { renderCard, downloadBlob, type CardInfo } from './media';
   import { planeAxes } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
@@ -52,6 +53,8 @@
     onCancelTool,
     focusPoint,
     toolsDisabled = false,
+    editorStep,
+    focusRequest = 0,
   }: {
     exportInfo?: CardInfo;
     visible?: boolean;
@@ -68,6 +71,8 @@
     onCancelTool?: () => void;
     focusPoint?: Point;
     toolsDisabled?: boolean;
+    editorStep?: number;
+    focusRequest?: number;
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
@@ -87,6 +92,13 @@
     continuousPick?: boolean;
     onBounds?: (bounds: { min: Point; max: Point }) => void;
   } = $props();
+  $effect(() => {
+    const request = focusRequest;
+    if (request)
+      untrack(() => {
+        if (focusPoint?.every(Number.isFinite)) controller?.focus(focusPoint);
+      });
+  });
   function mountViewer(node: HTMLElement) {
     mount?.(node);
   }
@@ -1142,19 +1154,24 @@
 </script>
 
 <div class="splat-viewer" use:mountViewer>
-  <h3>Captura 3D del gimnasio</h3>
-  {#if !capture}<p>
-      No hay una captura publicada. El administrador debe subirla desde
-      Capturas.
-    </p>{:else}<p>{capture.filename} · Versión del gimnasio</p>{/if}
-  <label
-    >Calidad 3D<select
-      bind:value={quality}
-      onchange={() => controller?.quality(quality)}
-      ><option value="auto">Automática</option><option value="low">Baja</option
-      ><option value="high">Alta</option></select
-    ></label
-  >
+  <div hidden={!!editorStep && [1, 6].includes(editorStep)}>
+    <h3>Captura 3D del gimnasio</h3>
+    {#if !capture}<p>
+        No hay una captura publicada. El administrador debe subirla desde
+        Capturas.
+      </p>{:else}<p>{capture.filename} · Versión del gimnasio</p>{/if}
+    <details open={!editorStep}>
+      <summary>Calidad y opciones avanzadas</summary><label
+        >Calidad 3D<select
+          bind:value={quality}
+          onchange={() => controller?.quality(quality)}
+          ><option value="auto">Automática</option><option value="low"
+            >Baja</option
+          ><option value="high">Alta</option></select
+        ></label
+      >
+    </details>
+  </div>
   <p role="status">{status}</p>
   {#if loading}<button onclick={() => controller?.cancel()}
       >Cancelar carga 3D</button
@@ -1173,208 +1190,223 @@
       onSelect={onHoldSelect}
       disabled={recording || loading || toolsDisabled || preparing}
     />{/if}
-  <p>
-    Arrastra para {navigation === 'orbit' ? 'orbitar' : 'desplazar'} · Rueda para
-    acercar · Dos dedos para desplazar y pinza para acercar · Flechas para desplazar
-    · + / − para zoom
-  </p>
-  <div class="actions navigation-tools" aria-label="Herramientas del visor">
-    <button
-      type="button"
-      disabled={!ready}
-      aria-pressed={navigation === 'orbit'}
-      onclick={() => (navigation = 'orbit')}>Orbitar</button
-    >
-    <button
-      type="button"
-      disabled={!ready}
-      aria-pressed={navigation === 'pan'}
-      onclick={() => (navigation = 'pan')}>Desplazar</button
-    >
-    <button
-      type="button"
-      disabled={!ready}
-      aria-label="Acercar"
-      title="Acercar"
-      onclick={() => controller?.zoom(0.8)}>+</button
-    >
-    <button
-      type="button"
-      disabled={!ready}
-      aria-label="Alejar"
-      title="Alejar"
-      onclick={() => controller?.zoom(1.25)}>−</button
-    >
-    <details class="view-options">
-      <summary>Encuadre y vistas</summary>
-      <div class="actions">
-        <button
-          type="button"
-          disabled={!ready}
-          onclick={() => controller?.framePrincipal()}
-          >Enfocar contenido principal</button
-        >
-        <button
-          type="button"
-          disabled={!ready}
-          onclick={() => controller?.frameAll()}>Ver límites completos</button
-        >
-        <button
-          type="button"
-          disabled={!ready}
-          onclick={() =>
-            controller?.apply(saved || capture?.initialCamera || undefined)}
-          >Ver ruta</button
-        ><button
-          type="button"
-          disabled={!ready}
-          onclick={() => controller?.reset()}>Ver gimnasio</button
-        >
-        {#if section}<button
+  <div hidden={!!editorStep && [1, 6].includes(editorStep)}>
+    <p>
+      Arrastra para {navigation === 'orbit' ? 'orbitar' : 'desplazar'} · Rueda para
+      acercar · Dos dedos para desplazar y pinza para acercar · Flechas para desplazar
+      · + / − para zoom
+    </p>
+    <div class="actions navigation-tools" aria-label="Herramientas del visor">
+      <button
+        type="button"
+        disabled={!ready}
+        aria-pressed={navigation === 'orbit'}
+        onclick={() => (navigation = 'orbit')}>Orbitar</button
+      >
+      <button
+        type="button"
+        disabled={!ready}
+        aria-pressed={navigation === 'pan'}
+        onclick={() => (navigation = 'pan')}>Desplazar</button
+      >
+      <button
+        type="button"
+        disabled={!ready}
+        aria-label="Acercar"
+        title="Acercar"
+        onclick={() => controller?.zoom(0.8)}>+</button
+      >
+      <button
+        type="button"
+        disabled={!ready}
+        aria-label="Alejar"
+        title="Alejar"
+        onclick={() => controller?.zoom(1.25)}>−</button
+      >
+      <details class="view-options">
+        <summary>Encuadre y vistas</summary>
+        <div class="actions">
+          <button
             type="button"
             disabled={!ready}
-            onclick={() => {
-              const { min, max } = section.bounds;
-              controller?.focus(min.map((n, i) => (n + max[i]) / 2) as Point);
-            }}>Enfocar sección</button
-          >{/if}
-      </div>
-    </details>
-    {#if onPoint}<button
-        type="button"
-        disabled={!ready || toolsDisabled || (preparing && !picking)}
-        aria-pressed={picking}
-        onclick={() => {
-          if (onModeChange) onModeChange(picking ? 'explore' : 'pick-hold');
-          else picking = !picking;
-        }}>{picking ? 'Cancelar selección' : 'Seleccionar punto'}</button
-      >{/if}
-    {#if onInitialSave}<button
-        type="button"
-        disabled={!ready || capture?.status !== 'draft'}
-        onclick={() => {
-          if (controller) onInitialSave(controller.save());
-        }}>Guardar cámara inicial del gimnasio</button
-      >{/if}
-  </div>
-  {#if focusPoint}<button
-      type="button"
-      disabled={!ready || toolsDisabled}
-      onclick={() => {
-        if (focusPoint?.every(Number.isFinite)) {
-          controller?.focus(focusPoint);
-          controller?.zoom(0.6);
-        }
-      }}>Acercar al punto seleccionado</button
-    >{/if}
-  {#if holds3D.length || onHoldSelect}<label
-      >Etiquetas de agarres<select bind:value={labelVisibility}
-        ><option value="all">Todos</option><option value="ends"
-          >Solo inicio y final</option
-        ><option value="hidden">Ocultar etiquetas</option></select
-      ></label
-    >
-    <p>
-      Selección aproximada: las anclas pueden verse a través del muro. Comprueba
-      la profundidad desde otro ángulo. Las etiquetas sin espacio se seleccionan
-      desde la lista.
-    </p>{/if}
-  {#if picking}<p role="status">
-      Haz clic o toca sobre la pared para seleccionar un centro gaussiano
-      aproximado. Escape cancela.
-    </p>{/if}
-  {#if selectedPoint && !onHoldSelect}<p>
-      Punto aproximado del gimnasio: {selectedPoint
-        .map((n) => n.toFixed(3))
-        .join(', ')}. Confirma su posición antes de guardarlo.
-    </p>{/if}
-  <div class="actions">
-    <button type="button" disabled={!ready} onclick={() => controller?.reset()}
-      >Vista general</button
-    >{#if staff}<button
-        type="button"
-        disabled={!ready || preparing || toolsDisabled}
-        onclick={() => {
-          if (controller) onSave(controller.save());
-        }}>Guardar cámara para esta ruta</button
-      >{/if}<button
-      type="button"
-      disabled={!ready}
-      onclick={() => {
-        const a = document.createElement('a');
-        a.href = canvas.toDataURL('image/png');
-        a.download = 'captura-3d.png';
-        a.click();
-      }}>Descargar vista 3D</button
-    >
-  </div>
-  {#if onImage}<button
-      disabled={!ready || loading || preparing || toolsDisabled}
-      onclick={() => {
-        if (!controller) return;
-        const view = controller.save();
-        controller.annotated().toBlob((b) => {
-          if (b) onImage?.(b, view);
-        }, 'image/png');
-      }}>Usar vista anotada como respaldo</button
-    >{/if}
-  {#if exportInfo}<details>
-      <summary>Compartir visual 3D</summary>
-      <p>
-        Incluye nombre, grado y atribución. La tarjeta personal sólo incluye los
-        datos que hayas elegido.
-      </p>
-      <button
-        disabled={!ready || loading || recording || preparing || toolsDisabled}
-        onclick={exportPng}>Preparar tarjeta 3D (PNG)</button
-      >{#if cardPreview}<img
-          src={cardPreview}
-          alt="Vista previa exacta de la tarjeta 3D"
-        /><button
+            onclick={() => controller?.framePrincipal()}
+            >Enfocar contenido principal</button
+          >
+          <button
+            type="button"
+            disabled={!ready}
+            onclick={() => controller?.frameAll()}>Ver límites completos</button
+          >
+          <button
+            type="button"
+            disabled={!ready}
+            onclick={() =>
+              controller?.apply(saved || capture?.initialCamera || undefined)}
+            >Ver ruta</button
+          ><button
+            type="button"
+            disabled={!ready}
+            onclick={() => controller?.reset()}>Ver gimnasio</button
+          >
+          {#if section}<button
+              type="button"
+              disabled={!ready}
+              onclick={() => {
+                const { min, max } = section.bounds;
+                controller?.focus(min.map((n, i) => (n + max[i]) / 2) as Point);
+              }}>Enfocar sección</button
+            >{/if}
+        </div>
+      </details>
+      {#if onPoint && (!editorStep || editorStep === 3)}<button
+          type="button"
+          disabled={!ready || toolsDisabled || (preparing && !picking)}
+          aria-pressed={picking}
           onclick={() => {
-            if (cardBlob) {
-              downloadBlob(cardBlob, 'ruta-3d.png');
-              measure('export_done');
-              mediaNotice = 'Descarga preparada.';
-            }
-          }}>Descargar tarjeta 3D (PNG)</button
-        >{/if}<button
-        disabled={!ready || loading || recording || preparing || toolsDisabled}
-        onclick={recordSweep}>Grabar barrido de 6 segundos</button
+            if (onModeChange) onModeChange(picking ? 'explore' : 'pick-hold');
+            else picking = !picking;
+          }}>{picking ? 'Cancelar selección' : 'Seleccionar punto'}</button
+        >{/if}
+      {#if onInitialSave}<button
+          type="button"
+          disabled={!ready || capture?.status !== 'draft'}
+          onclick={() => {
+            if (controller) onInitialSave(controller.save());
+          }}>Guardar cámara inicial del gimnasio</button
+        >{/if}
+    </div>
+    {#if focusPoint}<button
+        type="button"
+        disabled={!ready || toolsDisabled}
+        onclick={() => {
+          if (focusPoint?.every(Number.isFinite)) {
+            controller?.focus(focusPoint);
+            controller?.zoom(0.6);
+          }
+        }}>Acercar al punto seleccionado</button
+      >{/if}
+    {#if holds3D.length || onHoldSelect}<label
+        >Etiquetas de agarres<select bind:value={labelVisibility}
+          ><option value="all">Todos</option><option value="ends"
+            >Solo inicio y final</option
+          ><option value="hidden">Ocultar etiquetas</option></select
+        ></label
       >
-    </details>{/if}
-  {#if recording}<button
-      class="cancel-recording"
-      bind:this={cancelButton}
-      onkeydown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          cancelRecording?.();
-        } else if (e.key === 'Tab') {
-          e.preventDefault();
-          cancelButton?.focus();
-        }
-      }}
-      data-recording-control="true"
-      onclick={() => cancelRecording?.()}>Cancelar video</button
-    >
-    <p role="status">
-      Grabando barrido… Las herramientas están bloqueadas.
-    </p>{/if}
-  {#if mediaError}<p role="alert">{mediaError}</p>{/if}{#if mediaNotice}<p
-      role="status"
-    >
-      {mediaNotice}
-    </p>{/if}
-  {#if saved}<p>Cámara de ruta guardada para esta captura.</p>{/if}
-  <p>
-    La captura completa permanece intacta. El encuadre principal usa una
-    estimación del contenido central; puedes revisar todos los límites. SPZv4 y
-    LOD por ruta están pendientes.
-  </p>
+      <p>
+        Selección aproximada: las anclas pueden verse a través del muro.
+        Comprueba la profundidad desde otro ángulo. Las etiquetas sin espacio se
+        seleccionan desde la lista.
+      </p>{/if}
+    {#if picking}<p role="status">
+        Haz clic o toca sobre la pared para seleccionar un centro gaussiano
+        aproximado. Escape cancela.
+      </p>{/if}
+    {#if selectedPoint && !onHoldSelect}<p>
+        Punto aproximado del gimnasio: {selectedPoint
+          .map((n) => n.toFixed(3))
+          .join(', ')}. Confirma su posición antes de guardarlo.
+      </p>{/if}
+    <div class="actions">
+      <button
+        type="button"
+        disabled={!ready}
+        onclick={() => controller?.reset()}>Vista general</button
+      >{#if staff && (!editorStep || editorStep === 2)}<button
+          type="button"
+          disabled={!ready || preparing || toolsDisabled}
+          onclick={() => {
+            if (controller) onSave(controller.save());
+          }}>Guardar cámara para esta ruta</button
+        >{/if}<button
+        type="button"
+        disabled={!ready}
+        onclick={() => {
+          const a = document.createElement('a');
+          a.href = canvas.toDataURL('image/png');
+          a.download = 'captura-3d.png';
+          a.click();
+        }}>Descargar vista 3D</button
+      >
+    </div>
+    {#if onImage && (!editorStep || editorStep === 5)}<button
+        disabled={!ready || loading || preparing || toolsDisabled}
+        onclick={() => {
+          if (!controller) return;
+          const view = controller.save();
+          controller.annotated().toBlob((b) => {
+            if (b) onImage?.(b, view);
+          }, 'image/png');
+        }}>Usar vista anotada como respaldo</button
+      >{/if}
+    {#if exportInfo}<details>
+        <summary>Compartir visual 3D</summary>
+        <p>
+          Incluye nombre, grado y atribución. La tarjeta personal sólo incluye
+          los datos que hayas elegido.
+        </p>
+        <button
+          disabled={!ready ||
+            loading ||
+            recording ||
+            preparing ||
+            toolsDisabled}
+          onclick={exportPng}>Preparar tarjeta 3D (PNG)</button
+        >{#if cardPreview}<img
+            src={cardPreview}
+            alt="Vista previa exacta de la tarjeta 3D"
+          /><button
+            onclick={() => {
+              if (cardBlob) {
+                downloadBlob(cardBlob, 'ruta-3d.png');
+                measure('export_done');
+                mediaNotice = 'Descarga preparada.';
+              }
+            }}>Descargar tarjeta 3D (PNG)</button
+          >{/if}<button
+          disabled={!ready ||
+            loading ||
+            recording ||
+            preparing ||
+            toolsDisabled}
+          onclick={recordSweep}>Grabar barrido de 6 segundos</button
+        >
+      </details>{/if}
+    {#if recording}<button
+        class="cancel-recording"
+        bind:this={cancelButton}
+        onkeydown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelRecording?.();
+          } else if (e.key === 'Tab') {
+            e.preventDefault();
+            cancelButton?.focus();
+          }
+        }}
+        data-recording-control="true"
+        onclick={() => cancelRecording?.()}>Cancelar video</button
+      >
+      <p role="status">
+        Grabando barrido… Las herramientas están bloqueadas.
+      </p>{/if}
+    {#if mediaError}<p role="alert">{mediaError}</p>{/if}{#if mediaNotice}<p
+        role="status"
+      >
+        {mediaNotice}
+      </p>{/if}
+    {#if saved}<p>Cámara de ruta guardada para esta captura.</p>{/if}
+    <p hidden={!!editorStep}>
+      La captura completa permanece intacta. El encuadre principal usa una
+      estimación del contenido central; puedes revisar todos los límites. SPZv4
+      y LOD por ruta están pendientes.
+    </p>
+  </div>
 </div>
 
 <style>
+  [hidden] {
+    display: none !important;
+  }
   .cancel-recording {
     position: fixed;
     top: calc(var(--workspace-top) + 55px);

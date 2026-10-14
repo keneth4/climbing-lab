@@ -15,7 +15,7 @@ export type EditorDraft = Partial<
     | 'imageId'
     | 'markersVerified'
   >
-> & { changeReason?: string };
+> & { changeReason?: string; basedOnRevision?: number };
 export const normalize = (value: string) =>
   value
     .normalize('NFD')

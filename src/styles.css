@@ -279,7 +279,7 @@ nav {
 /* One spatial work area shared by catalog and capture/route preparation. */
 :root {
   --workspace-top: 175px;
-  --tools-width: min(440px, 42vw);
+  --tools-width: min(440px, calc(var(--viewport-width, 100vw) * 0.42));
 }
 header {
   padding: 10px 20px;
@@ -304,8 +304,10 @@ nav {
   left: 0;
   right: var(--scene-right);
   bottom: 0;
-  width: calc(100vw - var(--scene-right)) !important;
-  height: calc(100dvh - var(--workspace-top)) !important;
+  width: calc(var(--viewport-width, 100vw) - var(--scene-right)) !important;
+  height: calc(
+    var(--viewport-height, 100dvh) - var(--workspace-top)
+  ) !important;
   margin: 0;
   background: #172c3e;
 }
@@ -350,7 +352,7 @@ nav {
 @media (max-width: 750px) {
   :root {
     --workspace-top: 215px;
-    --tools-width: 100vw;
+    --tools-width: var(--viewport-width, 100vw);
   }
   header {
     padding: 8px 12px;
@@ -378,20 +380,27 @@ nav {
   .scene-backdrop,
   .workspace-canvas {
     right: 0;
-    width: 100vw !important;
-    height: calc((100dvh - var(--workspace-top)) * 0.48) !important;
+    width: var(--viewport-width, 100vw) !important;
+    height: calc(
+      (var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.48
+    ) !important;
     bottom: auto;
   }
   .tools-panel {
-    top: calc(var(--workspace-top) + (100dvh - var(--workspace-top)) * 0.48);
-    width: 100%;
+    top: calc(
+      var(--workspace-top) +
+        (var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.48
+    );
+    width: var(--viewport-width, 100vw);
     padding: 12px;
     border-left: 0;
     border-top: 1px solid #aab7c2;
   }
   .tools-closed .workspace-canvas,
   .tools-closed .scene-backdrop {
-    height: calc(100dvh - var(--workspace-top)) !important;
+    height: calc(
+      var(--viewport-height, 100dvh) - var(--workspace-top)
+    ) !important;
   }
 }
 
@@ -411,7 +420,10 @@ nav {
 }
 @media (max-width: 750px) {
   .viewer-home {
-    top: calc(var(--workspace-top) + (100dvh - var(--workspace-top)) * 0.48);
+    top: calc(
+      var(--workspace-top) +
+        (var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.48
+    );
     width: 100%;
   }
 }
@@ -815,4 +827,41 @@ header > div:last-child {
   .site-header > div {
     width: 100%;
   }
+}
+
+/* UX-P1A changes inspector height without resizing or recreating the scene. */
+@media (max-width: 750px) {
+  .workspace:not(.reading):has(.tools-panel[data-editor-sheet])
+    .workspace-canvas {
+    height: var(
+      --editor-scene-height,
+      calc((var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.48)
+    ) !important;
+  }
+  .tools-panel[data-editor-sheet] {
+    bottom: var(--keyboard-inset, 0px);
+    z-index: 2;
+  }
+  .tools-panel[data-editor-sheet='compact'] {
+    top: calc(
+      var(--workspace-top) +
+        (var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.48
+    );
+  }
+  .tools-panel[data-editor-sheet='medium'] {
+    top: calc(
+      var(--workspace-top) +
+        (var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.38
+    );
+  }
+  .tools-panel[data-editor-sheet='expanded'] {
+    top: calc(
+      var(--workspace-top) +
+        (var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.28
+    );
+  }
+}
+
+body {
+  width: var(--viewport-width, 100%);
 }
