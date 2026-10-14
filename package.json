@@ -28,7 +28,11 @@
     "pilot:migrate": "node scripts/pilot.mjs migrate",
     "pilot:deploy": "node scripts/pilot.mjs deploy",
     "pilot:backup": "node scripts/pilot.mjs backup",
-    "pilot:prepare-restore": "node scripts/restore-sql.mjs"
+    "pilot:prepare-restore": "node scripts/restore-sql.mjs",
+    "demo:setup": "node scripts/demo.mjs setup",
+    "demo:run": "node scripts/demo.mjs run",
+    "demo:check": "node scripts/demo.mjs check",
+    "demo:reset": "node scripts/demo.mjs reset"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",

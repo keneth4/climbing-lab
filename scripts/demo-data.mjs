@@ -7,7 +7,7 @@ export const manifest = JSON.parse(
 );
 export const quote = (value) => "'" + String(value).replaceAll("'", "''") + "'";
 export function seedSql() {
-  const statements = ['BEGIN TRANSACTION;'];
+  const statements = [];
   for (const [index, r] of manifest.routes.entries()) {
     const snapshot = {
       ...r,
@@ -28,7 +28,7 @@ export function seedSql() {
       `INSERT INTO route_revisions(route_id,revision,snapshot) SELECT ${quote(r.id)},1,${quote(JSON.stringify(snapshot))} WHERE NOT EXISTS (SELECT 1 FROM route_revisions WHERE route_id=${quote(r.id)});`,
     );
   }
-  statements.push('COMMIT;');
+
   return statements.join('\n');
 }
 export function poster(route) {
