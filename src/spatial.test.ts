@@ -35,3 +35,12 @@ it('rejects background centers outside the selected section instead of guessing 
     ),
   ).toBeUndefined();
 });
+
+it('rejects nonfinite depth and invalid picking cones without guessing a center', () => {
+  const centers = new Float32Array([0, 0, 5]);
+  for (const depth of [NaN, Infinity, 0, -1])
+    expect(
+      selectCenter(centers, [0, 0, 0], [0, 0, 1], depth, 0.02),
+    ).toBeUndefined();
+  expect(selectCenter(centers, [0, 0, 0], [0, 0, 1], 5, NaN)).toBeUndefined();
+});

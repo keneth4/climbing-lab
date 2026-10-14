@@ -126,7 +126,7 @@ export function drawMarkerLayout(
       c.stroke();
       c.fillStyle = markerColor(m.role);
       c.beginPath();
-      c.roundRect(p.x - 14, p.y - 12, 28, 24, 7);
+      c.roundRect(p.x - 13, p.y - 11, 26, 22, 6);
       c.fill();
       c.lineWidth = 2;
       c.strokeStyle = m.active ? '#ffdf55' : '#fff';

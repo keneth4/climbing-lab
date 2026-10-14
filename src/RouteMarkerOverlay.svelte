@@ -7,7 +7,7 @@
     disabled = false,
   }: {
     markers: MarkerLayout[];
-    viewport: Rect;
+    viewport: Rect & { zoom?: number };
     onSelect?: (id: string) => void;
     disabled?: boolean;
   } = $props();
@@ -16,6 +16,7 @@
 <div
   class="route-marker-overlay"
   aria-label="Marcadores sobre el muro"
+  style:zoom={1 / (viewport.zoom || 1)}
   style:left={`${viewport.x}px`}
   style:top={`${viewport.y}px`}
   style:width={`${viewport.width}px`}
@@ -118,6 +119,9 @@
   }
   button {
     pointer-events: auto;
+  }
+  button:disabled {
+    pointer-events: none;
   }
   button:hover {
     background: transparent;

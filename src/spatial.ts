@@ -24,6 +24,12 @@ export function selectCenter(
   cone: number,
   accepts?: (point: Point) => boolean,
 ): Point | undefined {
+  if (
+    ![...origin, ...direction, focusDepth, cone].every(Number.isFinite) ||
+    focusDepth <= 0 ||
+    cone <= 0
+  )
+    return;
   let best = Infinity,
     selected: Point | undefined;
   for (let i = 0; i < centers.length; i += 3) {

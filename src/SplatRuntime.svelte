@@ -3,6 +3,7 @@
   import { planeAxes } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
   import RouteMarkerOverlay from './RouteMarkerOverlay.svelte';
+  import type { SpatialMode } from './route-editing';
   import {
     layoutMarkers,
     drawMarkerLayout,
@@ -46,6 +47,11 @@
     previewPoint,
     selectedHoldId,
     onHoldSelect,
+    spatialMode,
+    onModeChange,
+    onCancelTool,
+    focusPoint,
+    toolsDisabled = false,
   }: {
     exportInfo?: CardInfo;
     visible?: boolean;
@@ -57,6 +63,11 @@
     previewPoint?: Point;
     selectedHoldId?: string;
     onHoldSelect?: (id: string) => void;
+    spatialMode?: SpatialMode;
+    onModeChange?: (mode: SpatialMode) => void;
+    onCancelTool?: () => void;
+    focusPoint?: Point;
+    toolsDisabled?: boolean;
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
@@ -87,7 +98,12 @@
   let cancelButton = $state<HTMLButtonElement>();
   let canvas: HTMLCanvasElement;
   let screenMarkers = $state<MarkerLayout[]>([]);
-  let markerViewport = $state<Rect>({ x: 0, y: 0, width: 0, height: 0 });
+  let markerViewport = $state<Rect & { zoom?: number }>({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   let cardPreview = $state(''),
     cardBlob = $state<Blob | undefined>();
   function exportPng() {
@@ -209,6 +225,13 @@
   let navigation = $state<'orbit' | 'pan'>('orbit');
   let picking = $state(false);
   let selectedPoint = $state<Point | undefined>();
+  const preparing = $derived(
+    spatialMode !== undefined &&
+      !['explore', 'review-route'].includes(spatialMode),
+  );
+  $effect(() => {
+    if (spatialMode !== undefined) picking = spatialMode === 'pick-hold';
+  });
   let initialized = $state(false);
   let ready = $state(false);
   let loading = $state(false);
@@ -251,7 +274,7 @@
     cardPreview = '';
   });
   $effect(() => {
-    if (!continuousPick) picking = false;
+    if (!continuousPick && spatialMode === undefined) picking = false;
   });
   const cameras = new Map<string, CameraView>();
   let viewKey = '';
@@ -489,7 +512,9 @@
           );
           if (!raw) {
             status =
-              'No se encontró un punto cerca del cursor. Acércate y vuelve a seleccionar.';
+              onHoldSelect && section
+                ? 'No se encontró un centro gaussiano dentro de esta sección. Acerca el muro, cambia de vista e intenta de nuevo.'
+                : 'No se encontró un punto cerca del cursor. Acércate y vuelve a seleccionar.';
             return;
           }
           const world = entity
@@ -601,6 +626,13 @@
           'keydown',
           (e) => {
             if (e.key === 'Escape') {
+              if (onCancelTool && preparing) {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancelTool();
+                picking = false;
+                return;
+              }
               if (!picking) onExit?.();
               picking = false;
               return;
@@ -960,6 +992,7 @@
             y: rect.top,
             width: rect.width,
             height: rect.height,
+            zoom: canvas.offsetWidth > 0 ? rect.width / canvas.offsetWidth : 1,
           };
           if (JSON.stringify(viewport) !== JSON.stringify(markerViewport))
             markerViewport = viewport;
@@ -1138,7 +1171,7 @@
       markers={screenMarkers}
       viewport={markerViewport}
       onSelect={onHoldSelect}
-      disabled={recording || loading}
+      disabled={recording || loading || toolsDisabled || preparing}
     />{/if}
   <p>
     Arrastra para {navigation === 'orbit' ? 'orbitar' : 'desplazar'} · Rueda para
@@ -1209,10 +1242,12 @@
     </details>
     {#if onPoint}<button
         type="button"
-        disabled={!ready}
+        disabled={!ready || toolsDisabled || (preparing && !picking)}
         aria-pressed={picking}
-        onclick={() => (picking = !picking)}
-        >{picking ? 'Cancelar selección' : 'Seleccionar punto'}</button
+        onclick={() => {
+          if (onModeChange) onModeChange(picking ? 'explore' : 'pick-hold');
+          else picking = !picking;
+        }}>{picking ? 'Cancelar selección' : 'Seleccionar punto'}</button
       >{/if}
     {#if onInitialSave}<button
         type="button"
@@ -1222,6 +1257,16 @@
         }}>Guardar cámara inicial del gimnasio</button
       >{/if}
   </div>
+  {#if focusPoint}<button
+      type="button"
+      disabled={!ready || toolsDisabled}
+      onclick={() => {
+        if (focusPoint?.every(Number.isFinite)) {
+          controller?.focus(focusPoint);
+          controller?.zoom(0.6);
+        }
+      }}>Acercar al punto seleccionado</button
+    >{/if}
   {#if holds3D.length || onHoldSelect}<label
       >Etiquetas de agarres<select bind:value={labelVisibility}
         ><option value="all">Todos</option><option value="ends"
@@ -1248,7 +1293,7 @@
       >Vista general</button
     >{#if staff}<button
         type="button"
-        disabled={!ready}
+        disabled={!ready || preparing || toolsDisabled}
         onclick={() => {
           if (controller) onSave(controller.save());
         }}>Guardar cámara para esta ruta</button
@@ -1264,7 +1309,7 @@
     >
   </div>
   {#if onImage}<button
-      disabled={!ready || loading}
+      disabled={!ready || loading || preparing || toolsDisabled}
       onclick={() => {
         if (!controller) return;
         const view = controller.save();
@@ -1279,8 +1324,9 @@
         Incluye nombre, grado y atribución. La tarjeta personal sólo incluye los
         datos que hayas elegido.
       </p>
-      <button disabled={!ready || loading || recording} onclick={exportPng}
-        >Preparar tarjeta 3D (PNG)</button
+      <button
+        disabled={!ready || loading || recording || preparing || toolsDisabled}
+        onclick={exportPng}>Preparar tarjeta 3D (PNG)</button
       >{#if cardPreview}<img
           src={cardPreview}
           alt="Vista previa exacta de la tarjeta 3D"
@@ -1293,7 +1339,7 @@
             }
           }}>Descargar tarjeta 3D (PNG)</button
         >{/if}<button
-        disabled={!ready || loading || recording}
+        disabled={!ready || loading || recording || preparing || toolsDisabled}
         onclick={recordSweep}>Grabar barrido de 6 segundos</button
       >
     </details>{/if}

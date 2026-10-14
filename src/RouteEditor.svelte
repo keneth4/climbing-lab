@@ -8,6 +8,13 @@
   import { untrack, onMount, onDestroy } from 'svelte';
   import RoutePresentation from './RoutePresentation.svelte';
   import SplatViewer from './SplatViewer.svelte';
+  import PointAdjuster from './PointAdjuster.svelte';
+  import {
+    copyHold,
+    applyHoldEdit,
+    validPoint,
+    type SpatialInteraction,
+  } from './route-editing';
   import type { Point } from '../shared/alignment';
   import type { Section, Capture } from './twin';
   import type { Route, Hold3D, CameraView } from './domain';
@@ -35,8 +42,93 @@
   } = $props();
   let currentCapture = $state<Capture | undefined>();
   let preparing3D = $state(false);
-  let candidate = $state<Point | undefined>();
-  let holdRole = $state<Hold3D['role']>('intermedio');
+  let interaction = $state<SpatialInteraction>({ mode: 'explore' });
+  const candidate = $derived(
+    interaction.mode === 'review-candidate' ? interaction.candidate : undefined,
+  );
+  const editing = $derived(
+    interaction.mode === 'edit-hold' ? interaction.hold : undefined,
+  );
+  const adjustingHold = $derived(editing?.id || '');
+  const toolBusy = $derived(
+    !['explore', 'review-route'].includes(interaction.mode),
+  );
+  let returnFocus: HTMLElement | undefined;
+  function revealInspector(id: string, documentNavigation = false) {
+    requestAnimationFrame(() => {
+      const node = document.getElementById(id);
+      const panel = node?.closest<HTMLElement>('#tools-panel');
+      if (node && panel) {
+        const n = node.getBoundingClientRect(),
+          p = panel.getBoundingClientRect();
+        if (preparing3D && (n.top < p.top || n.bottom > p.bottom))
+          panel.scrollTop += n.top - p.top - 12;
+        else if (!preparing3D && documentNavigation)
+          window.scrollTo({ top: window.scrollY + n.top - 16 });
+        node.focus({ preventScroll: true });
+      }
+    });
+  }
+  function cancelTool() {
+    interaction = { mode: 'explore' };
+    requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+    });
+  }
+  function beginEditHold(id: string) {
+    if (editing?.id === id) return;
+    if (toolBusy) {
+      message =
+        'Aplica o cancela la preparación actual antes de seleccionar otro agarre.';
+      return;
+    }
+    const h = holds3D.find((h) => h.id === id);
+    if (!h) return;
+    returnFocus = document.activeElement as HTMLElement;
+    interaction = {
+      mode: 'edit-hold',
+      hold: copyHold(h),
+      captureId: currentCapture?.id || '',
+      sectionId,
+    };
+    revealInspector(`edit-${id}`);
+  }
+  function applyEdit() {
+    if (!editing) return;
+    try {
+      if (!insideSection(editing.position)) {
+        message =
+          'El punto queda fuera de la sección elegida. Ajusta o cancela.';
+        return;
+      }
+      const next = applyHoldEdit(holds3D, editing);
+      if (next !== holds3D) {
+        checkpoint();
+        holds3D = next;
+        message =
+          'Cambio aplicado al borrador; respaldo y verificación pendientes.';
+      } else message = 'Sin cambios: respaldo y verificación conservados.';
+      cancelTool();
+    } catch (e) {
+      message = (e as Error).message;
+    }
+  }
+  $effect(() => {
+    const context =
+      interaction.mode === 'review-candidate'
+        ? interaction.candidate
+        : interaction.mode === 'edit-hold'
+          ? interaction
+          : undefined;
+    if (
+      context &&
+      (context.captureId !== currentCapture?.id ||
+        context.sectionId !== sectionId)
+    ) {
+      cancelTool();
+      message = 'La captura o sección cambió; preparación temporal cancelada.';
+    }
+  });
   let sections = $state<Section[]>([]),
     sectionId = $state('');
   onMount(() => {
@@ -80,17 +172,24 @@
       position: [...h.position],
     })),
   );
+  const displayHolds = $derived(
+    holds3D.map((h) => (editing?.id === h.id ? editing : h)),
+  );
   let camera = $state<CameraView | undefined>(
     restored?.camera || (initial?.captureId ? initial.camera : undefined),
   );
+  function insideSection(point: Point) {
+    const section = sections.find((s) => s.id === sectionId);
+    return (
+      validPoint(point) &&
+      (!section ||
+        point.every(
+          (n, i) => n >= section.bounds.min[i] && n <= section.bounds.max[i],
+        ))
+    );
+  }
   function addHold() {
-    if (
-      !candidate ||
-      !candidate.every(
-        (n) =>
-          typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e6,
-      )
-    ) {
+    if (!candidate || !validPoint(candidate.positionWorld)) {
       message = 'Revisa las tres coordenadas del agarre.';
       return;
     }
@@ -98,14 +197,23 @@
       message = 'Máximo 40 marcadores por ruta.';
       return;
     }
+    if (!insideSection(candidate.positionWorld)) {
+      message =
+        'El candidato queda fuera de la sección elegida. Ajusta o descarta.';
+      return;
+    }
     checkpoint();
     holds3D = [
       ...holds3D,
-      { id: crypto.randomUUID(), role: holdRole, position: [...candidate] },
+      {
+        id: crypto.randomUUID(),
+        role: candidate.role,
+        position: [...candidate.positionWorld],
+      },
     ];
     markersVerified = false;
     clearImage();
-    candidate = undefined;
+    cancelTool();
     message = 'Marcador preparado. Guarda la ruta para confirmarlo.';
   }
   let name = $state(restored?.name ?? initial?.name ?? ''),
@@ -130,7 +238,7 @@
     message = $state(''),
     busy = $state(false);
   async function save() {
-    if (busy || imageBusy) return;
+    if (busy || imageBusy || toolBusy) return;
     busy = true;
     message = '';
     try {
@@ -186,6 +294,12 @@
     if (imageBusy) return;
     imageBusy = true;
     message = '';
+    const imageContext = JSON.stringify({
+      captureId: route?.captureId || currentCapture?.id,
+      sectionId,
+      camera,
+      holds3D,
+    });
     try {
       const preview = URL.createObjectURL(blob);
       try {
@@ -215,6 +329,18 @@
       const result = await response.json();
       if (!response.ok)
         throw new Error(result.error || 'No se pudo guardar la imagen.');
+      if (
+        imageContext !==
+        JSON.stringify({
+          captureId: route?.captureId || currentCapture?.id,
+          sectionId,
+          camera,
+          holds3D,
+        })
+      )
+        throw new Error(
+          'La preparación cambió durante la carga. Genera un respaldo nuevo.',
+        );
       imageId = result.id;
       if (imagePreview) URL.revokeObjectURL(imagePreview);
       imagePreview = URL.createObjectURL(blob);
@@ -226,8 +352,8 @@
       imageBusy = false;
     }
   }
-  const undoStack: Hold3D[][] = [],
-    redoStack: Hold3D[][] = [];
+  let undoStack = $state<Hold3D[][]>([]),
+    redoStack = $state<Hold3D[][]>([]);
   function clearImage() {
     imageId = '';
     if (imagePreview) URL.revokeObjectURL(imagePreview);
@@ -248,10 +374,11 @@
       holds3D = next;
       markersVerified = false;
       clearImage();
+      cancelTool();
+      message = 'Geometría restaurada; respaldo y verificación pendientes.';
     }
   }
   let reuseRoute = $state('');
-  let adjustingHold = $state('');
   let reuseIds = $state<string[]>([]);
   const reusable = $derived(
     sourceRoutes.find((r) => r.id === reuseRoute)?.holds3D || [],
@@ -274,13 +401,20 @@
   }
   function goStep(value: number) {
     step = value;
-    requestAnimationFrame(() =>
-      document
-        .getElementById(`editor-${initial?.id || 'new'}-${value}`)
-        ?.scrollIntoView({ block: 'start' }),
-    );
+    revealInspector(`editor-${initial?.id || 'new'}-${value}`, true);
+    if (value === 4 && !toolBusy) interaction = { mode: 'review-route' };
   }
 </script>
+
+<svelte:window
+  onkeydown={(e) => {
+    if (e.key === 'Escape' && toolBusy) {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelTool();
+    }
+  }}
+/>
 
 <form
   onsubmit={(e) => {
@@ -345,7 +479,10 @@
       Pendientes para publicar: {pending.join(', ')}.
     </p>{/if}
   <button
-    disabled={busy || imageBusy || (status === 'activa' && pending.length > 0)}
+    disabled={busy ||
+      imageBusy ||
+      toolBusy ||
+      (status === 'activa' && pending.length > 0)}
   >
     {busy
       ? 'Guardando…'
@@ -362,6 +499,15 @@
   <h3 id={`editor-${initial?.id || 'new'}-2`}>Captura y cámara</h3>
   <p>{currentCapture?.filename || 'Captura pendiente'}</p>
   <h3 id={`editor-${initial?.id || 'new'}-3`}>Agarres 3D de la ruta</h3>
+  <p role="status">
+    Modo: {{
+      explore: 'Explorar',
+      'pick-hold': 'Seleccionar punto',
+      'review-candidate': 'Revisar candidato',
+      'edit-hold': 'Editar agarre',
+      'review-route': 'Revisar ruta',
+    }[interaction.mode]}
+  </p>
   <p>
     Los marcadores se guardan con la revisión de ruta en las coordenadas
     alineadas del gimnasio. La selección es aproximada: revisa cada posición
@@ -373,7 +519,7 @@
       onclick={() => {
         preparing3D = !preparing3D;
         onPreparing?.(preparing3D);
-        candidate = undefined;
+        cancelTool();
       }}
       >{preparing3D
         ? 'Cerrar preparación 3D'
@@ -386,38 +532,50 @@
         saved={camera}
         staff={true}
         onSave={(view) => {
-          camera = view;
-          imageId = '';
-          imagePreview = '';
-          message = 'Cámara preparada. Guarda la ruta para confirmarla.';
+          if (JSON.stringify(camera) !== JSON.stringify(view)) {
+            camera = view;
+            clearImage();
+            message =
+              'Cámara preparada; respaldo pendiente. Guarda la ruta para confirmarla.';
+          } else message = 'Cámara sin cambios; respaldo conservado.';
         }}
         onImage={(blob, view) => {
+          if (JSON.stringify(camera) !== JSON.stringify(view)) clearImage();
           camera = view;
           uploadImage(blob);
         }}
-        {holds3D}
-        previewPoint={candidate}
-        selectedHoldId={adjustingHold}
-        onHoldSelect={(id) => {
-          adjustingHold = id;
-          requestAnimationFrame(() =>
-            document
-              .getElementById(`hold-${id}`)
-              ?.scrollIntoView({ block: 'nearest' }),
-          );
+        holds3D={displayHolds}
+        previewPoint={candidate?.positionWorld}
+        focusPoint={candidate?.positionWorld || editing?.position}
+        spatialMode={interaction.mode}
+        onModeChange={(mode) => {
+          if (mode === 'pick-hold') {
+            returnFocus = document.activeElement as HTMLElement;
+            interaction = { mode };
+          } else cancelTool();
         }}
+        onCancelTool={cancelTool}
+        toolsDisabled={busy || imageBusy}
+        selectedHoldId={adjustingHold}
+        onHoldSelect={beginEditHold}
         onPoint={(_, world) => {
-          candidate = [...world];
-          requestAnimationFrame(() =>
-            document
-              .getElementById(`candidate-${initial?.id || 'new'}`)
-              ?.scrollIntoView({ block: 'nearest' }),
-          );
+          interaction = {
+            mode: 'review-candidate',
+            candidate: {
+              positionWorld: [...world],
+              captureId: currentCapture!.id,
+              sectionId,
+              role: holds3D.length ? 'intermedio' : 'inicio',
+              source: 'gaussian-center',
+            },
+          };
+          revealInspector(`candidate-${initial?.id || 'new'}`);
         }}
       />
       {#if candidate}<div
           id={`candidate-${initial?.id || 'new'}`}
           class="candidate-panel"
+          tabindex="-1"
         >
           <h4>Confirmar agarre seleccionado</h4>
           <p role="status">
@@ -425,17 +583,19 @@
             confirma para añadirlo.
           </p>
           <details>
-            <summary>Ajuste preciso de coordenadas</summary>
-            {#each ['X', 'Y', 'Z'] as axis, i}<label
-                >Posición del agarre {axis}<input
-                  type="number"
-                  step="any"
-                  bind:value={candidate[i]}
-                /></label
-              >{/each}
+            <summary>Ajustar posición del candidato</summary>
+            <PointAdjuster
+              position={candidate.positionWorld}
+              prefix="Candidato"
+              disabled={busy || imageBusy}
+              onChange={(position) => {
+                if (interaction.mode === 'review-candidate')
+                  interaction.candidate.positionWorld = position;
+              }}
+            />
           </details>
           <label
-            >Función del agarre<select bind:value={holdRole}
+            >Función del agarre<select bind:value={candidate.role}
               ><option value="inicio">Inicio</option><option value="intermedio"
                 >Intermedio</option
               ><option value="final">Final</option></select
@@ -443,7 +603,7 @@
           >
           <button type="button" onclick={addHold}
             >Añadir agarre a la ruta</button
-          ><button type="button" onclick={() => (candidate = undefined)}
+          ><button type="button" onclick={cancelTool}
             >Descartar agarre seleccionado</button
           >
         </div>{/if}
@@ -472,7 +632,11 @@
           1} · {h.role}</label
       >{/each}<button
       type="button"
-      disabled={!reuseIds.length || holds3D.length + reuseIds.length > 40}
+      disabled={toolBusy ||
+        busy ||
+        imageBusy ||
+        !reuseIds.length ||
+        holds3D.length + reuseIds.length > 40}
       onclick={reuse}>Confirmar copia de agarres</button
     >
   </details>
@@ -485,55 +649,74 @@
           .map((n) => n.toFixed(3))
           .join(', ')}<button
           type="button"
+          disabled={toolBusy && adjustingHold !== h.id}
           onclick={() => {
-            checkpoint();
-            adjustingHold = h.id;
+            beginEditHold(h.id);
           }}>Ajustar agarre {i + 1}</button
         ><button
           type="button"
+          disabled={toolBusy}
           onclick={() => {
             checkpoint();
             holds3D = holds3D.filter((x) => x.id !== h.id);
+            cancelTool();
+            message = 'Agarre eliminado del borrador; puedes deshacer.';
           }}>Eliminar agarre {i + 1}</button
         >
-        {#if adjustingHold === h.id}
-          <p>
-            Modo Ajustar: revisa el marcador desde dos ángulos antes de
-            terminar.
-          </p>
-          {#each ['X', 'Y', 'Z'] as axis, j}<label
-              >Coordenada {axis} del agarre {i + 1}<input
-                type="number"
-                step="any"
-                bind:value={h.position[j]}
-              /></label
-            >{/each}
-          <label
-            >Rol del agarre {i + 1}<select bind:value={h.role}
-              ><option value="inicio">Inicio</option><option value="intermedio"
-                >Intermedio</option
-              ><option value="final">Final</option></select
-            ></label
+        {#if editing?.id === h.id}<div
+            id={`edit-${h.id}`}
+            tabindex="-1"
+            class="candidate-panel"
           >
-          <button type="button" onclick={() => (adjustingHold = '')}
-            >Terminar ajuste</button
-          >
-        {/if}
+            <h4>Editar agarre {i + 1} · cambios temporales</h4>
+            <details>
+              <summary>Ajustar posición del agarre {i + 1}</summary>
+              <PointAdjuster
+                position={editing.position}
+                prefix={`Agarre ${i + 1}`}
+                disabled={busy || imageBusy}
+                onChange={(position) => {
+                  if (interaction.mode === 'edit-hold')
+                    interaction.hold.position = position;
+                }}
+              />
+            </details>
+            <label
+              >Rol del agarre {i + 1}<select bind:value={editing.role}
+                ><option value="inicio">Inicio</option><option
+                  value="intermedio">Intermedio</option
+                ><option value="final">Final</option></select
+              ></label
+            >
+            <button type="button" onclick={applyEdit}>Aplicar ajuste</button
+            ><button type="button" onclick={cancelTool}>Cancelar ajuste</button>
+          </div>{/if}
       </li>{/each}
   </ol>
   <div class="actions">
-    <button type="button" onclick={() => undo()}>Deshacer marcador</button
-    ><button type="button" onclick={() => undo(true)}>Rehacer marcador</button>
+    <button
+      type="button"
+      disabled={toolBusy || !undoStack.length}
+      onclick={() => undo()}>Deshacer marcador</button
+    ><button
+      type="button"
+      disabled={toolBusy || !redoStack.length}
+      onclick={() => undo(true)}>Rehacer marcador</button
+    >
   </div>
   <label class="toggle"
-    ><input type="checkbox" bind:checked={markersVerified} />Confirmé todos los
-    agarres desde dos ángulos y el inicio/final son legibles</label
+    ><input
+      type="checkbox"
+      bind:checked={markersVerified}
+      disabled={toolBusy || busy || imageBusy}
+    />Confirmé todos los agarres desde dos ángulos y el inicio/final son
+    legibles</label
   >
   <label
     >Imagen anotada de respaldo (PNG, hasta 4 MB)<input
       type="file"
       accept="image/png"
-      disabled={imageBusy}
+      disabled={imageBusy || toolBusy}
       onchange={(e) => {
         const file = e.currentTarget.files?.[0];
         if (file) uploadImage(file);
@@ -584,7 +767,7 @@
           position: [...h.position],
         }));
         camera = initial?.captureId ? initial.camera : undefined;
-        candidate = undefined;
+        cancelTool();
         markersVerified = initial?.markersVerified || false;
         imageId = initial?.imageId || '';
         message = 'Cambios 3D descartados; la ruta guardada sigue intacta.';
