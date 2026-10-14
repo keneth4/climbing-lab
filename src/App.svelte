@@ -161,6 +161,7 @@
           sessionStorage.removeItem('climbing-login-draft');
         }
         name = '';
+        accountNotice = '';
       }
       userEmail = nextEmail;
       userId = nextUserId;
@@ -483,6 +484,7 @@
     }
   });
   let message = $state('');
+  let accountNotice = $state('');
   let activityNotice = $state(''),
     reportNotice = $state('');
   let activityError = $state(false),
@@ -960,6 +962,7 @@
       />{:else if tab === 'Recepción' && staff && sessionReady}<OperationsPanel
         admin={adminRole}
       />{:else if tab === 'Cuenta'}<h1 tabindex="-1">Mi cuenta</h1>
+      {#if accountNotice}<p role="status">{accountNotice}</p>{/if}
       <p>
         Tu actividad y tus proyectos son privados. Las tarjetas solo incluyen
         los campos que selecciones antes de descargar.
@@ -970,6 +973,7 @@
         </p>
         <button onclick={() => navigate('Bitácora')}>Ver mi actividad</button
         >{:else}<AuthPanel
+          onPasswordUpdated={() => (accountNotice = 'Contraseña actualizada.')}
         />{/if}{:else if tab === 'Capturas' && adminRole}<CaptureManager
         owner={userId}
         {currentCapture}
