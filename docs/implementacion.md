@@ -58,3 +58,7 @@ Un QR de localhost no es un destino distribuible. Validar dominio público, impr
 ## Sitio público de ejemplo
 
 La entrega de portada y navegación está documentada en [Sitio base de ejemplo](sitio-base-ejemplo.md). `/` abre Inicio y los enlaces heredados de catálogo/QR conservan su comportamiento. La configuración editorial versionada está en `src/site.ts`; no requiere cambios de D1/R2 ni despliegue.
+
+## Demo integral aislado
+
+Entorno gym-demo en 5174/8789 y `.wrangler/demo`, con setup idempotente, ilustraciones R2 y smoke sin mocks. [Comandos, evidencia y límites](demo-local.md). No se alteran A/B ni las validaciones de publicación; flujos privados reales pendientes.

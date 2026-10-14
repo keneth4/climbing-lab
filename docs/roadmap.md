@@ -154,3 +154,7 @@ Crear fixtures, scripts, documentación de instalación, tests con API/D1/R2 loc
 - [Versión histórica de este roadmap antes de corregir prioridades](https://github.com/keneth4/climbing-lab/blob/416eb32a1205287c3d96b8a3842eb1d0ca08f625/docs/roadmap.md)
 
 **Resultado de producto buscado:** una URL y un repositorio que siempre demuestren cómo funciona **Climbing Lab para un gimnasio**, mientras las futuras personalizaciones de tres marcas se desarrollan y despliegan por separado, heredando correcciones del core.
+
+## Entrega local integral — 13 de octubre de 2026
+
+D01–D03 y preparación D05 implementados en `codex/demo-integral-canonico`: dataset aislado, bootstrap/reset y lectura pública real D1/R2. [Runbook y evidencias](demo-local.md). D04 sigue pendiente de cuentas autorizadas y captura para publicación completa; L1–L3 siguen pendientes. No reiniciar módulos existentes ni afirmar despliegue/validación física.

@@ -40,6 +40,11 @@
 <section class="catalog" aria-label="Catálogo de rutas">
   <h1 tabindex="-1">Rutas</h1>
   <p>Encuentra tu siguiente reto por grado o sector.</p>
+  <button disabled={loading} onclick={retry}>Actualizar rutas</button
+  >{#if loadError && filtered.length}<p role="alert">
+      No se pudo actualizar. Se muestran las rutas cargadas anteriormente. {loadError}
+    </p>
+    <button onclick={retry}>Reintentar catálogo</button>{/if}
   <label>Buscar<input bind:value={query} placeholder="Nombre o sector" /></label
   >
   <details>

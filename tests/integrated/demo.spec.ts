@@ -133,3 +133,30 @@ test('real catalog supports all widths, keyboard, empty filters and share illust
   await page.getByRole('button', { name: 'Descargar tarjeta (PNG)' }).click();
   expect((await download).suggestedFilename()).toBe('ruta-tarjeta.png');
 });
+
+test('real network failure preserves catalog and retry restores API reading', async ({
+  page,
+  request,
+}) => {
+  expect((await (await request.get('/api/health')).json()).gymId).toBe(
+    'gym-demo',
+  );
+  await page.goto('/?vista=Catálogo');
+  await expect(page.locator('.route-card')).toHaveCount(6);
+  await page.context().setOffline(true);
+  await page
+    .getByRole('button', { name: 'Actualizar rutas', exact: true })
+    .click();
+  await expect(
+    page.getByText('No se pudo actualizar.', { exact: false }),
+  ).toBeVisible();
+  await expect(page.locator('.route-card')).toHaveCount(6);
+  await page.context().setOffline(false);
+  await page
+    .getByRole('button', { name: 'Reintentar catálogo', exact: true })
+    .click();
+  await expect(
+    page.getByText('No se pudo actualizar.', { exact: false }),
+  ).toHaveCount(0);
+  await expect(page.locator('.route-card')).toHaveCount(6);
+});

@@ -16,6 +16,9 @@ import { manifest, seedSql, poster } from './demo-data.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const persist = join(root, '.wrangler', 'demo');
 const mode = process.argv[2] || 'check';
+const [major, minor] = process.versions.node.split('.').map(Number);
+if (major < 22 || major === 23 || (major === 22 && minor < 12))
+  throw new Error('Demo requiere Node 22.12+ o 24+.');
 const config = JSON.parse(
   await readFile(join(root, 'wrangler.demo.json'), 'utf8'),
 );
@@ -194,6 +197,7 @@ try {
     await assertSafePath();
     const api = worker();
     await waitForHealth();
+    await check();
     const web = start(process.execPath, [
       join(root, 'node_modules/vite/bin/vite.js'),
       '--mode',

@@ -6,6 +6,10 @@ Estado: primera base funcional local. El piloto completo está en desarrollo; el
 
 Para ejecutar: `npm ci`, `npm run db:migrate` y `npm run dev:local`. Consulta [implementación y límites](docs/implementacion.md).
 
+## Demo integral reproducible
+
+`npm ci` → `npm run demo:setup` → `npm run demo:run`. Abrir http://127.0.0.1:5174/. Dataset y R2 locales aislados de A/B, ilustraciones propias y sin captura 3D verificada. Smoke real: `npm run demo:smoke`, con el demo detenido. [Guía, reset seguro y límites](docs/demo-local.md).
+
 ## Documentación
 
 - [Visión y decisiones](docs/producto.md)

@@ -16,7 +16,7 @@
     "db:migrate": "wrangler d1 migrations apply DB --local",
     "db:migrate:b": "wrangler d1 migrations apply DB --local --env gym-b",
     "check:api": "tsc -p tsconfig.worker.json",
-    "types:api": "wrangler types worker-configuration.d.ts",
+    "types:api": "wrangler types --strict-vars=false worker-configuration.d.ts",
     "test:api": "vitest run --config vitest.api.config.ts",
     "db:seed": "node scripts/seed-local.mjs gym-a",
     "db:seed:b": "node scripts/seed-local.mjs gym-b",

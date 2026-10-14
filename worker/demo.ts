@@ -1,4 +1,4 @@
-import manifest from '../shared/demo-manifest.json';
+import { isDemoIllustration } from '../shared/demo-illustrations';
 import { HttpError } from './http';
 export async function demoAsset(
   request: Request,
@@ -8,10 +8,7 @@ export async function demoAsset(
   if (!path.startsWith('/api/demo-assets/')) return;
   if (request.method !== 'GET') throw new HttpError(405, 'Solo lectura.');
   const id = path.slice('/api/demo-assets/'.length);
-  if (
-    env.GYM_ID !== 'gym-demo' ||
-    !manifest.routes.some((r) => r.illustrationId === id)
-  )
+  if (env.GYM_ID !== 'gym-demo' || !isDemoIllustration(id))
     throw new HttpError(404, 'Ilustración no disponible.');
   const published = await env.DB.prepare(
     "SELECT 1 FROM route_revisions rr JOIN routes r ON r.id=rr.route_id WHERE r.publication_state='public' AND json_extract(rr.snapshot,'$.illustrationId')=? LIMIT 1",
