@@ -161,6 +161,7 @@
           sessionStorage.removeItem('climbing-login-draft');
         }
         name = '';
+        accountNotice = '';
       }
       userEmail = nextEmail;
       userId = nextUserId;
@@ -483,6 +484,7 @@
     }
   });
   let message = $state('');
+  let accountNotice = $state('');
   let activityNotice = $state(''),
     reportNotice = $state('');
   let activityError = $state(false),
@@ -960,6 +962,7 @@
       />{:else if tab === 'Recepción' && staff && sessionReady}<OperationsPanel
         admin={adminRole}
       />{:else if tab === 'Cuenta'}<h1 tabindex="-1">Mi cuenta</h1>
+      {#if accountNotice}<p role="status">{accountNotice}</p>{/if}
       <p>
         Tu actividad y tus proyectos son privados. Las tarjetas solo incluyen
         los campos que selecciones antes de descargar.
@@ -968,8 +971,20 @@
         >
           Sesión iniciada: {userEmail}
         </p>
+        <label
+          >Identificador de cuenta (UUID)<input
+            readonly
+            value={userId}
+            aria-describedby="account-id-help"
+          /></label
+        >
+        <p id="account-id-help">
+          Usa este identificador para autorizar tu cuenta en el demo local. No
+          es una contraseña ni concede permisos por sí solo.
+        </p>
         <button onclick={() => navigate('Bitácora')}>Ver mi actividad</button
         >{:else}<AuthPanel
+          onPasswordUpdated={() => (accountNotice = 'Contraseña actualizada.')}
         />{/if}{:else if tab === 'Capturas' && adminRole}<CaptureManager
         owner={userId}
         {currentCapture}
@@ -1086,8 +1101,11 @@
                 <p>{selected.beta || 'El staff aún no ha añadido una beta.'}</p>
               </details>
               <details>
-                <summary>Compartir</summary><button
-                  onclick={() => exportImage()}>Preparar imagen de ruta</button
+                <summary>Compartir</summary
+                >{#if ['localhost', '127.0.0.1'].includes(location.hostname)}<p>
+                    Enlace y QR locales: no accesibles desde internet.
+                  </p>{/if}<button onclick={() => exportImage()}
+                  >Preparar imagen de ruta</button
                 ><a href={routeUrl(selected.id)}>Enlace de ruta</a>
                 <details>
                   <summary>QR de la ruta</summary>{#if qr}<img

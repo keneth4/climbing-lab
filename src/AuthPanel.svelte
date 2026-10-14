@@ -1,6 +1,7 @@
 <script lang="ts">
   import { site } from './site';
   import { supabase } from './auth';
+  let { onPasswordUpdated }: { onPasswordUpdated?: () => void } = $props();
   let email = $state(''),
     password = $state(''),
     message = $state(''),
@@ -44,9 +45,10 @@
       if (action === 'update') {
         ({ error } = await supabase.auth.updateUser({ password }));
         if (!error) {
-          message = 'Contraseña actualizada.';
+          message = onPasswordUpdated ? '' : 'Contraseña actualizada.';
           recovery = false;
-          history.replaceState(null, '', '/');
+          history.replaceState(null, '', '/?vista=Cuenta');
+          onPasswordUpdated?.();
         }
       }
       if (error) throw error;
@@ -83,7 +85,7 @@
         aria-describedby={message ? 'auth-result' : undefined}
         type="password"
         bind:value={password}
-        minlength="8"
+        minlength={recovery ? 8 : undefined}
         autocomplete={recovery ? 'new-password' : 'current-password'}
         required
       /></label

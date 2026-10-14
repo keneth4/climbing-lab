@@ -16,7 +16,7 @@
     "db:migrate": "wrangler d1 migrations apply DB --local",
     "db:migrate:b": "wrangler d1 migrations apply DB --local --env gym-b",
     "check:api": "tsc -p tsconfig.worker.json",
-    "types:api": "wrangler types worker-configuration.d.ts",
+    "types:api": "wrangler types --strict-vars=false worker-configuration.d.ts",
     "test:api": "vitest run --config vitest.api.config.ts",
     "db:seed": "node scripts/seed-local.mjs gym-a",
     "db:seed:b": "node scripts/seed-local.mjs gym-b",
@@ -28,7 +28,16 @@
     "pilot:migrate": "node scripts/pilot.mjs migrate",
     "pilot:deploy": "node scripts/pilot.mjs deploy",
     "pilot:backup": "node scripts/pilot.mjs backup",
-    "pilot:prepare-restore": "node scripts/restore-sql.mjs"
+    "pilot:prepare-restore": "node scripts/restore-sql.mjs",
+    "demo:setup": "node scripts/demo.mjs setup",
+    "demo:run": "node scripts/demo.mjs run",
+    "demo:check": "node scripts/demo.mjs check",
+    "demo:reset": "node scripts/demo.mjs reset",
+    "demo:smoke": "npm run demo:setup && playwright test --config playwright.demo.config.ts",
+    "demo:staff": "node scripts/demo-staff.mjs",
+    "demo:auth": "node scripts/demo-auth.mjs",
+    "demo:private": "node scripts/demo-private.mjs",
+    "test:demo-tools": "node --test scripts/demo-private-guards.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",

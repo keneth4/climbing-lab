@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "climbing-lab-demo-local",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-12",
+  "workers_dev": false,
+  "vars": {
+    "GYM_ID": "gym-demo",
+    "AUTH_ISSUER": "https://defblrjdwgnqyzzgozdf.supabase.co/auth/v1",
+    "AUTH_AUDIENCE": "authenticated"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "climbing-lab-demo-local",
+      "database_id": "00000000-0000-0000-0000-000000000003",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "CAPTURES", "bucket_name": "climbing-lab-demo-local-assets" }
+  ]
+}

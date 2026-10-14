@@ -1,3 +1,4 @@
+import { demoAsset } from './demo';
 import { pilotApi, requestKey, writeOnce, presentationKey } from './pilot';
 import { operationsApi } from './operations';
 import { projectApi } from './projects';
@@ -226,6 +227,8 @@ export async function handle(
   try {
     const url = new URL(request.url);
     const path = url.pathname;
+    const illustration = await demoAsset(request, env);
+    if (illustration) return illustration;
     const pilotResponse = await pilotApi(request, env, () =>
       authenticate(request, env),
     );

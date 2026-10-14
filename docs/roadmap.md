@@ -154,3 +154,23 @@ Crear fixtures, scripts, documentación de instalación, tests con API/D1/R2 loc
 - [Versión histórica de este roadmap antes de corregir prioridades](https://github.com/keneth4/climbing-lab/blob/416eb32a1205287c3d96b8a3842eb1d0ca08f625/docs/roadmap.md)
 
 **Resultado de producto buscado:** una URL y un repositorio que siempre demuestren cómo funciona **Climbing Lab para un gimnasio**, mientras las futuras personalizaciones de tres marcas se desarrollan y despliegan por separado, heredando correcciones del core.
+
+## Entrega local integral — 13 de octubre de 2026
+
+D01–D03 y preparación D05 implementados en `codex/demo-integral-canonico`: dataset aislado, bootstrap/reset y lectura pública real D1/R2. [Runbook y evidencias](demo-local.md). D04 sigue pendiente de cuentas autorizadas y captura para publicación completa; L1–L3 siguen pendientes. No reiniciar módulos existentes ni afirmar despliegue/validación física.
+
+### Continuación UX-P0 — 14 de octubre de 2026
+
+UX-P0 implementado y probado localmente en el PR #3: marcadores legibles y edición reversible, sin cambiar API ni geometría de secciones. [Evidencia por nivel](planes/ux/01-editor-espacial-y-tour-3d.md#12-entrega-ux-p0--14-de-octubre-de-2026). Crux está publicada solo en el demo local y la ruta D04 sigue como borrador: revisión humana de agarres y recorridos privados entre cuentas pendientes. D04 y L1–L3 no se consideran completos; UX-P1/P2 se mantienen separados.
+
+### Preparación del cierre D04
+
+Helper de sesiones Firefox y verificador privado opt-in implementados, con destino gym-demo y precondiciones antes de escritura. [Runbook](demo-local.md#verificador-privado-preparado-14-de-octubre-de-2026). Prueba manual favorable del propietario sobre precisión inicial del picking registrada. No hay segunda cuenta; ejecución privada, revisión/publicación de la ruta y validación física siguen pendientes. D04 permanece abierto; no se adelanta UX-P1A ni se despliega.
+
+### Publicación de la ruta D04
+
+Tras confirmación humana del propietario, la ruta Crux quedó publicada exclusivamente en el demo local, revisión 4, con nueve agarres, cámara y PNG anotado. Lectura anónima y smoke público real aprobados. D04 continúa abierto por segunda cuenta y recorrido privado real; L1–L3 y validación física pendientes.
+
+### Cierre funcional D04 local
+
+Dos cuentas reales verificadas en el navegador interno completaron proyecto/actividad persistente, privacidad, permisos, reporte y revisiones históricas. Ruta Crux original activa en revisión 4; copia de prueba retirada e historia conservada. [Evidencia actual](planes/demo-integral/04-recorrido-cuenta-y-staff.md#cierre-funcional-real--14-de-octubre-de-2026). Los estados anteriores son cronológicos: D04 ya no depende de una segunda cuenta. L0 funcional local verificado; L1–L3 y validación física pendientes. Próxima entrega de interfaz: UX-P1A, sin adelantar tour ni despliegue.

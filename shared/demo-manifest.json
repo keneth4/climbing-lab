@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "gymId": "gym-demo",
+  "routes": [
+    {
+      "id": "demo-route-01",
+      "name": "Travesía tranquila",
+      "grade": "V0",
+      "sector": "Placa de ejemplo",
+      "gradeScale": "V",
+      "status": "activa",
+      "beta": "Consejo ilustrativo: prueba desplazar el peso antes del siguiente movimiento.",
+      "rules": "Pies libres en este problema ilustrativo. No corresponde a un muro real.",
+      "illustrationId": "demo-poster-v1-01"
+    },
+    {
+      "id": "demo-route-02",
+      "name": "Equilibrio de ejemplo",
+      "grade": "V1",
+      "sector": "Muro central",
+      "gradeScale": "V",
+      "status": "activa",
+      "beta": "Consejo ilustrativo: prueba desplazar el peso antes del siguiente movimiento.",
+      "rules": "Pies libres en este problema ilustrativo. No corresponde a un muro real.",
+      "illustrationId": "demo-poster-v1-02"
+    },
+    {
+      "id": "demo-route-03",
+      "name": "Cruce central",
+      "grade": "V2",
+      "sector": "Desplome de ejemplo",
+      "gradeScale": "V",
+      "status": "activa",
+      "beta": "Consejo ilustrativo: prueba desplazar el peso antes del siguiente movimiento.",
+      "rules": "Pies libres en este problema ilustrativo. No corresponde a un muro real.",
+      "illustrationId": "demo-poster-v1-03"
+    },
+    {
+      "id": "demo-route-04",
+      "name": "Pies precisos",
+      "grade": "5a",
+      "sector": "Placa de ejemplo",
+      "gradeScale": "Font",
+      "status": "activa",
+      "beta": "Consejo ilustrativo: prueba desplazar el peso antes del siguiente movimiento.",
+      "rules": "Pies libres en este problema ilustrativo. No corresponde a un muro real.",
+      "illustrationId": "demo-poster-v1-04"
+    },
+    {
+      "id": "demo-route-05",
+      "name": "Salida lateral",
+      "grade": "6a",
+      "sector": "Muro central",
+      "gradeScale": "Font",
+      "status": "activa",
+      "beta": "Consejo ilustrativo: prueba desplazar el peso antes del siguiente movimiento.",
+      "rules": "Pies libres en este problema ilustrativo. No corresponde a un muro real.",
+      "illustrationId": "demo-poster-v1-05"
+    },
+    {
+      "id": "demo-route-06",
+      "name": "Desafío del desplome",
+      "grade": "V5",
+      "sector": "Desplome de ejemplo",
+      "gradeScale": "V",
+      "status": "activa",
+      "beta": "Consejo ilustrativo: prueba desplazar el peso antes del siguiente movimiento.",
+      "rules": "Pies libres en este problema ilustrativo. No corresponde a un muro real.",
+      "illustrationId": "demo-poster-v1-06"
+    },
+    {
+      "id": "demo-route-07",
+      "name": "Armado anterior",
+      "grade": "V3",
+      "sector": "Placa de ejemplo",
+      "gradeScale": "V",
+      "status": "retirada",
+      "beta": "Consejo ilustrativo: prueba desplazar el peso antes del siguiente movimiento.",
+      "rules": "Pies libres en este problema ilustrativo. No corresponde a un muro real.",
+      "illustrationId": "demo-poster-v1-07"
+    },
+    {
+      "id": "demo-route-08",
+      "name": "Proyecto del setter",
+      "grade": "V2",
+      "sector": "Muro central",
+      "gradeScale": "V",
+      "status": "borrador",
+      "beta": "Consejo ilustrativo: prueba desplazar el peso antes del siguiente movimiento.",
+      "rules": "Pies libres en este problema ilustrativo. No corresponde a un muro real.",
+      "illustrationId": null
+    }
+  ]
+}

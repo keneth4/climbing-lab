@@ -2,6 +2,17 @@
   import { renderCard, downloadBlob, type CardInfo } from './media';
   import { planeAxes } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
+  import RouteMarkerOverlay from './RouteMarkerOverlay.svelte';
+  import type { SpatialMode } from './route-editing';
+  import {
+    layoutMarkers,
+    drawMarkerLayout,
+    cssToPng,
+    viewportToLocal,
+    type MarkerLayout,
+    type LabelVisibility,
+    type Rect,
+  } from './marker-layout';
   import { onMount, tick } from 'svelte';
   import { measure } from './pilot';
   import { supabase } from './auth';
@@ -33,6 +44,14 @@
     grid,
     continuousPick = false,
     holds3D = [],
+    previewPoint,
+    selectedHoldId,
+    onHoldSelect,
+    spatialMode,
+    onModeChange,
+    onCancelTool,
+    focusPoint,
+    toolsDisabled = false,
   }: {
     exportInfo?: CardInfo;
     visible?: boolean;
@@ -41,6 +60,14 @@
     onRecording?: (active: boolean) => void;
     mount?: (node: HTMLElement) => void;
     holds3D?: Hold3D[];
+    previewPoint?: Point;
+    selectedHoldId?: string;
+    onHoldSelect?: (id: string) => void;
+    spatialMode?: SpatialMode;
+    onModeChange?: (mode: SpatialMode) => void;
+    onCancelTool?: () => void;
+    focusPoint?: Point;
+    toolsDisabled?: boolean;
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
@@ -70,6 +97,13 @@
   let recordedCaptureId = '';
   let cancelButton = $state<HTMLButtonElement>();
   let canvas: HTMLCanvasElement;
+  let screenMarkers = $state<MarkerLayout[]>([]);
+  let markerViewport = $state<Rect & { zoom?: number }>({
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+  });
   let cardPreview = $state(''),
     cardBlob = $state<Blob | undefined>();
   function exportPng() {
@@ -186,11 +220,18 @@
   }
 
   let status = $state('Selecciona una captura para explorarla.');
-  let showRouteHolds = $state(true);
+  let labelVisibility = $state<LabelVisibility>('all');
   let quality = $state('auto');
   let navigation = $state<'orbit' | 'pan'>('orbit');
   let picking = $state(false);
   let selectedPoint = $state<Point | undefined>();
+  const preparing = $derived(
+    spatialMode !== undefined &&
+      !['explore', 'review-route'].includes(spatialMode),
+  );
+  $effect(() => {
+    if (spatialMode !== undefined) picking = spatialMode === 'pick-hold';
+  });
   let initialized = $state(false);
   let ready = $state(false);
   let loading = $state(false);
@@ -233,7 +274,7 @@
     cardPreview = '';
   });
   $effect(() => {
-    if (!continuousPick) picking = false;
+    if (!continuousPick && spatialMode === undefined) picking = false;
   });
   const cameras = new Map<string, CameraView>();
   let viewKey = '';
@@ -433,10 +474,16 @@
         const choosePoint = (e: PointerEvent) => {
           if (!asset || !entity) return;
           const rect = canvas.getBoundingClientRect();
-          const x =
-            ((e.clientX - rect.left) * app.graphicsDevice.width) / rect.width;
-          const y =
-            ((e.clientY - rect.top) * app.graphicsDevice.height) / rect.height;
+          // CameraComponent uses device.clientRect (CSS pixels), not framebuffer pixels.
+          const { x, y } = viewportToLocal(
+            { x: e.clientX, y: e.clientY },
+            {
+              x: rect.left,
+              y: rect.top,
+              width: rect.width,
+              height: rect.height,
+            },
+          );
           const far = camera.camera!.screenToWorld(x, y, 1);
           const worldOrigin = camera.getPosition();
           const inverse = entity.getWorldTransform().clone().invert();
@@ -450,10 +497,24 @@
             [direction.x, direction.y, direction.z],
             localTarget.distance(origin),
             (Math.tan((camera.camera!.fov * Math.PI) / 360) * 16) / rect.height,
+            section && onHoldSelect
+              ? (point) => {
+                  const aligned = entity!
+                    .getWorldTransform()
+                    .transformPoint(new pc.Vec3(...point));
+                  return [aligned.x, aligned.y, aligned.z].every(
+                    (n, i) =>
+                      n >= section!.bounds.min[i] &&
+                      n <= section!.bounds.max[i],
+                  );
+                }
+              : undefined,
           );
           if (!raw) {
             status =
-              'No se encontró un punto cerca del cursor. Acércate y vuelve a seleccionar.';
+              onHoldSelect && section
+                ? 'No se encontró un centro gaussiano dentro de esta sección. Acerca el muro, cambia de vista e intenta de nuevo.'
+                : 'No se encontró un punto cerca del cursor. Acércate y vuelve a seleccionar.';
             return;
           }
           const world = entity
@@ -462,17 +523,19 @@
           selectedPoint = [world.x, world.y, world.z];
           pickedWorld = selectedPoint;
           pickedEntity?.destroy();
-          pickedEntity = new pc.Entity('selected-point');
-          pickedEntity.addComponent('render', { type: 'sphere' });
-          pickedEntity.setPosition(world);
-          pickedEntity.setLocalScale(
-            distance * 0.012,
-            distance * 0.012,
-            distance * 0.012,
-          );
-          for (const mesh of pickedEntity.render!.meshInstances)
-            mesh.material = red;
-          app.root.addChild(pickedEntity);
+          if (!onHoldSelect) {
+            pickedEntity = new pc.Entity('selected-point');
+            pickedEntity.addComponent('render', { type: 'sphere' });
+            pickedEntity.setPosition(world);
+            pickedEntity.setLocalScale(
+              distance * 0.012,
+              distance * 0.012,
+              distance * 0.012,
+            );
+            for (const mesh of pickedEntity.render!.meshInstances)
+              mesh.material = red;
+            app.root.addChild(pickedEntity);
+          }
           picking = continuousPick;
           onPoint?.(raw, selectedPoint);
         };
@@ -563,6 +626,13 @@
           'keydown',
           (e) => {
             if (e.key === 'Escape') {
+              if (onCancelTool && preparing) {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancelTool();
+                picking = false;
+                return;
+              }
               if (!picking) onExit?.();
               picking = false;
               return;
@@ -590,6 +660,69 @@
           },
           { signal: abort.signal },
         );
+        const projectMarkers = (includePreparation = true) => {
+          const rect = canvas.getBoundingClientRect();
+          const points = [
+            ...holds3D.map((h, i) => ({
+              ...h,
+              label:
+                h.role === 'inicio'
+                  ? `I${i + 1}`
+                  : h.role === 'final'
+                    ? `F${i + 1}`
+                    : String(i + 1),
+              active: includePreparation && h.id === selectedHoldId,
+            })),
+            ...(includePreparation && previewPoint
+              ? [
+                  {
+                    id: 'candidate',
+                    position: previewPoint,
+                    role: 'candidate' as const,
+                    label: '?',
+                    active: true,
+                  },
+                ]
+              : []),
+          ];
+          const projected = points.flatMap((h) => {
+            const p = camera.camera!.worldToScreen(new pc.Vec3(...h.position));
+            return p.z > 0
+              ? [
+                  {
+                    id: h.id,
+                    label: h.label,
+                    role: h.role,
+                    active: h.active,
+                    x: p.x,
+                    y: p.y,
+                  },
+                ]
+              : [];
+          });
+          const blocked = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '.drawer-toggle,.scene-exit,.cancel-recording',
+            ),
+          )
+            .filter((n) => !n.hidden)
+            .map((n) => {
+              const r = n.getBoundingClientRect();
+              return {
+                x: r.left - rect.left,
+                y: r.top - rect.top,
+                width: r.width,
+                height: r.height,
+              };
+            });
+          return layoutMarkers(
+            projected,
+            rect.width,
+            rect.height,
+            labelVisibility,
+            blocked,
+          );
+        };
         controller = {
           quality: (value) => {
             app.graphicsDevice.maxPixelRatio =
@@ -622,36 +755,12 @@
             out.height = canvas.height;
             const c = out.getContext('2d')!;
             c.drawImage(canvas, 0, 0);
-            for (const [i, h] of holds3D.entries()) {
-              const p = camera.camera!.worldToScreen(
-                new pc.Vec3(...h.position),
-              );
-              if (
-                p.z <= 0 ||
-                p.x < 0 ||
-                p.y < 0 ||
-                p.x > out.width ||
-                p.y > out.height
-              )
-                continue;
-              const label =
-                h.role === 'inicio'
-                  ? 'I'
-                  : h.role === 'final'
-                    ? 'F'
-                    : String(i + 1);
-              c.beginPath();
-              c.arc(p.x, p.y, 16, 0, Math.PI * 2);
-              c.fillStyle = '#172c3e';
-              c.fill();
-              c.lineWidth = 3;
-              c.strokeStyle = 'white';
-              c.stroke();
-              c.fillStyle = 'white';
-              c.font = 'bold 18px system-ui';
-              c.textAlign = 'center';
-              c.fillText(label, p.x, p.y + 6);
-            }
+            const rect = canvas.getBoundingClientRect();
+            const scale = cssToPng({ x: 1, y: 1 }, rect, out);
+            c.save();
+            c.scale(scale.x, scale.y);
+            drawMarkerLayout(c, projectMarkers(false));
+            c.restore();
             return out;
           },
           clear: () => {
@@ -877,6 +986,24 @@
         };
         app.on('update', () => {
           if (!visible || document.hidden) return;
+          const rect = canvas.getBoundingClientRect();
+          const viewport = {
+            x: rect.left,
+            y: rect.top,
+            width: rect.width,
+            height: rect.height,
+            zoom: canvas.offsetWidth > 0 ? rect.width / canvas.offsetWidth : 1,
+          };
+          if (JSON.stringify(viewport) !== JSON.stringify(markerViewport))
+            markerViewport = viewport;
+          const projected = ready && !loading ? projectMarkers() : [];
+          if (JSON.stringify(projected) !== JSON.stringify(screenMarkers))
+            screenMarkers = projected;
+          if (onHoldSelect && !previewPoint && pickedWorld) {
+            pickedWorld = undefined;
+            pickedEntity?.destroy();
+            pickedEntity = undefined;
+          }
           if (
             grid &&
             Number.isFinite(grid.step) &&
@@ -959,50 +1086,7 @@
                     false,
                   );
           }
-          if (showRouteHolds)
-            for (const h of holds3D) {
-              const p = new pc.Vec3(...h.position),
-                r = Math.max(distance * 0.01, 0.015);
-              const color =
-                h.role === 'inicio'
-                  ? new pc.Color(0.1, 1, 0.3)
-                  : h.role === 'final'
-                    ? new pc.Color(1, 0.5, 0.1)
-                    : new pc.Color(0.2, 0.6, 1);
-              const right = camera.right.clone().mulScalar(r),
-                up = camera.up.clone().mulScalar(r);
-              const stroke = (
-                a: InstanceType<typeof pc.Vec3>,
-                b: InstanceType<typeof pc.Vec3>,
-              ) =>
-                app.drawLine(p.clone().add(a), p.clone().add(b), color, false);
-              if (h.role === 'inicio') {
-                stroke(up.clone().mulScalar(-1), up);
-                stroke(up.clone().add(right), up.clone().sub(right));
-                stroke(
-                  up.clone().mulScalar(-1).add(right),
-                  up.clone().mulScalar(-1).sub(right),
-                );
-              } else if (h.role === 'final') {
-                stroke(
-                  up.clone().mulScalar(-1).sub(right),
-                  up.clone().sub(right),
-                );
-                stroke(up.clone().sub(right), up.clone().add(right));
-                stroke(right.clone().mulScalar(-1), right);
-              }
-              for (const offset of [
-                camera.right.clone().mulScalar(r),
-                camera.up.clone().mulScalar(r),
-              ])
-                app.drawLine(
-                  p.clone().sub(offset),
-                  p.clone().add(offset),
-                  color,
-                  false,
-                );
-            }
-          if (pickedWorld) {
+          if (pickedWorld && !onHoldSelect) {
             const p = new pc.Vec3(...pickedWorld),
               r = Math.max(distance * 0.01, 0.01);
             for (const offset of [
@@ -1083,12 +1167,18 @@
     aria-label="Visor de Gaussian Splatting"
     tabindex="0"
   ></canvas>
+  {#if visible}<RouteMarkerOverlay
+      markers={screenMarkers}
+      viewport={markerViewport}
+      onSelect={onHoldSelect}
+      disabled={recording || loading || toolsDisabled || preparing}
+    />{/if}
   <p>
     Arrastra para {navigation === 'orbit' ? 'orbitar' : 'desplazar'} · Rueda para
     acercar · Dos dedos para desplazar y pinza para acercar · Flechas para desplazar
     · + / − para zoom
   </p>
-  <div class="actions">
+  <div class="actions navigation-tools" aria-label="Herramientas del visor">
     <button
       type="button"
       disabled={!ready}
@@ -1104,47 +1194,60 @@
     <button
       type="button"
       disabled={!ready}
-      onclick={() => controller?.zoom(0.8)}>Acercar</button
+      aria-label="Acercar"
+      title="Acercar"
+      onclick={() => controller?.zoom(0.8)}>+</button
     >
     <button
       type="button"
       disabled={!ready}
-      onclick={() => controller?.zoom(1.25)}>Alejar</button
+      aria-label="Alejar"
+      title="Alejar"
+      onclick={() => controller?.zoom(1.25)}>−</button
     >
-    <button
-      type="button"
-      disabled={!ready}
-      onclick={() => controller?.framePrincipal()}
-      >Enfocar contenido principal</button
-    >
-    <button
-      type="button"
-      disabled={!ready}
-      onclick={() => controller?.frameAll()}>Ver límites completos</button
-    >
-    <button
-      type="button"
-      disabled={!ready}
-      onclick={() =>
-        controller?.apply(saved || capture?.initialCamera || undefined)}
-      >Ver ruta</button
-    ><button type="button" disabled={!ready} onclick={() => controller?.reset()}
-      >Ver gimnasio</button
-    >
-    {#if section}<button
-        type="button"
-        disabled={!ready}
-        onclick={() => {
-          const { min, max } = section.bounds;
-          controller?.focus(min.map((n, i) => (n + max[i]) / 2) as Point);
-        }}>Enfocar sección</button
-      >{/if}
+    <details class="view-options">
+      <summary>Encuadre y vistas</summary>
+      <div class="actions">
+        <button
+          type="button"
+          disabled={!ready}
+          onclick={() => controller?.framePrincipal()}
+          >Enfocar contenido principal</button
+        >
+        <button
+          type="button"
+          disabled={!ready}
+          onclick={() => controller?.frameAll()}>Ver límites completos</button
+        >
+        <button
+          type="button"
+          disabled={!ready}
+          onclick={() =>
+            controller?.apply(saved || capture?.initialCamera || undefined)}
+          >Ver ruta</button
+        ><button
+          type="button"
+          disabled={!ready}
+          onclick={() => controller?.reset()}>Ver gimnasio</button
+        >
+        {#if section}<button
+            type="button"
+            disabled={!ready}
+            onclick={() => {
+              const { min, max } = section.bounds;
+              controller?.focus(min.map((n, i) => (n + max[i]) / 2) as Point);
+            }}>Enfocar sección</button
+          >{/if}
+      </div>
+    </details>
     {#if onPoint}<button
         type="button"
-        disabled={!ready}
+        disabled={!ready || toolsDisabled || (preparing && !picking)}
         aria-pressed={picking}
-        onclick={() => (picking = !picking)}
-        >{picking ? 'Cancelar selección' : 'Seleccionar punto'}</button
+        onclick={() => {
+          if (onModeChange) onModeChange(picking ? 'explore' : 'pick-hold');
+          else picking = !picking;
+        }}>{picking ? 'Cancelar selección' : 'Seleccionar punto'}</button
       >{/if}
     {#if onInitialSave}<button
         type="button"
@@ -1154,19 +1257,33 @@
         }}>Guardar cámara inicial del gimnasio</button
       >{/if}
   </div>
-  {#if holds3D.length}<label class="toggle"
-      ><input type="checkbox" bind:checked={showRouteHolds} />Mostrar agarres 3D
-      ({holds3D.length})</label
+  {#if focusPoint}<button
+      type="button"
+      disabled={!ready || toolsDisabled}
+      onclick={() => {
+        if (focusPoint?.every(Number.isFinite)) {
+          controller?.focus(focusPoint);
+          controller?.zoom(0.6);
+        }
+      }}>Acercar al punto seleccionado</button
+    >{/if}
+  {#if holds3D.length || onHoldSelect}<label
+      >Etiquetas de agarres<select bind:value={labelVisibility}
+        ><option value="all">Todos</option><option value="ends"
+          >Solo inicio y final</option
+        ><option value="hidden">Ocultar etiquetas</option></select
+      ></label
     >
     <p>
-      Verde: inicio · Azul: intermedio · Naranja: final. Marcadores aproximados
-      visibles a través de superficies; verifica su posición.
+      Selección aproximada: las anclas pueden verse a través del muro. Comprueba
+      la profundidad desde otro ángulo. Las etiquetas sin espacio se seleccionan
+      desde la lista.
     </p>{/if}
   {#if picking}<p role="status">
       Haz clic o toca sobre la pared para seleccionar un centro gaussiano
       aproximado. Escape cancela.
     </p>{/if}
-  {#if selectedPoint}<p>
+  {#if selectedPoint && !onHoldSelect}<p>
       Punto aproximado del gimnasio: {selectedPoint
         .map((n) => n.toFixed(3))
         .join(', ')}. Confirma su posición antes de guardarlo.
@@ -1176,7 +1293,7 @@
       >Vista general</button
     >{#if staff}<button
         type="button"
-        disabled={!ready}
+        disabled={!ready || preparing || toolsDisabled}
         onclick={() => {
           if (controller) onSave(controller.save());
         }}>Guardar cámara para esta ruta</button
@@ -1192,7 +1309,7 @@
     >
   </div>
   {#if onImage}<button
-      disabled={!ready || loading}
+      disabled={!ready || loading || preparing || toolsDisabled}
       onclick={() => {
         if (!controller) return;
         const view = controller.save();
@@ -1207,8 +1324,9 @@
         Incluye nombre, grado y atribución. La tarjeta personal sólo incluye los
         datos que hayas elegido.
       </p>
-      <button disabled={!ready || loading || recording} onclick={exportPng}
-        >Preparar tarjeta 3D (PNG)</button
+      <button
+        disabled={!ready || loading || recording || preparing || toolsDisabled}
+        onclick={exportPng}>Preparar tarjeta 3D (PNG)</button
       >{#if cardPreview}<img
           src={cardPreview}
           alt="Vista previa exacta de la tarjeta 3D"
@@ -1221,7 +1339,7 @@
             }
           }}>Descargar tarjeta 3D (PNG)</button
         >{/if}<button
-        disabled={!ready || loading || recording}
+        disabled={!ready || loading || recording || preparing || toolsDisabled}
         onclick={recordSweep}>Grabar barrido de 6 segundos</button
       >
     </details>{/if}
@@ -1276,6 +1394,22 @@
     height: 360px;
     touch-action: none;
     background: #172c3e;
+  }
+  .navigation-tools {
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .view-options {
+    margin: 0;
+  }
+  .view-options summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+  }
+  .view-options[open] {
+    flex-basis: 100%;
   }
   p {
     font-size: 13px;

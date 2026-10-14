@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { illustrationUrl, illustrationLabel } from './illustrations';
   import QRCode from 'qrcode';
   import { cardPalette } from './site';
   import { api } from './auth';
@@ -79,17 +80,19 @@
           wrap(c, url, 60, 1120, 960, 32);
           c.fillText(`Revisión ${revision} · Escanea para consultar`, 60, 1300);
         } else {
-          if (!r.imageId)
+          if (!r.imageId && !illustrationUrl(r))
             throw new Error(
               'Esta revisión no tiene imagen de respaldo. Prepara la tarjeta histórica 3D; no se usará el muro actual.',
             );
-          const img = await image(`/api/route-images/${r.imageId}`);
+          const img = await image(
+            r.imageId ? `/api/route-images/${r.imageId}` : illustrationUrl(r)!,
+          );
           const source = document.createElement('canvas');
           source.width = img.naturalWidth;
           source.height = img.naturalHeight;
           source.getContext('2d')!.drawImage(img, 0, 0);
           canvas = renderCard(source, {
-            title: values.entry?.routeName || r.name,
+            title: `${values.entry?.routeName || r.name}${!r.imageId && r.illustrationId ? ` · ${illustrationLabel}` : ''}`,
             grade: values.entry?.grade || r.grade,
             gym: values.gym,
             revision,

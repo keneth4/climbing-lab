@@ -180,9 +180,10 @@ test('password login → protected request → logout clears personal data', asy
   await page.goto('/?vista=Catálogo');
   await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
   await page.getByLabel('Correo', { exact: true }).fill('test@example.com');
-  await page
-    .getByLabel('Contraseña', { exact: true })
-    .fill('Test-password-123');
+  await page.getByLabel('Contraseña', { exact: true }).fill('short');
+  await expect(
+    page.getByRole('button', { name: 'Crear cuenta', exact: true }),
+  ).toBeDisabled();
   await page.getByRole('button', { name: 'Entrar', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'Cerrar sesión' }),
@@ -462,9 +463,19 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   expect(current.holds3D).toHaveLength(2);
   await page.getByRole('button', { name: 'Explorar en 3D' }).click();
   expect(current.holds3D[0].role).toBe('inicio');
-  await expect(page.getByLabel('Mostrar agarres 3D (2)')).toBeVisible();
-  await page.getByLabel('Mostrar agarres 3D (2)').uncheck();
-  await page.getByLabel('Mostrar agarres 3D (2)').check();
+  const labels = page.getByRole('combobox', {
+    name: 'Etiquetas de agarres',
+    exact: true,
+  });
+  await expect(labels).toBeVisible();
+  await labels.selectOption('hidden');
+  await expect(
+    page.getByRole('img', { name: 'Agarre I1 · inicio', exact: true }),
+  ).toHaveCount(0);
+  await labels.selectOption('all');
+  await expect(
+    page.getByRole('img', { name: 'Agarre I1 · inicio', exact: true }),
+  ).toBeVisible();
   await page.locator('summary').filter({ hasText: 'Editar ruta' }).click();
   await page
     .getByRole('combobox', { name: 'Estado', exact: true })

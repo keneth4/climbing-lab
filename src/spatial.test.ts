@@ -18,3 +18,29 @@ it('selects a nearby center along the ray, ignoring points behind the camera and
   ]);
   expect(selectCenter(centers, [0, 0, 0], [1, 0, 0], 5, 0.02)).toBeUndefined();
 });
+it('rejects background centers outside the selected section instead of guessing a point', () => {
+  const centers = new Float32Array([0, 0, 50, 0.01, 0, 5]);
+  const inSection = (p: [number, number, number]) => p[2] >= 4 && p[2] <= 6;
+  expect(
+    selectCenter(centers, [0, 0, 0], [0, 0, 1], 50, 0.02, inSection),
+  ).toEqual([centers[3], 0, 5]);
+  expect(
+    selectCenter(
+      new Float32Array([0, 0, 50]),
+      [0, 0, 0],
+      [0, 0, 1],
+      50,
+      0.02,
+      inSection,
+    ),
+  ).toBeUndefined();
+});
+
+it('rejects nonfinite depth and invalid picking cones without guessing a center', () => {
+  const centers = new Float32Array([0, 0, 5]);
+  for (const depth of [NaN, Infinity, 0, -1])
+    expect(
+      selectCenter(centers, [0, 0, 0], [0, 0, 1], depth, 0.02),
+    ).toBeUndefined();
+  expect(selectCenter(centers, [0, 0, 0], [0, 0, 1], 5, NaN)).toBeUndefined();
+});
