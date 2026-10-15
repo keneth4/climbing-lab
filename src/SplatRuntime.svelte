@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { visibleSceneHeight } from './editor-flow';
   import { untrack } from 'svelte';
   import { renderCard, downloadBlob, type CardInfo } from './media';
   import { planeAxes } from '../shared/sections';
@@ -110,6 +111,7 @@
   let cancelButton = $state<HTMLButtonElement>();
   let canvas: HTMLCanvasElement;
   let screenMarkers = $state<MarkerLayout[]>([]);
+  let overlayClipBottom = $state(0);
   let markerViewport = $state<Rect & { zoom?: number }>({
     x: 0,
     y: 0,
@@ -360,6 +362,7 @@
         let fileId = '';
         let managedModel: Capture | undefined;
         let requestedId = '';
+        let failedCaptureKey = '';
         let mainBounds: { min: Point; max: Point } | undefined;
         let pickedEntity: InstanceType<typeof pc.Entity> | undefined;
         let downloadAbort: AbortController | undefined;
@@ -754,11 +757,15 @@
             downloadAbort?.abort();
             generation++;
             requestedId = '';
+            failedCaptureKey = capture
+              ? `${capture.id}:${capture.version}`
+              : '';
             loading = false;
             status = 'Carga cancelada. Puedes reintentar o seguir con imagen.';
           },
           retry: () => {
             requestedId = '';
+            failedCaptureKey = '';
             if (capture) void controller?.loadManaged(capture);
           },
           annotated: () => {
@@ -885,7 +892,11 @@
               onReady?.(source.id, source.version);
               return;
             }
-            if (requestedId === source.id) return;
+            if (
+              requestedId === source.id ||
+              failedCaptureKey === `${source.id}:${source.version}`
+            )
+              return;
             requestedId = source.id;
             const loadTicket = ++generation;
             downloadAbort?.abort();
@@ -918,12 +929,19 @@
                 capture?.id === source.id &&
                 loadTicket === generation
               ) {
+                failedCaptureKey = `${source.id}:${source.version}`;
                 status = 'No se pudo cargar la captura del gimnasio.';
                 measure('scene_error');
               }
             } finally {
-              if (requestedId === source.id) requestedId = '';
-              if (!disposed && capture?.id === source.id) loading = false;
+              if (loadTicket === generation && requestedId === source.id)
+                requestedId = '';
+              if (
+                !disposed &&
+                capture?.id === source.id &&
+                loadTicket === generation
+              )
+                loading = false;
             }
           },
           orient: frame,
@@ -1006,6 +1024,11 @@
             height: rect.height,
             zoom: canvas.offsetWidth > 0 ? rect.width / canvas.offsetWidth : 1,
           };
+          const inspector = editorStep
+            ? document.getElementById('tools-panel')?.getBoundingClientRect()
+            : undefined;
+          overlayClipBottom =
+            viewport.height - visibleSceneHeight(viewport, inspector);
           if (JSON.stringify(viewport) !== JSON.stringify(markerViewport))
             markerViewport = viewport;
           const projected = ready && !loading ? projectMarkers() : [];
@@ -1187,6 +1210,7 @@
   {#if visible}<RouteMarkerOverlay
       markers={screenMarkers}
       viewport={markerViewport}
+      clipBottom={overlayClipBottom}
       onSelect={onHoldSelect}
       disabled={recording || loading || toolsDisabled || preparing}
     />{/if}

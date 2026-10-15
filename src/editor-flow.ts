@@ -81,3 +81,18 @@ export function geometryKey(value: Partial<Route>): string {
     value.holds3D,
   ]);
 }
+
+/** DOM occlusion only: projection and exported PNG coordinates stay unchanged. */
+export function visibleSceneHeight(
+  viewport: { x: number; y: number; width: number; height: number },
+  inspector?: { x: number; y: number; width: number; height: number },
+): number {
+  if (
+    !inspector ||
+    inspector.x >= viewport.x + viewport.width - 1 ||
+    inspector.x + inspector.width <= viewport.x + 1 ||
+    inspector.y >= viewport.y + viewport.height
+  )
+    return viewport.height;
+  return Math.max(0, Math.min(viewport.height, inspector.y - viewport.y));
+}

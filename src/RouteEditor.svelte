@@ -67,41 +67,78 @@
     !['explore', 'review-route'].includes(interaction.mode),
   );
   let returnFocus: HTMLElement | undefined;
+  let editorRoot: HTMLDivElement;
+  function alignInspector(node: HTMLElement, documentNavigation = false) {
+    const panel = node.closest<HTMLElement>('#tools-panel');
+    if (!panel) return;
+    const n = node.getBoundingClientRect(),
+      p = panel.getBoundingClientRect();
+    const nav = node.closest('.route-editor')?.querySelector('nav');
+    const navHeight =
+      nav && getComputedStyle(nav).position === 'sticky'
+        ? nav.getBoundingClientRect().height
+        : 0;
+    const footerHeight =
+      node
+        .closest('.route-editor')
+        ?.querySelector('.editor-save-bar')
+        ?.getBoundingClientRect().height || 0;
+    if (getComputedStyle(panel).position === 'fixed') {
+      if (
+        n.top < p.top + navHeight + 12 ||
+        n.bottom > p.bottom - footerHeight - 12
+      )
+        panel.scrollTop += n.top - p.top - navHeight - 12;
+    } else if (documentNavigation)
+      window.scrollTo({ top: window.scrollY + n.top - navHeight - 16 });
+  }
   function revealInspector(id: string, documentNavigation = false) {
+    const origin = document.activeElement;
     requestAnimationFrame(() => {
+      if (
+        document.activeElement !== origin &&
+        document.activeElement !== document.body
+      )
+        return;
       const node = document.getElementById(id);
-      const panel = node?.closest<HTMLElement>('#tools-panel');
-      if (node && panel) {
-        const n = node.getBoundingClientRect(),
-          p = panel.getBoundingClientRect();
-        const nav = node.closest('.route-editor')?.querySelector('nav');
-        const navHeight =
-          nav && getComputedStyle(nav).position === 'sticky'
-            ? nav.getBoundingClientRect().height
-            : 0;
-        if (preparing3D && (n.top < p.top + navHeight || n.bottom > p.bottom))
-          panel.scrollTop += n.top - p.top - navHeight - 12;
-        else if (!preparing3D && documentNavigation)
-          window.scrollTo({ top: window.scrollY + n.top - navHeight - 16 });
-        node.focus({ preventScroll: true });
-      }
+      if (!node) return;
+      alignInspector(node, documentNavigation);
+      node.focus({ preventScroll: true });
+      // Workspace/portal updates and responsive navigation can finish in the next frame.
+      requestAnimationFrame(() => {
+        if (document.activeElement === node)
+          alignInspector(node, documentNavigation);
+      });
     });
   }
+  onMount(() => {
+    const panel = editorRoot.closest('#tools-panel'),
+      nav = editorRoot.querySelector('nav');
+    const observer = new ResizeObserver(() => {
+      const node = document.activeElement;
+      if (
+        node instanceof HTMLElement &&
+        node.closest('.route-editor') === editorRoot &&
+        node.id.startsWith('editor-')
+      )
+        alignInspector(node, true);
+    });
+    if (panel) observer.observe(panel);
+    if (nav) observer.observe(nav);
+    return () => observer.disconnect();
+  });
   function cancelTool() {
+    const origin = document.activeElement;
     interaction = { mode: 'explore' };
     requestAnimationFrame(() => {
+      if (
+        document.activeElement !== origin &&
+        document.activeElement !== document.body
+      )
+        return;
       if (returnFocus?.isConnected) {
-        const panel = returnFocus.closest<HTMLElement>('#tools-panel');
-        if (
-          preparing3D &&
-          panel &&
-          !returnFocus.closest('.route-marker-overlay')
-        ) {
-          const n = returnFocus.getBoundingClientRect(),
-            p = panel.getBoundingClientRect();
-          if (n.top < p.top || n.bottom > p.bottom)
-            panel.scrollTop += n.top - p.top - 12;
-        }
+        if (!returnFocus.closest('.route-marker-overlay'))
+          alignInspector(returnFocus);
         returnFocus.focus({ preventScroll: true });
       }
     });
@@ -629,7 +666,7 @@
   }}
 />
 
-<div class="route-editor" data-step={step}>
+<div bind:this={editorRoot} class="route-editor" data-step={step}>
   <h2>{route ? 'Editar ruta' : 'Crear ruta'}</h2>
   {#if published}<p>
       Versión publicada · Revisión {initial?.revision}. La preparación no cambia

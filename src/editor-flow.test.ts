@@ -47,3 +47,18 @@ it('differences preserve identical geometry and distinguish presentation from me
     differences({ ...copy, markersVerified: false, imageId: '' }, route),
   ).toEqual(['Verificación', 'Respaldo']);
 });
+
+it('clips only the mobile inspector overlap without changing scene projection dimensions', async () => {
+  const { visibleSceneHeight } = await import('./editor-flow');
+  const viewport = { x: 0, y: 200, width: 390, height: 300 };
+  expect(
+    visibleSceneHeight(viewport, { x: 0, y: 440, width: 390, height: 500 }),
+  ).toBe(240);
+  expect(
+    visibleSceneHeight(viewport, { x: 390, y: 200, width: 440, height: 500 }),
+  ).toBe(300);
+  expect(
+    visibleSceneHeight(viewport, { x: 0, y: 150, width: 390, height: 500 }),
+  ).toBe(0);
+  expect(visibleSceneHeight(viewport)).toBe(300);
+});

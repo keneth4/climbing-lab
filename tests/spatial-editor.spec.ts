@@ -65,6 +65,7 @@ async function setup(page: Page, published = false) {
     errorStatus: 0,
     errorMessage: '',
     failAsset: false,
+    assetRequests: 0,
     delay: 0,
     writes: [] as any[],
     images: [] as any[],
@@ -75,6 +76,7 @@ async function setup(page: Page, published = false) {
       path = url.pathname,
       method = handler.request().method();
     if (path.includes('/file/scene.ply')) {
+      state.assetRequests += 1;
       if (state.failAsset) {
         await handler.fulfill({ status: 503, body: 'Asset unavailable' });
         return;
@@ -730,6 +732,18 @@ test('step navigation and mobile sheet heights retain one canvas, with usable no
     for (const label of ['Compacto', 'Medio', 'Ampliado']) {
       await page.getByRole('button', { name: label, exact: true }).click();
       expect(await canvas.boundingBox()).toEqual(before);
+      await expect
+        .poll(async () => {
+          const top = (await page.locator('#tools-panel').boundingBox())!.y;
+          return page
+            .locator('.route-marker-overlay button')
+            .evaluateAll(
+              (nodes, top) =>
+                nodes.every((n) => n.getBoundingClientRect().bottom <= top + 1),
+              top,
+            );
+        })
+        .toBe(true);
     }
   }
   await page
@@ -865,6 +879,7 @@ test('failed scene recovers without replacing the canvas or discarding the draft
     'Conservar en fallo',
   );
   await go(page, 2);
+  expect(state.assetRequests).toBe(1);
   state.failAsset = false;
   await page
     .getByRole('button', { name: 'Reintentar 3D', exact: true })
@@ -915,6 +930,26 @@ test('guided inspector stays readable at required widths, themes, zoom and emula
         .boundingBox();
       expect(nav!.width).toBeLessThanOrEqual(width);
       await go(page, 6);
+      await expect(
+        page.getByRole('heading', { name: 'Revisar y publicar', exact: true }),
+      ).toBeFocused();
+      await expect(
+        page.getByRole('heading', { name: 'Revisar y publicar', exact: true }),
+      ).toBeInViewport();
+      await expect
+        .poll(() =>
+          page
+            .getByRole('heading', { name: 'Revisar y publicar', exact: true })
+            .evaluate((n) => {
+              const r = n.getBoundingClientRect();
+              const top = document.elementFromPoint(
+                r.left + 10,
+                r.top + r.height / 2,
+              );
+              return top === n || n.contains(top);
+            }),
+        )
+        .toBe(true);
       await page.screenshot({
         path: `/tmp/p1a-${info.project.name}-${width}-${theme}.png`,
       });
@@ -924,6 +959,13 @@ test('guided inspector stays readable at required widths, themes, zoom and emula
     }
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(async () => (await canvas.boundingBox())?.width).toBe(390);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   await go(page, 1);
   await page.getByLabel('Nombre de ruta', { exact: true }).focus();
   const before = await canvas.boundingBox();
