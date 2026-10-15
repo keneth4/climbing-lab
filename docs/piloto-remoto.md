@@ -1,3 +1,5 @@
+> **Estado vigente — 15 de octubre de 2026:** la Ola 0 prepara el piloto sin despliegue. Ver [runbook de recuperación y puertas pendientes](recuperacion-local.md). `pilot:check` valida configuración, no recursos; `pilot:backup` sigue siendo SQL solamente. `pilot:rehearse` ensaya D1/R2 con fixtures locales dedicados. Impresión QR pública deshabilitada. L1/L2/L3 permanecen pendientes. Las notas históricas siguientes no autorizan acciones cloud.
+
 # Preparación y dependencias del piloto remoto
 
 Fecha: 13 de octubre de 2026. La preparación está lista; el piloto no está publicado ni aprobado para operación real.
