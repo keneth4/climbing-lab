@@ -5,11 +5,13 @@
     viewport,
     onSelect,
     disabled = false,
+    clipBottom = 0,
   }: {
     markers: MarkerLayout[];
     viewport: Rect & { zoom?: number };
     onSelect?: (id: string) => void;
     disabled?: boolean;
+    clipBottom?: number;
   } = $props();
 </script>
 
@@ -21,6 +23,7 @@
   style:top={`${viewport.y}px`}
   style:width={`${viewport.width}px`}
   style:height={`${viewport.height}px`}
+  style:clip-path={`inset(0 0 ${clipBottom}px 0)`}
 >
   <svg width={viewport.width} height={viewport.height} aria-hidden="true">
     {#each markers as m (m.id)}
@@ -47,7 +50,7 @@
     {/each}
   </svg>
   {#each markers as m (m.id)}
-    {#if m.labelPoint}
+    {#if m.labelPoint && m.labelPoint.y + 24 <= viewport.height - clipBottom}
       {#if onSelect && m.role !== 'candidate'}
         <button
           type="button"

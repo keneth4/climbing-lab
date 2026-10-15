@@ -174,3 +174,8 @@ Tras confirmación humana del propietario, la ruta Crux quedó publicada exclusi
 ### Cierre funcional D04 local
 
 Dos cuentas reales verificadas en el navegador interno completaron proyecto/actividad persistente, privacidad, permisos, reporte y revisiones históricas. Ruta Crux original activa en revisión 4; copia de prueba retirada e historia conservada. [Evidencia actual](planes/demo-integral/04-recorrido-cuenta-y-staff.md#cierre-funcional-real--14-de-octubre-de-2026). Los estados anteriores son cronológicos: D04 ya no depende de una segunda cuenta. L0 funcional local verificado; L1–L3 y validación física pendientes. Próxima entrega de interfaz: UX-P1A, sin adelantar tour ni despliegue.
+
+
+### UX-P1A — Editor guiado implementado localmente
+
+Seis pasos, preparación local de rutas publicadas, revisión de diferencias, errores por paso y panel móvil accesible implementados en `codex/route-editor-guided-ux`, para PR independiente a main. [Entrega y evidencia](planes/ux/02-flujo-editor-rutas.md#entrega-y-evidencia-local--14-de-octubre-de-2026): 76 e2e y 6 smoke públicos reales aprobados, además de tipos, dominio/API y build. Crux y la ruta D04 original permanecen intactas; sin migraciones, reset, merge ni despliegue. Las etapas posteriores de UX siguen separadas; teléfonos, lector y rendimiento físico pendientes.

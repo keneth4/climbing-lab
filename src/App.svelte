@@ -79,6 +79,34 @@
     journalNotice = $state('');
   let routePreparing = $state(false);
   let editorDrafts = $state<Record<string, EditorDraft>>({});
+  function clearEditorPreparation(id: string) {
+    const prefix = `${userId}:${id}:`;
+    for (const key of Object.keys(editorDrafts))
+      if (key.startsWith(prefix)) delete editorDrafts[key];
+  }
+  function editorPreparation(
+    id: string,
+    revision: number,
+  ): EditorDraft | undefined {
+    const prefix = `${userId}:${id}:`;
+    const exact = editorDrafts[`${prefix}${revision}`];
+    if (exact && Object.keys(exact).length) return exact;
+    const prior = Object.entries(editorDrafts)
+      .filter(
+        ([key, value]) =>
+          key.startsWith(prefix) &&
+          Object.keys(value).length &&
+          Number(key.slice(prefix.length)) < revision,
+      )
+      .sort(
+        ([a], [b]) =>
+          Number(b.slice(prefix.length)) - Number(a.slice(prefix.length)),
+      )[0];
+    return prior
+      ? { ...prior[1], basedOnRevision: Number(prior[0].slice(prefix.length)) }
+      : undefined;
+  }
+
   let historicalSection = $state<Section | undefined>();
   let sectionTicket = 0;
   $effect(() => {
@@ -385,14 +413,28 @@
     if (viewerWorkspace.active) viewerStarted = true;
   });
   onMount(() => {
-    const resize = new ResizeObserver(() => {
+    const measureWorkspace = () => {
+      const zoom = Number(getComputedStyle(document.documentElement).zoom) || 1;
       document.documentElement.style.setProperty(
         '--workspace-top',
-        `${chrome.getBoundingClientRect().height}px`,
+        `${chrome.getBoundingClientRect().height / zoom}px`,
       );
-    });
+      document.documentElement.style.setProperty(
+        '--viewport-height',
+        `${window.innerHeight / zoom}px`,
+      );
+      document.documentElement.style.setProperty(
+        '--viewport-width',
+        `${window.innerWidth / zoom}px`,
+      );
+    };
+    const resize = new ResizeObserver(measureWorkspace);
     resize.observe(chrome);
-    return () => resize.disconnect();
+    window.addEventListener('resize', measureWorkspace);
+    return () => {
+      resize.disconnect();
+      window.removeEventListener('resize', measureWorkspace);
+    };
   });
   const pageStarted = performance.now();
   let sceneStarted = 0,
@@ -1083,9 +1125,7 @@
               {#if staff}{#key selected.id + ':' + selected.revision}<details>
                     <summary>Editar ruta</summary><RouteEditor
                       route={selected}
-                      draft={editorDrafts[
-                        `${userId}:${selected.id}:${selected.revision}`
-                      ]}
+                      draft={editorPreparation(selected.id, selected.revision)}
                       owner={userId}
                       sourceRoutes={db.routes}
                       onDraft={(owner, id, revision, values) => {
@@ -1093,7 +1133,11 @@
                           editorDrafts[`${owner}:${id}:${revision}`] = values;
                       }}
                       onPreparing={(active) => (routePreparing = active)}
-                      onSaved={(id) => refreshRoutes(id)}
+                      onReload={() => refreshRoutes(selected?.id)}
+                      onSaved={(id) => {
+                        clearEditorPreparation(id);
+                        refreshRoutes(id);
+                      }}
                     />
                   </details>{/key}{/if}
               <details bind:open={betaOpen}>

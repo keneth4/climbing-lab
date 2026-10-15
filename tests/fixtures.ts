@@ -1,3 +1,4 @@
+import { expect, type Page } from '@playwright/test';
 export function gaussianFixture() {
   const props = [
     'x',
@@ -38,4 +39,33 @@ export function gaussianFixture() {
     ].forEach((v, j) => body.writeFloatLE(v, (i * props.length + j) * 4));
   }
   return Buffer.concat([header, body]);
+}
+
+export async function editorStep(page: Page, step: number) {
+  const button = page.getByRole('button', { name: new RegExp(`^${step}\\. `) });
+  const compact = page.getByRole('combobox', {
+    name: 'Paso del editor',
+    exact: true,
+  });
+  // Layout switches between tabs and a select after viewport/container resize.
+  await expect(button.or(compact)).toBeVisible();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (await button.isVisible()) {
+      try {
+        await button.click({ timeout: 3000 });
+        return;
+      } catch (error) {
+        if (!(await compact.isVisible())) throw error;
+      }
+    }
+    if (await compact.isVisible()) {
+      try {
+        await compact.selectOption(String(step), { timeout: 3000 });
+        return;
+      } catch (error) {
+        if (!(await button.isVisible())) throw error;
+      }
+    }
+  }
+  throw new Error('No se estabilizó la navegación del editor');
 }
