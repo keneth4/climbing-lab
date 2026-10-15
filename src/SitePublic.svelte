@@ -11,6 +11,9 @@
       <h1 id="home-title" tabindex="-1">{site.content.headline}</h1>
       <p class="hero-description">{site.content.description}</p>
       <div class="actions">
+        <button onclick={() => navigate('Recorrido')}
+          >Recorrer el gimnasio</button
+        >
         <button class="primary" onclick={() => navigate('Catálogo')}
           >Explorar rutas</button
         ><button onclick={() => navigate('El gimnasio')}
@@ -68,6 +71,7 @@
       una visita se necesitan datos oficiales del gimnasio: ubicación, horarios,
       servicios, precios y contacto.
     </p>
+    <button onclick={() => navigate('Recorrido')}>Recorrer el gimnasio</button>
     <button class="primary" onclick={() => navigate('Catálogo')}
       >Explorar rutas</button
     >

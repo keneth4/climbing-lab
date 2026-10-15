@@ -60,6 +60,7 @@ export const filterKeys = [
   'buscar',
   'grado',
   'sector',
+  'zona',
   'escala',
   'desde',
   'hasta',
