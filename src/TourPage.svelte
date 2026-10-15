@@ -104,8 +104,7 @@
   {#if error}<p role="alert">No se pudo consultar el recorrido. {error}</p>
     <button
       onclick={() => {
-        loadedId = '';
-        void load(tourId);
+        void load(tourId, true);
       }}>Reintentar recorrido</button
     >{/if}
   {#if tour}

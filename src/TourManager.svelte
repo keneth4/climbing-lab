@@ -137,6 +137,7 @@
       conflict = false;
       candidate = undefined;
       scene = false;
+      command = undefined;
       base = undefined;
       mutation = undefined;
       imageRetry = undefined;
@@ -173,6 +174,7 @@
     };
     baseline = JSON.stringify(content);
     selected = '';
+    command = undefined;
     past = [];
     future = [];
     candidate = undefined;
@@ -210,6 +212,7 @@
     reviewed = false;
     if (!next.stops.some((s) => s.id === selected))
       selected = next.stops[0]?.id || '';
+    if (scene && compatible) selectStop(selected);
   }
   function add() {
     if (!content || content.stops.length >= 20 || candidate) return;
@@ -530,7 +533,7 @@
                 if (next.startStopId === s.id)
                   next.startStopId = next.stops[0]?.id;
                 change(next);
-                if (selected === s.id) selected = next.stops[0]?.id || '';
+                if (selected === s.id) selectStop(next.stops[0]?.id || '');
               }}>Eliminar</button
             >
           </li>{/each}
@@ -614,7 +617,13 @@
           usa «Guardar cámara e imagen de parada». Cambiar la cámara exige una
           imagen nueva.
         </p>
-        <button disabled={!id || !compatible} onclick={() => (scene = !scene)}
+        <button
+          disabled={!id || !compatible || !!candidate}
+          onclick={() => {
+            if (!scene && stop?.camera)
+              command = { id: ++commandId, camera: stop.camera };
+            scene = !scene;
+          }}
           >{scene
             ? 'Cerrar preparación del recorrido'
             : 'Preparar parada en 3D'}</button

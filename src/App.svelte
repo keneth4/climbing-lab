@@ -642,7 +642,7 @@
     tourSelection = id;
     stopSelection = stop;
     const url = new URL(location.href);
-    url.search = '';
+    url.searchParams.delete('ruta');
     url.searchParams.set('vista', 'Recorrido');
     url.searchParams.set('tour', id);
     if (stop) url.searchParams.set('parada', stop);
@@ -1040,7 +1040,6 @@
         onSelect={selectTour}
         onRoute={(id) => navigate('Catálogo', id)}
         onZone={(id) => {
-          clearFilters();
           zoneFilter = id;
           navigate('Catálogo');
         }}

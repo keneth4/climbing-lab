@@ -131,3 +131,21 @@ Antes de guardar, revisar nombre/tipo, rutas dependientes y volumen desde dos á
 Tras guardar una zona de escalada, «Crear ruta en esta zona» abre UX-P1A. Si ya había preparación local de una ruta, se conserva antes de iniciar otra. No usar la sección original D04 para escrituras de QA. [Plan y evidencia UX-P1B](planes/ux/03-zonas-planos-inclinados.md).
 
 Al editar una ruta existente, UX-P1A usa su revisión histórica de zona y avisa si la zona vigente es posterior. Guardar o retirar la ruta no adopta automáticamente esa nueva geometría. Si falta el snapshot de sección, se conserva la preparación y la API exige revisar el conflicto; no reasigna la ruta silenciosamente.
+
+## Recorrido virtual UX-P2B
+
+Para actualizar el demo existente, con su Worker saludable en 8789, ejecutar desde la raíz:
+
+```sh
+npm run demo:migrate
+```
+
+Destino fijo `.wrangler/demo`, D1/R2 `gym-demo`; rechaza argumentos, overrides y symlinks. Es una migración aditiva, repetible, sin seed/reset ni destinos remotos. No necesita detener Vite/Worker. Un clon nuevo obtiene estas tablas con el bootstrap habitual, que aplica todas las migraciones. [Referencia oficial de comandos D1](https://developers.cloudflare.com/d1/wrangler-commands/).
+
+Público: Inicio/El gimnasio → Recorrer el gimnasio, o `http://127.0.0.1:5174/?vista=Recorrido`. Estos enlaces solo funcionan localmente. Cada parada conserva texto/imagen sin WebGL; «Iniciar recorrido en 3D» descarga la captura bajo demanda. Anterior/Siguiente y la lista cambian cámara directamente. Explorar mueve libremente; Volver a esta parada recupera cámara/FOV. La URL con tour/parada permite recargar o compartir dentro del equipo; una retirada conserva respaldo y desactiva entrada al 3D.
+
+Staff → Recorridos: Crear recorrido, completar textos y guardar borrador. Añadir 3–20 paradas, elegir la inicial, preparar cada parada en 3D y usar «Guardar cámara e imagen de parada». Guardar borrador antes de subir imágenes fija su contexto de captura. Revisar las paradas desde dos ángulos y guardar; la confirmación final habilita Publicar únicamente para administración. Los editores no publican ni retiran. Orden, eliminación y puntos de interés opcionales son reversibles con deshacer/rehacer; Escape cancela el punto provisional y Ctrl/Cmd+Z opera fuera de campos de escritura.
+
+La preparación no guardada es local en memoria. Una comprobación temporal de sesión la oculta hasta verificar la misma cuenta; cambiar de cuenta la limpia. Recargar o salir puede perder cambios no guardados. Guardar un borrador no cambia el recorrido público. Ante conflicto, consultar la base nueva, comparar y confirmar su revisión; ante error de imagen, Reintentar conserva la misma captura PNG y clave. Un cambio de versión/transformación exige preparar cámaras/imágenes nuevas; los vínculos de zona conservan su revisión histórica. Retirar requiere guardar o descartar primero la preparación pendiente y conserva las revisiones públicas.
+
+[Entrega, pruebas y puerta humana pendiente](planes/ux/05-tour-paradas.md#entrega-local--14-de-octubre-de-2026). Todavía no hay un recorrido real de Crux publicado: las tres cámaras requieren selección/revisión humanas. Repetir QA público con `DEMO_REUSE_SERVER=1 npx playwright test --config playwright.demo.config.ts`; no usar `demo:smoke` en este runtime persistente porque incluye setup.

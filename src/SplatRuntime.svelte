@@ -689,11 +689,7 @@
           'wheel',
           (e) => {
             e.preventDefault();
-            distance = Math.max(
-              0.05,
-              Math.min(10000, distance * Math.exp(e.deltaY * 0.001)),
-            );
-            update();
+            zoom(Math.exp(e.deltaY * 0.001));
           },
           { signal: abort.signal, passive: false },
         );
@@ -1417,7 +1413,10 @@
       <button
         type="button"
         disabled={!ready}
-        onclick={() => controller?.reset()}>Vista general</button
+        onclick={() => {
+          onExplore?.();
+          controller?.reset();
+        }}>Vista general</button
       >{#if staff && !tourMode && (!editorStep || editorStep === 2)}<button
           type="button"
           disabled={!ready || preparing || toolsDisabled}

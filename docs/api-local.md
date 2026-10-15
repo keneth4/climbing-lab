@@ -95,3 +95,24 @@ Para diagnosticar este síntoma, comprobar primero que Vite y Wrangler estén ac
 Detén instancias previas de Vite/Wrangler y ejecuta `npm run dev:local`. Inicia frontend 5173 y API 8787 y finaliza ambos al cerrar el comando. Vite no cambia de puerto silenciosamente. Ante API caída se muestra un estado específico y Reintentar vuelve a verificar permisos sin escribir roles.
 
 Migraciones 0007/0008 aplicadas en bases A/B locales. Proyectos, agrupación diaria, recepción QR, cobros manuales e inventario se describen en [continuación integral](continuacion-integral.md). Las pruebas de operación usan bases aisladas; no se seedearon socios ni pagos reales. La cuenta del propietario conserva admin.
+
+## Recorridos UX-P2B
+
+Migración aditiva `0010_gym_tours.sql`; en el demo existente usar exclusivamente `npm run demo:migrate`. JSON hasta 64 KiB; títulos 80 caracteres, descripciones 1.000; PNG hasta 5 MiB y 4096 × 4096, con estructura validada. Ninguna operación acepta `gymId` del cliente: el aislamiento depende de D1/R2 del Worker.
+
+| Método | Endpoint | Acceso |
+| --- | --- | --- |
+| GET | `/api/tours` | Recorrido publicado vigente, o `tour:null` |
+| GET | `/api/tours/:id` | Última revisión pública o respaldo retirado; nunca borrador |
+| GET | `/api/tours/:id/revisions/:revision` | Revisión pública inmutable |
+| GET | `/api/staff/tours`, `/api/staff/tours/:id` | Editor/admin: lista y borradores |
+| POST | `/api/staff/tours` | Editor/admin: crear borrador |
+| PUT | `/api/staff/tours/:id` | Editor/admin: guardar borrador |
+| POST | `/api/staff/tours/:id/publish` | Solo admin, contenido completo y `reviewed:true` |
+| POST | `/api/staff/tours/:id/retire` | Solo admin, conserva respaldo e historia |
+| POST | `/api/tour-images` | Editor/admin: PNG asociado a tour/cámara/contexto |
+| GET | `/api/tour-images/:id` | Público si una revisión pública lo referencia; en otro caso solo staff |
+
+Escrituras JSON: `requestId`, `expectedRevision`, `content` (salvo retiro), `reviewed` para publicar. El contenido lleva captura/versión/transformación y 0–20 paradas en borrador; publicación exige 3–20 completas. Reintento idéntico devuelve el mismo resultado; contenido distinto con la misma clave o revisión concurrente produce 409 sin sobrescribir.
+
+Imágenes: `Content-Type:image/png`, `X-Tour-Id`, `X-Request-Id`, `X-Tour-Presentation` y sesión autorizada. Presentation contiene `title:''`, `description:''`, `captureId`, `captureVersion`, `captureTransform` y `camera` (pose orbital + FOV). El contexto debe haberse guardado en el borrador. La publicación valida que cada imagen pertenece al mismo tour y presentación exacta. No acepta URLs externas; las respuestas privadas no se cachean. Las imágenes publicadas permanecen disponibles por su historial incluso después de retirar.

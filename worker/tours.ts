@@ -261,6 +261,8 @@ export async function tourApi(
       const { camera: rawCamera, ...context } = p;
       const c = tourContent({ ...context, stops: [] });
       const camera = tourCamera(rawCamera);
+      if (camera.captureId !== c.captureId)
+        throw new Error('La cámara pertenece a otra captura.');
       return { c, camera };
     });
     // Header carries context plus camera; never accepts an asset URL or another binding.
