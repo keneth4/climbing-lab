@@ -1,20 +1,7 @@
-export type GymSiteConfig = {
-  version: 1;
-  brand: {
-    name: string;
-    subtitle: string;
-    attribution: string;
-    defaultTheme: 'default' | 'warm';
-  };
-  content: {
-    headline: string;
-    description: string;
-    exampleNotice: string;
-    faq: { question: string; answer: string }[];
-  };
-};
-export const site: GymSiteConfig = {
-  version: 1,
+import { normalizeSiteConfig, type GymSiteConfig } from './site-config';
+export type { GymSiteConfig } from './site-config';
+export const site = normalizeSiteConfig({
+  version: 2,
   brand: {
     name: 'Climbing Lab',
     subtitle: 'Gimnasio de ejemplo',
@@ -55,7 +42,7 @@ export const site: GymSiteConfig = {
       },
     ],
   },
-};
+} satisfies GymSiteConfig);
 export const filterKeys = [
   'buscar',
   'grado',
@@ -71,7 +58,12 @@ export function viewFromUrl(url: URL): string {
   if (url.pathname.startsWith('/auth/')) return 'Cuenta';
   if (url.searchParams.has('ruta')) return 'Catálogo';
   const view = url.searchParams.get('vista');
-  if (view) return view === 'Rutas' ? 'Catálogo' : view;
+  if (view)
+    return view === 'Rutas'
+      ? 'Catálogo'
+      : view === 'Mi escalada'
+        ? 'Bitácora'
+        : view;
   return filterKeys.some((k) => url.searchParams.has(k))
     ? 'Catálogo'
     : 'Inicio';
