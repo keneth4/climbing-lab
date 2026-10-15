@@ -875,3 +875,15 @@ body {
     );
   }
 }
+
+/* A stable canvas while the section inspector changes step or height. */
+@media (max-width: 767px) {
+  .workspace:not(.reading):has(.section-editor.preparing) .workspace-canvas {
+    height: calc(
+      (var(--viewport-height, 100dvh) - var(--workspace-top)) * 0.48
+    );
+  }
+}
+body:has(.section-editor.preparing) .drawer-toggle {
+  display: none;
+}

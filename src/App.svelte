@@ -44,6 +44,7 @@
   import AuthPanel from './AuthPanel.svelte';
   import RouteEditor from './RouteEditor.svelte';
   import CaptureManager from './CaptureManager.svelte';
+  let newRouteSection = $state('');
   import type { Capture, Section } from './twin';
   import { supabase, api, ApiError, setApiOwner } from './auth';
   import SplatViewer from './SplatViewer.svelte';
@@ -169,6 +170,7 @@
         shareEntry = undefined;
         drafts = {};
         editorDrafts = {};
+        newRouteSection = '';
         activityNotice = '';
         reportNotice = '';
         savedActivity = undefined;
@@ -1029,6 +1031,10 @@
           onPasswordUpdated={() => (accountNotice = 'Contraseña actualizada.')}
         />{/if}{:else if tab === 'Capturas' && adminRole}<CaptureManager
         owner={userId}
+        onCreateRoute={(id) => {
+          newRouteSection = id;
+          navigate('Staff');
+        }}
         {currentCapture}
         routes={db.routes}
         onPublished={async () => {
@@ -1460,7 +1466,14 @@
       {:else}<p>Inicia sesión para consultar tu bitácora personal.</p>{/if}
     {:else if tab === 'Staff' && staff}<h1>Panel del staff</h1>
       <PilotMetrics />
+      {#if newRouteSection && editorDrafts[`${userId}:new:0`]?.name}<p
+          role="status"
+        >
+          Se conserva tu preparación local anterior. Puedes guardarla antes de
+          crear otra ruta en esta zona.
+        </p>{/if}
       <RouteEditor
+        initialSectionId={newRouteSection}
         draft={editorDrafts[`${userId}:new:0`]}
         owner={userId}
         sourceRoutes={db.routes}
@@ -1469,6 +1482,7 @@
             editorDrafts[`${owner}:${id}:${revision}`] = values;
         }}
         onSaved={async (id) => {
+          newRouteSection = '';
           await refreshRoutes(id);
           navigate('Catálogo', id);
         }}

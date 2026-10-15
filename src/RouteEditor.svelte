@@ -35,7 +35,9 @@
     onDraft,
     owner,
     sourceRoutes = [],
+    initialSectionId = '',
   }: {
+    initialSectionId?: string;
     route?: Route;
     owner: string;
     sourceRoutes?: Route[];
@@ -201,7 +203,11 @@
     }
   });
   let sections = $state<Section[]>([]),
-    sectionId = $state(restored?.sectionId || initial?.sectionId || '');
+    sectionId = $state(
+      restored?.sectionId ||
+        initial?.sectionId ||
+        untrack(() => initialSectionId),
+    );
   onMount(() => {
     api('/captures/current')
       .then((data) => (currentCapture = data.capture || undefined))
@@ -209,7 +215,8 @@
     api('/sections')
       .then((data) => {
         sections = data.sections;
-        sectionId = restored?.sectionId || initial?.sectionId || '';
+        sectionId =
+          restored?.sectionId || initial?.sectionId || initialSectionId;
       })
       .catch((e) => (message = e.message));
   });

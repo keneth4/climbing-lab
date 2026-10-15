@@ -60,6 +60,8 @@
     toolsDisabled = false,
     editorStep,
     focusRequest = 0,
+    sectionCamera,
+    sectionEditing = false,
   }: {
     exportInfo?: CardInfo;
     visible?: boolean;
@@ -78,6 +80,8 @@
     toolsDisabled?: boolean;
     editorStep?: number;
     focusRequest?: number;
+    sectionCamera?: import('./section-tool').SectionTool['camera'];
+    sectionEditing?: boolean;
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
@@ -102,6 +106,31 @@
     if (request)
       untrack(() => {
         if (focusPoint?.every(Number.isFinite)) controller?.focus(focusPoint);
+      });
+  });
+  let beforeSectionView: CameraView | undefined;
+  $effect(() => {
+    if (!sectionEditing) beforeSectionView = undefined;
+  });
+  $effect(() => {
+    const command = sectionCamera;
+    if (command)
+      untrack(() => {
+        if (!controller || !ready) return;
+        if (command.plane) {
+          beforeSectionView ||= controller.save();
+          const current = controller.save(),
+            normal = command.plane.normal;
+          controller.apply({
+            ...current,
+            target: command.plane.origin,
+            yaw: Math.atan2(normal[0], normal[2]),
+            pitch: Math.asin(Math.max(-1, Math.min(1, normal[1]))),
+          });
+        } else if (beforeSectionView) {
+          controller.apply(beforeSectionView);
+          beforeSectionView = undefined;
+        }
       });
   });
   function mountViewer(node: HTMLElement) {
@@ -516,7 +545,7 @@
             [direction.x, direction.y, direction.z],
             localTarget.distance(origin),
             (Math.tan((camera.camera!.fov * Math.PI) / 360) * 16) / rect.height,
-            section && onHoldSelect
+            section && onHoldSelect && !sectionEditing
               ? (point) => {
                   const aligned = entity!
                     .getWorldTransform()
@@ -1028,9 +1057,13 @@
             height: rect.height,
             zoom: canvas.offsetWidth > 0 ? rect.width / canvas.offsetWidth : 1,
           };
-          const inspector = editorStep
-            ? document.getElementById('tools-panel')?.getBoundingClientRect()
-            : undefined;
+          const inspector = sectionEditing
+            ? document
+                .querySelector('.section-editor.preparing')
+                ?.getBoundingClientRect()
+            : editorStep
+              ? document.getElementById('tools-panel')?.getBoundingClientRect()
+              : undefined;
           overlayClipBottom =
             viewport.height - visibleSceneHeight(viewport, inspector);
           if (JSON.stringify(viewport) !== JSON.stringify(markerViewport))
