@@ -330,12 +330,17 @@ export async function handle(
         : null;
       payload.sectionId = payload.sectionId || existingSection || undefined;
       const section = payload.sectionId
-        ? await env.DB.prepare('SELECT revision FROM sections WHERE id=?')
+        ? await env.DB.prepare('SELECT revision,kind FROM sections WHERE id=?')
             .bind(payload.sectionId)
-            .first<{ revision: number }>()
+            .first<{ revision: number; kind: string }>()
         : null;
       if (!section && payload.status !== 'borrador')
         throw new HttpError(400, 'Selecciona una sección del gimnasio.');
+      if (section?.kind === 'accessible-area')
+        throw new HttpError(
+          400,
+          'Las áreas visitables no admiten rutas ni agarres.',
+        );
       payload.sectionRevision = section?.revision;
       if (
         !routeMatch &&
