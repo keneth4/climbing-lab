@@ -119,3 +119,15 @@ Para nuevas rutas/borradores, guardar incompleto usa la API actual. Para una rut
 Revisar desde dos ángulos y confirmar humanamente antes de generar/cargar el respaldo. Los cambios geométricos confirmados invalidan verificación e imagen; cancelar o aplicar idéntico las conserva. Si se desea recuperar el encuadre guardado antes del PNG, utilizar «Ver ruta» en opciones del visor. Publicar/actualizar y retirar/reactivar son acciones finales separadas con los permisos y motivos actuales.
 
 [QA y límites de UX-P1A](planes/ux/02-flujo-editor-rutas.md#entrega-y-evidencia-local--14-de-octubre-de-2026). Para repetir el smoke sobre el runtime persistente usar `DEMO_REUSE_SERVER=1 npx playwright test --config playwright.demo.config.ts`; no ejecutar setup/reset para esta comprobación. La ruta D04 original debe conservarse; cualquier nueva selección o publicación real requiere revisión humana.
+
+## Zonas y planos inclinados UX-P1B
+
+En Staff → Capturas, seleccionar la captura y elegir Preparar sección visual (caja), Delimitar con vértices o Plano inclinado. Los pasos Tipo, Superficie, Contorno y espesor y Revisar y guardar están disponibles mediante «Paso de zona».
+
+Una zona de escalada admite rutas; un área visitable no. Para el plano inclinado, elegir tres puntos distintos y no alineados sobre el muro; reiniciar permite descartarlos. Añadir vértices proyecta cada selección al plano. Cerrar el contorno comprueba cruces y área. Seleccionar desde la lista enfoca el vértice y permite ajustar U/V con botones; Aplicar confirma y Cancelar conserva la posición anterior. Deshacer/rehacer no escribe en servidor. El espesor usa unidades del clon, no metros. Vista perpendicular y Restaurar cámara ayudan a revisar el volumen.
+
+Antes de guardar, revisar nombre/tipo, rutas dependientes y volumen desde dos ángulos. Un cambio de captura cancela la preparación; la preparación no guardada es local y no garantiza recuperación tras recargar. Un error conserva los datos. Ante conflicto, consultar nueva base, comparar geometría/historial y confirmar la revisión antes de enviar otra vez. Las rutas existentes conservan su revisión histórica de sección.
+
+Tras guardar una zona de escalada, «Crear ruta en esta zona» abre UX-P1A. Si ya había preparación local de una ruta, se conserva antes de iniciar otra. No usar la sección original D04 para escrituras de QA. [Plan y evidencia UX-P1B](planes/ux/03-zonas-planos-inclinados.md).
+
+Al editar una ruta existente, UX-P1A usa su revisión histórica de zona y avisa si la zona vigente es posterior. Guardar o retirar la ruta no adopta automáticamente esa nueva geometría. Si falta el snapshot de sección, se conserva la preparación y la API exige revisar el conflicto; no reasigna la ruta silenciosamente.
