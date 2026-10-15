@@ -2,9 +2,17 @@
   import SiteHeader from './SiteHeader.svelte';
   import SitePublic from './SitePublic.svelte';
   import TourPage from './TourPage.svelte';
+  import TourOriginTrail from './TourOriginTrail.svelte';
+  import {
+    readTourOrigin,
+    putTourOrigin,
+    tourRevision,
+    type TourOrigin,
+  } from './tour-origin';
   import TourManager from './TourManager.svelte';
   import SiteFooter from './SiteFooter.svelte';
   import RouteCatalog from './RouteCatalog.svelte';
+  import { filterCatalog } from './catalog';
   import { site, viewFromUrl, pageTitle } from './site';
   import QRCode from 'qrcode';
   import RoutePresentation from './RoutePresentation.svelte';
@@ -13,9 +21,6 @@
   import MyReports from './MyReports.svelte';
   import DemoImport from './DemoImport.svelte';
   import {
-    normalize,
-    gradeScale,
-    gradeRank,
     newDraft,
     privateFields,
     sharedPersonal,
@@ -23,7 +28,7 @@
     type ActivityDraft,
     type EditorDraft,
   } from './pilot';
-  import { onMount, setContext, untrack } from 'svelte';
+  import { onMount, setContext, untrack, tick } from 'svelte';
   import SplatRuntime from './SplatRuntime.svelte';
   import { VIEWER_CONTEXT, ViewerWorkspace } from './viewer-context.svelte';
   const viewerWorkspace = new ViewerWorkspace();
@@ -47,6 +52,8 @@
   import HistoricalExport from './HistoricalExport.svelte';
   import ProjectsPanel from './ProjectsPanel.svelte';
   import JournalControls from './JournalControls.svelte';
+  import { activityUtc, type JournalQuery } from './journal';
+  let journalQuery = $state<JournalQuery | undefined>();
   import AuthPanel from './AuthPanel.svelte';
   import RouteEditor from './RouteEditor.svelte';
   import CaptureManager from './CaptureManager.svelte';
@@ -175,6 +182,7 @@
         shareOpen = false;
         shareEntry = undefined;
         drafts = {};
+        journalQuery = undefined;
         editorDrafts = {};
         newRouteSection = '';
         activityNotice = '';
@@ -221,20 +229,6 @@
         navigate('Catálogo', target);
       }
       void refreshRoutes();
-      const dataEntries = await api('/entries');
-      if (ticket !== generation) return;
-      db.entries = dataEntries.entries.map((e: any) => ({
-        id: e.id,
-        routeId: e.route_id,
-        revision: e.revision,
-        routeName: e.route_name || e.route_id,
-        grade: e.grade || '',
-        date: e.created_at,
-        attempts: e.attempts,
-        result: e.result,
-        notes: e.notes,
-        holds: e.route_snapshot ? JSON.parse(e.route_snapshot).holds || [] : [],
-      }));
       if (staff) {
         const reports = await api('/staff/reports');
         if (ticket !== generation) return;
@@ -270,6 +264,7 @@
   let catalogLoading = $state(true),
     catalogError = $state('');
   async function refreshRoutes(id?: string) {
+    const catalogStarted = performance.now();
     catalogLoading = true;
     catalogError = '';
     const ticket = ++routesTicket,
@@ -324,7 +319,22 @@
       );
       if (ticket !== routesTicket || owner !== userId || (authorized && !staff))
         return;
+      const renderStarted = performance.now();
       db.routes = routes;
+      void tick().then(() => {
+        if (ticket === routesTicket) {
+          performance.clearMeasures('catalog:render');
+          performance.measure('catalog:render', {
+            start: renderStarted,
+            end: performance.now(),
+          });
+        }
+      });
+      performance.clearMeasures('catalog:download');
+      performance.measure('catalog:download', {
+        start: catalogStarted,
+        end: performance.now(),
+      });
       if (id) select(id);
       else if (!selectedId) selectedId = routes[0]?.id || '';
       else if (!routes.some((r) => r.id === selectedId)) {
@@ -465,35 +475,64 @@
   let zoneFilter = $state(initialUrl.searchParams.get('zona') || '');
   let tourSelection = $state(initialUrl.searchParams.get('tour') || '');
   let stopSelection = $state(initialUrl.searchParams.get('parada') || '');
+  let tourRevisionSelection = $state(
+    tourRevision(initialUrl.searchParams.get('revision')),
+  );
+  let invalidTourRevision = $state(
+    initialUrl.searchParams.has('revision') &&
+      !tourRevision(initialUrl.searchParams.get('revision')),
+  );
+  function initialOrigin() {
+    try {
+      return (
+        readTourOrigin(initialUrl) ||
+        (sessionStorage.getItem('climbing-login-return')
+          ? readTourOrigin(
+              new URL(
+                sessionStorage.getItem('climbing-login-origin') || '/',
+                location.origin,
+              ),
+            )
+          : undefined)
+      );
+    } catch {
+      return undefined;
+    }
+  }
+  let tourOrigin = $state<TourOrigin | undefined>(initialOrigin());
+  let invalidTourOrigin = $state(
+    initialUrl.searchParams.has('tourOrigen') && !readTourOrigin(initialUrl),
+  );
+  function returnToTour(origin: TourOrigin) {
+    navigate('Recorrido', undefined, true, origin);
+  }
+
   let scaleFilter = $state(initialUrl.searchParams.get('escala') || '');
   let minGrade = $state(initialUrl.searchParams.get('desde') || '');
   let maxGrade = $state(initialUrl.searchParams.get('hasta') || '');
   let order = $state(initialUrl.searchParams.get('orden') || 'recientes');
   let showRetired = $state(initialUrl.searchParams.get('retiradas') === '1');
-  let filtered = $derived(
-    db.routes
-      .filter(
-        (r) =>
-          (r.status === 'activa' || (showRetired && r.status === 'retirada')) &&
-          (!grade || r.grade === grade) &&
-          (!sectorFilter || r.sector === sectorFilter) &&
-          (!zoneFilter || r.sectionId === zoneFilter) &&
-          (!scaleFilter ||
-            (r.gradeScale || gradeScale(r.grade)) === scaleFilter) &&
-          (!minGrade ||
-            (gradeRank(r.grade, scaleFilter) ?? -Infinity) >=
-              (gradeRank(minGrade, scaleFilter) ?? Infinity)) &&
-          (!maxGrade ||
-            (gradeRank(r.grade, scaleFilter) ?? Infinity) <=
-              (gradeRank(maxGrade, scaleFilter) ?? -Infinity)) &&
-          normalize(`${r.name} ${r.sector}`).includes(normalize(query)),
-      )
-      .sort((a, b) =>
-        order === 'nombre'
-          ? a.name.localeCompare(b.name)
-          : (b.updatedAt || '').localeCompare(a.updatedAt || ''),
-      ),
-  );
+  let filtered = $derived.by(() => {
+    const started = performance.now();
+    const result = filterCatalog(db.routes, {
+      query,
+      grade,
+      sector: sectorFilter,
+      zone: zoneFilter,
+      scale: scaleFilter,
+      min: minGrade,
+      max: maxGrade,
+      order,
+      retired: showRetired,
+    });
+    performance.clearMeasures('catalog:filter');
+    performance.measure('catalog:filter', {
+      start: started,
+      end: performance.now(),
+    });
+    return result;
+  });
+
   $effect(() => {
     const filters = {
       buscar: query,
@@ -515,10 +554,11 @@
     history.replaceState(history.state, '', url);
   });
   let drafts = $state<Record<string, ActivityDraft>>({});
+  let emptyActivityDraft = $state(newDraft(0));
   let draft = $derived.by(
     () =>
       drafts[`${userId}:${selectedId}:${selected?.revision || 0}`] ||
-      newDraft(selected?.revision || 0),
+      emptyActivityDraft,
   );
   $effect(() => {
     if (!selected) return;
@@ -566,7 +606,12 @@
   let loginReturn = $state(
     sessionStorage.getItem('climbing-login-return') || '',
   );
-  function navigate(view: string, id?: string, push = true) {
+  function navigate(
+    view: string,
+    id?: string,
+    push = true,
+    restoreTour?: TourOrigin,
+  ) {
     const previous = new URL(location.href);
     for (const [k, v] of Object.entries({
       buscar: query,
@@ -591,10 +636,18 @@
       '',
       previous,
     );
-    if (view === 'Recorrido' && tab !== 'Recorrido') {
+    if (view === 'Recorrido' && tab !== 'Recorrido' && !restoreTour) {
+      tourRevisionSelection = undefined;
+      invalidTourRevision = false;
       tourSelection = '';
       stopSelection = '';
     }
+    if (restoreTour) {
+      tourSelection = restoreTour.tour;
+      stopSelection = restoreTour.stop;
+      tourRevisionSelection = restoreTour.revision;
+    }
+    if (['Inicio', 'El gimnasio'].includes(view)) tourOrigin = undefined;
     tab = view;
     if (id) selectedId = id;
     detailMode = !!id;
@@ -605,7 +658,13 @@
     url.search = '';
     if (view !== 'Inicio') url.searchParams.set('vista', view);
     if (id) url.searchParams.set('ruta', id);
+    if (view === 'Catálogo') {
+      putTourOrigin(url, tourOrigin);
+      invalidTourOrigin = false;
+    }
     if (view === 'Recorrido') {
+      if (tourRevisionSelection)
+        url.searchParams.set('revision', String(tourRevisionSelection));
       if (tourSelection) url.searchParams.set('tour', tourSelection);
       if (stopSelection) url.searchParams.set('parada', stopSelection);
     }
@@ -662,6 +721,11 @@
       zoneFilter = url.searchParams.get('zona') || '';
       tourSelection = url.searchParams.get('tour') || '';
       stopSelection = url.searchParams.get('parada') || '';
+      tourRevisionSelection = tourRevision(url.searchParams.get('revision'));
+      invalidTourRevision =
+        url.searchParams.has('revision') && !tourRevisionSelection;
+      tourOrigin = readTourOrigin(url);
+      invalidTourOrigin = url.searchParams.has('tourOrigen') && !tourOrigin;
       scaleFilter = url.searchParams.get('escala') || '';
       minGrade = url.searchParams.get('desde') || '';
       maxGrade = url.searchParams.get('hasta') || '';
@@ -702,6 +766,9 @@
     );
     loginReturn = detailMode && tab === 'Catálogo' ? selectedId : '';
     sessionStorage.setItem('climbing-login-return', loginReturn);
+    const originUrl = new URL('/', location.origin);
+    putTourOrigin(originUrl, tourOrigin);
+    sessionStorage.setItem('climbing-login-origin', originUrl.href);
     navigate('Cuenta');
   }
   function clearFilters() {
@@ -743,10 +810,19 @@
       d = draft,
       owner = userId,
       ticket = requestOwner;
+    let occurredAt: string | undefined;
+    try {
+      if (d.activityTime) occurredAt = activityUtc(d.activityTime);
+    } catch (e) {
+      activityError = true;
+      activityNotice = (e as Error).message;
+      return;
+    }
     const content = JSON.stringify({
       attempts: d.attempts,
       result: d.result,
       notes: d.notes,
+      activityTime: d.activityTime,
     });
     recordingActivity = true;
     activityError = false;
@@ -762,6 +838,7 @@
           result: d.result,
           notes: d.notes,
           requestId: d.activityKey,
+          ...(occurredAt ? { occurredAt } : {}),
         },
         undefined,
         owner,
@@ -779,11 +856,14 @@
           attempts: d.attempts,
           result: d.result,
           notes: d.notes,
+          activityTime: d.activityTime,
         }) === content
       ) {
         d.notes = '';
       }
       if (selectedId === route.id) activityNotice = 'Actividad guardada.';
+      if (journalQuery?.label === 'Últimos 7 días (168 horas)')
+        journalQuery = undefined;
       measure('activity_saved', performance.now() - activityStarted);
       await refreshSession();
     } catch (e) {
@@ -915,9 +995,18 @@
     shareOpen = true;
   }
   $effect(() => {
-    document.title = pageTitle(tab, detailMode ? selected?.name : undefined);
+    document.title =
+      (tab === 'Inicio' && site.editorial.seo?.title) ||
+      pageTitle(tab, detailMode ? selected?.name : undefined);
   });
 </script>
+
+<svelte:head
+  >{#if tab === 'Inicio' || tab === 'El gimnasio'}<meta
+      name="description"
+      content={site.editorial.seo?.description || site.content.description}
+    />{/if}</svelte:head
+>
 
 <div bind:this={chrome}>
   <SiteHeader
@@ -1034,17 +1123,31 @@
     aria-label="Contenido del gimnasio"
     tabindex="-1"
   >
-    {#if tab === 'Recorrido'}<TourPage
-        tourId={tourSelection}
-        stopId={stopSelection}
-        onSelect={selectTour}
-        onRoute={(id) => navigate('Catálogo', id)}
-        onZone={(id) => {
-          zoneFilter = id;
-          navigate('Catálogo');
-        }}
-      />
-    {:else if tab === 'Recorridos' && userId}{#key userId}<TourManager
+    {#if tab === 'Recorrido'}{#if invalidTourRevision}<p role="alert">
+          La revisión del recorrido indicada no es válida.
+        </p>
+        <button
+          onclick={() => {
+            invalidTourRevision = false;
+            tourRevisionSelection = undefined;
+            navigate('Recorrido');
+          }}>Ver recorrido vigente</button
+        >{:else}<TourPage
+          tourId={tourSelection}
+          stopId={stopSelection}
+          revision={tourRevisionSelection}
+          onSelect={selectTour}
+          onRoute={(id, origin) => {
+            tourOrigin = origin;
+            navigate('Catálogo', id);
+          }}
+          onZone={(id, origin) => {
+            tourOrigin = origin;
+            zoneFilter = id;
+            navigate('Catálogo');
+          }}
+        />
+      {/if}{:else if tab === 'Recorridos' && userId}{#key userId}<TourManager
           admin={adminRole}
           available={staff && sessionReady}
           owner={userId}
@@ -1054,9 +1157,12 @@
         view={tab}
         {navigate}
       />
-    {:else if tab === 'Proyectos'}{#if userEmail && sessionReady}{#key userEmail}<ProjectsPanel
+    {:else if tab === 'Proyectos'}<h1 tabindex="-1">Mis proyectos</h1>
+      {#if userEmail && sessionReady}{#key userEmail}<ProjectsPanel
             routes={db.routes.filter((r) => r.status !== 'borrador')}
           />{/key}{:else}<p>Inicia sesión para consultar tus proyectos.</p>{/if}
+    {:else if tab === 'Reportes'}{#if userId && sessionReady}{#key userId}<MyReports
+          />{/key}{:else}<p>Inicia sesión para consultar tus reportes.</p>{/if}
     {:else if tab === 'Productos'}<StorePanel
       />{:else if tab === 'Recepción' && staff && sessionReady}<OperationsPanel
         admin={adminRole}
@@ -1070,17 +1176,20 @@
         >
           Sesión iniciada: {userEmail}
         </p>
-        <label
-          >Identificador de cuenta (UUID)<input
-            readonly
-            value={userId}
-            aria-describedby="account-id-help"
-          /></label
-        >
-        <p id="account-id-help">
-          Usa este identificador para autorizar tu cuenta en el demo local. No
-          es una contraseña ni concede permisos por sí solo.
-        </p>
+        {#if import.meta.env.DEV && import.meta.env.MODE === 'demo' && adminRole && ['127.0.0.1', 'localhost'].includes(location.hostname)}<details
+          >
+            <summary>Diagnóstico del demo</summary><label
+              >Identificador de cuenta (UUID)<input
+                readonly
+                value={userId}
+                aria-describedby="account-id-help"
+              /></label
+            >
+            <p id="account-id-help">
+              Usa este identificador para autorizar tu cuenta en el demo local.
+              No es una contraseña ni concede permisos por sí solo.
+            </p>
+          </details>{/if}
         <button onclick={() => navigate('Bitácora')}>Ver mi actividad</button
         >{:else}<AuthPanel
           onPasswordUpdated={() => (accountNotice = 'Contraseña actualizada.')}
@@ -1097,10 +1206,20 @@
           await refreshRoutes();
         }}
       />{:else if tab === 'Catálogo'}
+      {#if invalidTourOrigin}<p role="alert">
+          El origen del recorrido indicado no es válido.
+        </p>
+        <a href="/?vista=Recorrido">Ver recorrido vigente</a>{/if}
+      {#if tourOrigin}<TourOriginTrail
+          origin={tourOrigin}
+          onReturn={returnToTour}
+        />{/if}
       <div class="layout" class:route-detail={detailMode}>
         {#if !detailMode}<RouteCatalog
             routes={db.routes.filter((r) => r.status !== 'borrador')}
             {filtered}
+            zoneName={sections.find((s) => s.id === zoneFilter)?.name}
+            retryZone={refreshTwin}
             bind:query
             bind:grade
             bind:sectorFilter
@@ -1128,7 +1247,9 @@
                 {selected.name} <small>{selected.grade}</small>
               </h2>
               <p>
-                {selected.sector} · Revisión {selected.revision} · {selected.status}
+                {selected.sector} · {selected.status === 'retirada'
+                  ? 'Retirada'
+                  : 'Activa'}
               </p>
               {#if selected.status === 'retirada'}<p role="status">
                   Ruta retirada. El enlace y su historial se conservan. Consulta
@@ -1142,6 +1263,11 @@
                     document
                       .getElementById('activity-form')
                       ?.scrollIntoView({ block: 'start' });
+                    document
+                      .querySelector<HTMLInputElement>(
+                        '#activity-form input[type=number]',
+                      )
+                      ?.focus({ preventScroll: true });
                   }}>Registrar actividad</button
                 ><button
                   disabled={!userEmail ||
@@ -1151,6 +1277,12 @@
                   onclick={saveProject}>Guardar proyecto</button
                 >
               </div>
+              <details>
+                <summary>Información de ruta</summary>
+                <p>
+                  Revisión {selected.revision} · Identificador {selected.id}
+                </p>
+              </details>
               <RoutePresentation route={selected} />
               {#if selected.captureId}<button
                   id="explore-3d"
@@ -1294,17 +1426,35 @@
                     ></select
                   ></label
                 >
-                <label
-                  >Notas<textarea
-                    aria-describedby={activityNotice
-                      ? 'activity-result'
-                      : undefined}
-                    bind:value={draft.notes}
-                    maxlength="2000"
-                    disabled={recordingActivity}
-                    oninput={() => (draft.activityKey = crypto.randomUUID())}
-                  ></textarea></label
+                <details
+                  open={draft.detailsOpen ??
+                    (!!draft.notes || !!draft.activityTime)}
+                  ontoggle={(e) => (draft.detailsOpen = e.currentTarget.open)}
                 >
+                  <summary>Añadir detalles</summary>
+                  <label
+                    >Notas<textarea
+                      aria-describedby={activityNotice
+                        ? 'activity-result'
+                        : undefined}
+                      bind:value={draft.notes}
+                      maxlength="2000"
+                      disabled={recordingActivity}
+                      oninput={() => (draft.activityKey = crypto.randomUUID())}
+                    ></textarea></label
+                  >
+                  <label
+                    >Fecha y hora opcional (hora local del dispositivo)<input
+                      type="datetime-local"
+                      value={draft.activityTime || ''}
+                      disabled={recordingActivity}
+                      onchange={(e) => {
+                        draft.activityTime = e.currentTarget.value;
+                        draft.activityKey = crypto.randomUUID();
+                      }}
+                    /></label
+                  >
+                </details>
                 <button
                   class="primary"
                   disabled={selected.status !== 'activa' ||
@@ -1409,14 +1559,13 @@
               </p>{/if}
           </section>{/if}
       </div>
-    {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
+    {:else if tab === 'Bitácora'}<h1 tabindex="-1">Mi actividad</h1>
       {#if mediaEntry && userEmail && sessionReady}{#key mediaEntry.id}<HistoricalExport
             entry={mediaEntry}
             gym={site.brand.attribution}
             personal={sharedPersonal(mediaEntry, shareFields, name)}
             onClose={() => (mediaEntry = undefined)}
           />{/key}{/if}
-      {#if userEmail && sessionReady}<ProjectsPanel routes={db.routes} />{/if}
       <button
         disabled={!userEmail || !sessionReady}
         onclick={() => {
@@ -1433,6 +1582,8 @@
             onCancel={() => (journalEntryOpen = false)}
             onSaved={async () => {
               const edited = !!editingEntry;
+              if (journalQuery?.label === 'Últimos 7 días (168 horas)')
+                journalQuery = undefined;
               await refreshSession();
               journalEntryOpen = false;
               editingEntry = undefined;
@@ -1451,6 +1602,8 @@
           }}
         />{/if}
       {#if userEmail && sessionReady}{#key userEmail}<JournalControls
+            initialState={journalQuery}
+            onState={(state) => (journalQuery = state)}
             onEntries={(entries) => (db.entries = entries)}
           />{/key}
 
@@ -1479,7 +1632,6 @@
             {name}
             gym={site.brand.attribution}
           />{/if}
-        {#key userId}<MyReports />{/key}
         <DemoImport
           routes={db.routes}
           owner={userEmail}
