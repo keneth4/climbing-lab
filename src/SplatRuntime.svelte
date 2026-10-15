@@ -66,6 +66,8 @@
     sectionEditing = false,
     tourCommand,
     onTourSnapshot,
+    onTourCaptureReady,
+    onTourCaptureError,
     onExplore,
     tourMode = false,
   }: {
@@ -91,6 +93,8 @@
     sectionEditing?: boolean;
     tourCommand?: { id: number; camera: TourCamera };
     onTourSnapshot?: (blob: Blob, camera: TourCamera) => void;
+    onTourCaptureReady?: (capture: (() => void) | undefined) => void;
+    onTourCaptureError?: (message: string) => void;
     onExplore?: () => void;
     tourMode?: boolean;
     saved?: CameraView;
@@ -148,6 +152,38 @@
     const command = tourCommand;
     const available = ready;
     if (available) untrack(() => controller?.tour(command?.camera));
+  });
+  function capturePngError() {
+    status =
+      'No se pudo generar el PNG. Vuelve a intentar guardar el encuadre.';
+    onTourCaptureError?.(status);
+  }
+  function captureTourSnapshot() {
+    if (
+      !controller ||
+      !ready ||
+      loading ||
+      toolsDisabled ||
+      !visible ||
+      !onTourSnapshot
+    )
+      return;
+    const view = controller.tourSnapshot(),
+      deliver = onTourSnapshot;
+    try {
+      canvas.toBlob((blob) => {
+        if (blob) deliver(blob, view);
+        else capturePngError();
+      }, 'image/png');
+    } catch {
+      capturePngError();
+    }
+  }
+  $effect(() => {
+    const notify = onTourCaptureReady;
+    const available =
+      ready && !loading && !toolsDisabled && visible && !!onTourSnapshot;
+    untrack(() => notify?.(available ? captureTourSnapshot : undefined));
   });
   function mountSceneCanvas(node: HTMLCanvasElement) {
     canvasMount?.(node);
@@ -1253,17 +1289,10 @@
 </script>
 
 <div class="splat-viewer" use:mountViewer>
-  {#if onTourSnapshot}<button
+  {#if onTourSnapshot && !onTourCaptureReady}<button
       type="button"
       disabled={!ready || loading || toolsDisabled}
-      onclick={() => {
-        if (!controller) return;
-        const view = controller.tourSnapshot();
-        const deliver = onTourSnapshot;
-        canvas.toBlob((blob) => {
-          if (blob) deliver?.(blob, view);
-        }, 'image/png');
-      }}>Guardar cámara e imagen de parada</button
+      onclick={captureTourSnapshot}>Guardar cámara e imagen de parada</button
     >{/if}
   <div hidden={!!editorStep && [1, 6].includes(editorStep)}>
     <h3>Captura 3D del gimnasio</h3>

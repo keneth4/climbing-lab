@@ -57,6 +57,10 @@
   let imageRetry = $state<
     { key: string; requestId: string; blob: Blob } | undefined
   >();
+  let captureAction = $state<(() => void) | undefined>();
+  $effect(() => {
+    if (!scene || !compatible || !available) captureAction = undefined;
+  });
   const copy = (v: TourContent) => structuredClone($state.snapshot(v));
   const stop = $derived(content?.stops.find((s) => s.id === selected));
   const dirty = $derived(!!content && JSON.stringify(content) !== baseline);
@@ -385,8 +389,11 @@
       };
       change(next);
       imageRetry = undefined;
-      message =
-        'Cámara e imagen preparadas. Revisa la parada desde dos ángulos y guarda el borrador.';
+      // Persist the captured pose/image even before the separate human review.
+      busy = false;
+      if (await save())
+        message =
+          'Cámara e imagen preparadas y guardadas en el borrador. Revisa la parada desde dos ángulos y guarda su revisión.';
     } catch (e) {
       message = (e as Error).message;
     } finally {
@@ -476,7 +483,7 @@
     Staff prepara; administración publica o retira. Los borradores no cambian el
     recorrido público.
   </p>
-  <p role="status">{message}</p>
+  {#if !stop}<p role="status">{message}</p>{/if}
   <div class="actions">
     <button disabled={busy} onclick={refresh}
       >Actualizar recorridos y captura</button
@@ -557,8 +564,10 @@
         tourMode
         tourCommand={command}
         onSave={() => {}}
-        toolsDisabled={busy || !!candidate}
+        toolsDisabled={busy || !!candidate || !available}
         onTourSnapshot={stop ? snapshot(stop.id) : undefined}
+        onTourCaptureReady={(action) => (captureAction = action)}
+        onTourCaptureError={(value) => (message = value)}
         onPoint={stop
           ? (_, world) => {
               candidate = {
@@ -727,11 +736,37 @@
             title={stop.title}
             privateOwner={actor}
           />{/if}
-        <p>
-          {stop.camera
-            ? 'Cámara preparada · FOV ' + stop.camera.fov + '°'
-            : 'Cámara e imagen pendientes'}
-        </p>
+        <section class="capture-card" aria-label="Cámara e imagen de la parada">
+          <p>
+            {stop.camera
+              ? 'Cámara preparada · FOV ' + stop.camera.fov + '°'
+              : 'Cámara e imagen pendientes'}
+          </p>
+          {#if !stop.camera || !stop.imageId}<p>
+              Mover el Splat no guarda el encuadre. Guarda la cámara y su imagen
+              antes de revisar esta parada. «Guardar borrador» conserva los
+              textos, pero no captura la vista.
+            </p>{/if}
+          <button
+            class="primary"
+            disabled={!captureAction || busy || !!candidate || conflict}
+            onclick={() => captureAction?.()}
+            >Guardar cámara e imagen de parada</button
+          >
+          {#if !scene}<button
+              disabled={busy || !compatible}
+              onclick={() => {
+                scene = true;
+                if (stop?.camera)
+                  command = { id: ++commandId, camera: stop.camera };
+              }}>Abrir Splat para guardar este encuadre</button
+            >
+          {:else if !captureAction && !busy && !candidate}<p role="status">
+              Espera a que termine de cargar el visor. Si falla, usa Reintentar
+              3D o vuelve a abrirlo.
+            </p>{/if}
+          <p role="status">{message}</p>
+        </section>
         <label class="toggle"
           ><input
             type="checkbox"
@@ -741,7 +776,7 @@
           />Revisé esta parada y su punto de interés desde dos ángulos</label
         >
         <p>
-          El botón del visor guarda juntos la cámara y el PNG. Después de
+          El botón de cámara guarda juntos la cámara y el PNG. Después de
           revisar desde dos ángulos, confirma la casilla y guarda esta parada.
           Cambiar el encuadre requiere generar otra imagen.
         </p>
@@ -907,6 +942,12 @@
 </section>
 
 <style>
+  .capture-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin: 0.75rem 0;
+  }
   .tour-guide {
     border: 1px solid var(--border);
     border-radius: 8px;

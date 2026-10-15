@@ -547,6 +547,8 @@ test('staff snapshot binds PNG to the selected stop camera and FOV and invalidat
     .click();
   await expect(page.getByText(/Cámara e imagen preparadas/)).toBeVisible();
   expect(state.images[0].camera.fov).toBe(56);
+  await expect.poll(() => state.draft.stops[0].imageId).toBe('captured-1');
+  expect(state.draft.stops[0].verified).toBe(false);
   await expect(
     page.getByLabel(
       'Revisé esta parada y su punto de interés desde dos ángulos',
@@ -700,4 +702,62 @@ test('discarding preparation cancels a pending PNG callback instead of uploading
   ).toBeVisible();
   expect(state.images).toHaveLength(0);
   expect(state.writes).toHaveLength(0);
+});
+
+test('pending camera state has its own capture action and shows PNG failures beside it', async ({
+  page,
+}) => {
+  const state = await staffFixture(page);
+  delete state.draft.stops[0].camera;
+  delete state.draft.stops[0].imageId;
+  state.draft.stops[0].verified = false;
+  await page.goto('/?vista=Recorridos');
+  await page.getByRole('button', { name: /Abrir recorrido tour-1/ }).click();
+  const card = page.getByRole('region', {
+    name: 'Cámara e imagen de la parada',
+    exact: true,
+  });
+  const capture = card.getByRole('button', {
+    name: 'Guardar cámara e imagen de parada',
+    exact: true,
+  });
+  await expect(capture).toBeDisabled();
+  await card
+    .getByRole('button', {
+      name: 'Abrir Splat para guardar este encuadre',
+      exact: true,
+    })
+    .click();
+  await expect(capture).toBeEnabled();
+  await expect(
+    card.getByText('Cámara e imagen pendientes', { exact: true }),
+  ).toBeVisible();
+  await capture.scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: '/tmp/tour-capture-control.png',
+    fullPage: true,
+  });
+  expect(
+    await page
+      .getByRole('button', {
+        name: 'Guardar cámara e imagen de parada',
+        exact: true,
+      })
+      .count(),
+  ).toBe(1);
+  await page.evaluate(() => {
+    HTMLCanvasElement.prototype.toBlob = function (callback) {
+      callback(null);
+    };
+  });
+  await capture.click();
+  await expect(card.getByRole('status')).toHaveText(
+    'No se pudo generar el PNG. Vuelve a intentar guardar el encuadre.',
+  );
+  expect(state.images).toHaveLength(0);
+  expect(state.writes).toHaveLength(0);
+  await page.screenshot({
+    path: '/tmp/tour-capture-action-fixed.png',
+    fullPage: true,
+  });
 });

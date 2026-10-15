@@ -45,6 +45,8 @@ export class ViewerWorkspace {
         sectionEditing: false,
         tourCommand: undefined,
         onTourSnapshot: undefined,
+        onTourCaptureReady: undefined,
+        onTourCaptureError: undefined,
         onExplore: undefined,
         tourMode: false,
         onReady: undefined,
