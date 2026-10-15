@@ -2,6 +2,8 @@
 
 Base: main con PR #5 integrado; rama `codex/gym-guided-tour`.
 
+**Estado vigente — 14 de octubre de 2026:** aceptación funcional local UX-P2B cerrada tras la prueba manual del propietario y comprobación D1 del recorrido Main Gym publicado, revisión 19, con tres paradas verificadas e imágenes. Los pendientes de recorrido real descritos más abajo son registros cronológicos y quedan sustituidos por este cierre. PR #6 pendiente de integración; dispositivos físicos, lector de pantalla, rendimiento y staging continúan abiertos.
+
 ## Entrega acordada
 
 Recorrido público bajo demanda, con imágenes/texto sin WebGL, paradas Anterior/Siguiente, enlaces profundos y vuelta desde exploración libre. Cambio de cámara directo, sin autoplay; una captura y un runtime. Enlaces opcionales a rutas públicas y catálogo con `zona=ID`.
@@ -70,3 +72,16 @@ Al revisar el intento real «Main Gym», el borrador conservaba título y parada
 Guardar cámara e imagen persiste ahora también la referencia de pose/PNG en el borrador antes de la revisión humana separada: no depende de guardar más tarde para sobrevivir a una recarga. La verificación permanece falsa hasta que el operador la confirme. Un error conserva la preparación para reintentar el guardado; no declara guardado exitoso.
 
 QA: 26 e2e del recorrido aprobadas en escritorio/móvil, incluyendo parada incompleta, botón en el mismo bloque, habilitación al cargar, error PNG local, persistencia de pose/imagen y verificación humana aún pendiente. Tipos, formato y build aprobados. En navegador interno se abrió el borrador existente y Crux, y se comprobó el botón habilitado; no se capturó/subió ni publicó una cámara real y el borrador no se modificó. Los PNG y escrituras automáticas de prueba son fixtures sintéticos.
+
+
+## Cierre de aceptación funcional local — 14 de octubre de 2026
+
+El propietario confirma que pudo guardar y explorar el recorrido después de las correcciones del flujo. Consulta de solo lectura a la persistencia D1 demo confirma:
+
+- Recorrido `b8af5024-1332-4a5e-98be-b6820c68654a`, título **Main Gym**, estado `published`, revisión de borrador/publicación **19**; es el recorrido vigente.
+- Tres paradas: Spray Wall front, Spray Wall side y Spray Wall other side, todas con `verified:true`, cámara de Crux `a449889e-b042-419a-b090-9630b330a088` e imagen asignada.
+- La revisión pública 19 tiene tres referencias de imágenes en `tour_revision_images`.
+
+**Cerrado:** aceptación funcional humana de creación/guardado y exploración del recorrido local sobre Crux; ya no falta seleccionar y publicar tres paradas para aceptar UX-P2B. Evidencia humana: reporte del propietario en este chat. Evidencia técnica de esta comprobación: lectura D1; no se repitió una sesión de navegación ni una suite automatizada en este cierre documental. Los resultados automatizados anteriores conservan su alcance.
+
+El agente no creó, alteró ni publicó paradas durante esta comprobación; el resultado corresponde al trabajo manual del propietario. No se ejecutó setup/reset, migración ni despliegue. El recorrido y Crux permanecen locales. El cierre no autoriza fusionar el PR #6 automáticamente ni acredita teléfonos físicos, lector, red remota, rendimiento o L1–L3.
