@@ -108,3 +108,14 @@ Ruta D04 publicada tras revisión/autorización humana: `http://127.0.0.1:5174/?
 ## Cierre D04 real
 
 [Resultados y límites](planes/demo-integral/04-recorrido-cuenta-y-staff.md#cierre-funcional-real--14-de-octubre-de-2026): API privada real, recarga, privacidad de tarjeta, revisión histórica, reporte y retiro aprobados. Se verificaron 16 vistas previas y dos descargas PNG. La actividad de prueba fue retirada lógicamente y el proyecto archivado; se preservó historia. Sesiones exportadas y descargas JSON eliminadas explícitamente. Resultado final: 27 frontend, 50 API, 4 guardas, 56 e2e y 6 smoke públicos; tipos, formato y build aprobados. No equivale a validación física ni staging.
+
+
+## Editor guiado UX-P1A
+
+Abrir una ruta como staff y «Editar ruta». Recorrer Datos → Encuadre → Agarres → Verificación → Imagen/respaldo → Publicar; se puede volver sin perder cámara o preparación. Aplicar o Cancelar el candidato/ajuste antes de cambiar de paso. Seleccionar desde la lista enfoca e inspecciona el agarre; F enfoca y Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z deshacen/rehacen fuera de campos de escritura. Escape cancela. En móvil, usar Compacto/Medio/Ampliado y el selector de paso.
+
+Para nuevas rutas/borradores, guardar incompleto usa la API actual. Para una ruta publicada, «Conservar preparación local» solo conserva en memoria, no escribe en servidor y puede perderse al recargar. Una nueva revisión exige recargar la base y confirmar la revisión de diferencias antes del envío. Un error conserva los campos y señala el paso a corregir.
+
+Revisar desde dos ángulos y confirmar humanamente antes de generar/cargar el respaldo. Los cambios geométricos confirmados invalidan verificación e imagen; cancelar o aplicar idéntico las conserva. Si se desea recuperar el encuadre guardado antes del PNG, utilizar «Ver ruta» en opciones del visor. Publicar/actualizar y retirar/reactivar son acciones finales separadas con los permisos y motivos actuales.
+
+[QA y límites de UX-P1A](planes/ux/02-flujo-editor-rutas.md#entrega-y-evidencia-local--14-de-octubre-de-2026). Para repetir el smoke sobre el runtime persistente usar `DEMO_REUSE_SERVER=1 npx playwright test --config playwright.demo.config.ts`; no ejecutar setup/reset para esta comprobación. La ruta D04 original debe conservarse; cualquier nueva selección o publicación real requiere revisión humana.
