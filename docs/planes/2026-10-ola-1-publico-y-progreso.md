@@ -1,8 +1,8 @@
 # Ola 1 · Claridad y continuidad para visitante y escalador
 
-**Estado:** propuesta para revisión; implementación no iniciada.  
-**Base:** `main@96c11e7`, PR #7 integrado el 15 de octubre de 2026.  
-**Rama:** `codex/ux-publico-y-progreso`.  
+**Estado:** implementado y verificado localmente; PR independiente pendiente de revisión.
+**Base:** `main@96c11e7`, PR #7 integrado el 15 de octubre de 2026.
+**Rama:** `codex/ux-publico-y-progreso`.
 **Fuente:** auditoría `docs/auditoria-flujo-integral-ux-2026-10` @ `d0cefd5`, A01–A03, B01–B05, C01–C03, D01–D05 y F06 (texto público solamente). A05 se atiende con ese mismo ajuste de texto.
 
 ## Objetivo y criterio de salida
@@ -70,4 +70,33 @@ Un PR de Ola 1 con dos bloques revisables, en este orden:
 
 Commits separados para modelo/configuración, público/recorrido, actividad/cuenta y QA/documentación. Actualizar matriz de hallazgos y roadmap con resuelto/parcial/pendiente y evidencia. Abrir PR a main al finalizar implementación; sin fusión ni despliegue automático. Si surge necesidad de backend nuevo o una decisión de producto fuera de los criterios definidos, registrarla para revisión antes de ampliar alcance.
 
-**Revisión pendiente:** aprobar este alcance y los valores por defecto (Mi escalada, últimos 7 días, atajos limitados a criterios existentes) antes de comenzar código. Teléfonos reales, lector de pantalla, tareas moderadas y L1–L3 permanecen fuera de aceptación local.
+**Alcance aprobado por el propietario:** Mi escalada, últimos 7 días y atajos limitados a criterios existentes. Teléfonos reales, lector de pantalla, tareas moderadas y L1–L3 permanecen fuera de aceptación local.
+
+
+## Evidencia de entrega — 15 de octubre de 2026
+
+- Tipos frontend/backend y formato aprobados; 39 pruebas de dominio/frontend y 59 API aprobadas. Build aprobado con el aviso de chunks grandes existente; sin afirmación de rendimiento físico.
+- Suite completa estable: **124 e2e aprobados**, con fixtures de auth/API para escrituras. Incluye inicialmente 10 casos nuevos (5 escenarios por escritorio/móvil): origen histórico con recarga/retorno, 429 con payload idéntico, página retenida/errores diarios/reportes/logout, y catálogos sintéticos de 100/1.000 rutas.
+- Regresión posterior al ajuste final de foco/títulos: **32 aprobadas**. Ronda final Ola 1: **12 aprobadas**, incluyendo dos verificaciones nuevas de respuesta tardía después del logout (escritorio/móvil). Ningún dato privado reaparece tras cerrar sesión.
+- Smoke público real: **6 aprobados** con `DEMO_REUSE_SERVER=1`, sin setup/reset ni interceptar `/api`. Preserva las pruebas existentes de red/recuperación, QR y exportación ilustrativa.
+- Las primeras rondas detectaron selectores antiguos y el efecto de cambios durante ejecución; se corrigieron las pruebas para usar detalles/filtros explícitos y todo el historial cuando una actividad retroactiva queda fuera del intervalo. La suite completa final se ejecutó sin cambios de código simultáneos; no se rebajaron verificaciones del visor ni de privacidad.
+- QA navegador interno: Inicio/Recorrido/Mi escalada/Reportes y ficha D04; 320/390/768/1440, ambos temas sin overflow, paradas y registro con teclado, imagen/texto sin iniciar 3D. La matriz automatizada incluye zoom 200%, fallback WebGL, DPR 1/2/3, canvas persistente, errores y permisos. Tras recarga limpia en el navegador interno, la consola no mostró errores ni advertencias nuevos y Registrar actividad enfocó Intentos.
+- Main Gym real mantiene sus tres paradas y revisión 19; no tiene enlaces zona/ruta configurados, por lo que la continuidad de ida/vuelta se prueba con fixtures y endpoint histórico existente. No se añadieron enlaces ni se editaron paradas reales para forzar esa prueba.
+- Capturas sólo locales: `/tmp/climbing-ola1-tour-ANCHO-TEMA.png` y `/tmp/climbing-ola1-registro-mobile.png`. No subir esas imágenes de Crux a Git ni a un destino público.
+
+### Mediciones sintéticas reproducibles
+
+`npx playwright test tests/ola1.spec.ts --grep "catalog measurement"` usa el frontend real y API interceptada con fixtures, no red de producción. Resultados locales JSON en `/tmp/climbing-ola1-catalog-PROYECTO-CANTIDAD.json`. `catalog:download` incluye lectura/paginación/normalización, `catalog:filter` la última ejecución de filtro y `catalog:render` la actualización DOM hasta tick; no incluye necesariamente pintura final o carga de imágenes. Los bytes son JSON servido por la fixture, incluyen revalidaciones y no representan transferencia comprimida. No son percentiles ni umbrales de aceptación.
+
+| Fixture / viewport emulado | JSON servido (bytes) | Lectura (ms) | Filtro final (ms) | Actualización DOM (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| 100 / desktop | 153894 | 27.8 | 0.3 | 18.7 |
+| 100 / mobile | 153894 | 54.6 | 0.2 | 16.8 |
+| 1000 / desktop | 1550118 | 199.3 | 1.1 | 64.5 |
+| 1000 / mobile | 1550118 | 167.5 | 1.1 | 53.2 |
+
+Conservar filtrado cliente en esta entrega. B03/B04 permanecen parciales; una eventual paginación backend deberá preservar filtros/URLs/orden y decidirse con datos representativos de uso y dispositivos. Sin eventos analíticos nuevos, notas, identidad ni contenido personal en estas mediciones.
+
+### Puertas abiertas
+
+L1/L2: recursos, origen público, callbacks y recuperación remota conjunta. L3: teléfonos, lector de pantalla, QR impreso y rendimiento físico. La revisión humana previa de D04/Main Gym se conserva, pero no acredita las tareas moderadas nuevas de Ola 1. No se ejecutaron migraciones, despliegues ni publicaciones reales en esta entrega.

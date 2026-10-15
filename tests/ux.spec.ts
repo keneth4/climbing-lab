@@ -130,6 +130,16 @@ test('route drafts, reports and optional beta never transfer to another route; b
   await setup(page);
   await page.goto('/?ruta=a');
   const form = page.getByRole('form', { name: 'Registrar actividad' });
+  if (
+    !(await page
+      .locator('#activity-form')
+      .getByLabel('Notas', { exact: true })
+      .isVisible())
+  )
+    await page
+      .locator('#activity-form')
+      .getByText('Añadir detalles', { exact: true })
+      .click();
   await form.getByLabel('Notas', { exact: true }).fill('Nota solo A');
   await form.getByLabel('Intentos', { exact: true }).fill('3');
   await page.getByText('Ver beta', { exact: true }).click();
@@ -227,6 +237,16 @@ test('failed activity keeps the draft and request identity; rapid taps create on
   });
   await page.goto('/?ruta=a');
   const form = page.getByRole('form', { name: 'Registrar actividad' });
+  if (
+    !(await page
+      .locator('#activity-form')
+      .getByLabel('Notas', { exact: true })
+      .isVisible())
+  )
+    await page
+      .locator('#activity-form')
+      .getByText('Añadir detalles', { exact: true })
+      .click();
   await form.getByLabel('Notas', { exact: true }).fill('Conservar borrador');
   await expect(
     form.getByRole('button', { name: 'Guardar actividad' }),
@@ -303,6 +323,16 @@ test('a new route revision preserves the draft and requires an explicit review b
   });
   await page.goto('/?ruta=a');
   const form = page.getByRole('form', { name: 'Registrar actividad' });
+  if (
+    !(await page
+      .locator('#activity-form')
+      .getByLabel('Notas', { exact: true })
+      .isVisible())
+  )
+    await page
+      .locator('#activity-form')
+      .getByText('Añadir detalles', { exact: true })
+      .click();
   await form
     .getByLabel('Notas', { exact: true })
     .fill('Conservar en revisión nueva');

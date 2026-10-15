@@ -119,7 +119,10 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
     .getByRole('button', { name: 'Descargar vista previa del QR' })
     .click();
   expect((await download).suggestedFilename()).toBe('route-a-qr.png');
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Cuenta y privacidad', exact: true })
+    .click();
   await expect(
     page.getByRole('button', { name: 'Continuar con Google' }),
   ).toBeVisible();
@@ -186,7 +189,10 @@ test('password login → protected request → logout clears personal data', asy
     });
   });
   await page.goto('/?vista=Catálogo');
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Cuenta y privacidad', exact: true })
+    .click();
   await page.getByLabel('Correo', { exact: true }).fill('test@example.com');
   await page.getByLabel('Contraseña', { exact: true }).fill('short');
   await expect(
@@ -196,7 +202,7 @@ test('password login → protected request → logout clears personal data', asy
   await expect(
     page.getByRole('button', { name: 'Cerrar sesión' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
   await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await expect(page.getByText('Mi registro privado')).toBeVisible();
   await page.getByRole('button', { name: 'Cerrar sesión' }).click();
@@ -231,12 +237,15 @@ test('published capture loads on demand and preserves scene context', async ({
   page.on('request', (request) => {
     if (request.url().includes('/file')) requests.push(request.url());
   });
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
   await expect(canvas).toHaveAttribute('data-persistent-test', 'original');
+  await page
+    .getByRole('button', { name: 'Cuenta y privacidad', exact: true })
+    .click();
   await expect(
     page.getByRole('button', { name: 'Continuar con Google' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
   await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await expect(canvas).toHaveAttribute('data-persistent-test', 'original');
   await page.getByRole('button', { name: 'Rutas', exact: true }).click();
@@ -475,7 +484,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     page.getByRole('heading', { name: 'Ruta revisada V2' }),
   ).toBeVisible();
   await expect(
-    page.getByText('Spray wall · Revisión 2 · activa', { exact: true }),
+    page.getByText('Spray wall · Activa', { exact: true }),
   ).toBeVisible();
   expect(current.holds3D).toHaveLength(2);
   await page.getByRole('button', { name: 'Explorar en 3D' }).click();
@@ -498,7 +507,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await page.getByLabel('Motivo del cambio').fill('Armado retirado');
   await page.getByRole('button', { name: 'Confirmar retiro' }).click();
   await expect(
-    page.getByText('Spray wall · Revisión 3 · retirada', { exact: true }),
+    page.getByText('Spray wall · Retirada', { exact: true }),
   ).toBeVisible();
   expect(appErrors).toEqual([]);
   await page.screenshot({

@@ -20,9 +20,9 @@ Una captura nueva exige revisar las rutas conservadas. Las rutas con presentaci�
 
 El visor se activa por intención, ofrece cancelación/reintento, órbita/desplazamiento, zoom, pinza y pan con dos dedos, recuperación de ruta/gimnasio, calidad y salida a la ficha. Un único runtime conserva contexto entre vistas; pausa render al ocultarse y mantiene hasta 50 cámaras en memoria. La selección de presas sigue siendo aproximada y requiere revisión visual; no hay segmentación ni garantía de oclusión física.
 
-Compartir tiene vista previa y descarga del mismo PNG. Nombre, fecha, intentos y notas tienen controles independientes y están desactivados inicialmente. Las tarjetas históricas consultan la revisión del registro; una imagen ausente no se sustituye por la actual. La tarjeta QR imprimible incluye identidad y enlace completo; hay que validar el destino público y las impresiones antes de distribuirlas.
+Compartir tiene vista previa y descarga del mismo PNG. Nombre, fecha, intentos y notas tienen controles independientes y están desactivados inicialmente. Las tarjetas históricas consultan la revisión del registro; una imagen ausente no se sustituye por la actual. La tarjeta QR de vista previa incluye identidad y enlace completo; la impresión pública permanece deshabilitada hasta verificación remota, según Ola 0.
 
-Los reportes tienen categoría, revisión, responsable y resolución trazable. Los pendientes de agarre suelto aparecen primero e indican avisar directamente al staff. El staff puede tomar un reporte; el autor ve su respuesta en Bitácora. Resolver no modifica la ruta.
+Los reportes tienen categoría, revisión, responsable y resolución trazable. Los pendientes de agarre suelto aparecen primero e indican avisar directamente al staff. El staff puede tomar un reporte; el autor ve su respuesta en Mis reportes. Resolver no modifica la ruta.
 
 Se registran exclusivamente eventos de vocabulario fijo, conteos diarios UTC y suma de tiempos: apertura QR, ficha/vista 3D disponibles, inicio/guardado y exportación, con errores. No se guardan notas, ruta, cuenta, correo ni identificadores de dispositivo en esas métricas. Los promedios agregados no son percentiles ni pruebas de usabilidad; descarga terminada significa preparación e inicio de descarga, no confirmación de guardado del sistema operativo.
 
@@ -95,3 +95,29 @@ Límites deliberados: sin LOD nuevo ni adopción SPZv4, sin segmentación autom�
 ## Comparación posterior: sitio base de un gimnasio
 
 Los 17 hallazgos de la auditoría de oportunidades multigimnasio se comparan con el código actual en [Sitio base de ejemplo](sitio-base-ejemplo.md). La nueva entrega añade portada, información/FAQ, configuración editorial versionada, navegación pública/cuenta/staff y catálogo con tarjetas/chips. `/` abre Inicio; `?ruta=` y enlaces con filtros siguen funcionando. La matriz de 36 hallazgos anterior conserva su numeración y su puerta de validación física. Las pruebas adicionales de sitio no convierten los pendientes físicos en resueltos.
+
+## Ola 1 — auditoría integral de octubre de 2026
+
+Fuente adicional: rama `docs/auditoria-flujo-integral-ux-2026-10`, commit `d0cefd5`. Los IDs siguientes pertenecen a esa auditoría, no reemplazan los 36 hallazgos originales ni la ampliación anterior. «Resuelto local» significa implementación y regresión local, no aceptación física o cumplimiento WCAG certificado.
+
+| Hallazgo | Estado de implementación | Evidencia / pendiente |
+| --- | --- | --- |
+| A01 | Resuelto local | Recorrido en navegación persistente, conserva enlaces antiguos |
+| A02 | Resuelto local | Explorar rutas primario; bloque secundario de recorrido con poster opcional |
+| A03 | Resuelto local; contenido real pendiente | Config v2 validada y v1 normalizada; opcionales omitidos, sin datos inventados |
+| A05 / F06 | Resuelto local, sólo texto | Productos disponibles / Consulta en recepción, sin checkout nuevo |
+| B01 | Resuelto local | Nombre/grado/zona/imagen/estado primero; revisión en Información de ruta |
+| B02 | Resuelto local | Nombre de zona, cantidad, recuperación y regreso a parada histórica |
+| B03 | Parcial | Lectura/filtrado cliente conservados; mediciones 100/1000 sintéticas. Backend sólo tras decisión fundada en mediciones |
+| B04 | Parcial | Recientes y contexto de zona disponibles; sin etiquetas ni niveles inferidos |
+| B05 | Resuelto local | Registro breve con detalles opcionales, fecha, claves estables, 429/error sin pérdida |
+| C01 | Resuelto local | Tarjetas de paradas en escritorio, selector/contador móvil |
+| C02 | Resuelto local | Origen tour/parada/revisión en URL; reload, retorno y Atrás/Adelante probados |
+| C03 | Resuelto local; validación física pendiente | Corte directo, posters/texto y errores; e2e conserva canvas y descarga única por escena |
+| D01 | Resuelto local | Mi escalada; Actividad/Proyectos/Reportes/Cuenta, sin proyectos duplicados |
+| D02 | Resuelto local | Reemplazo sólo tras éxito; fallo mantiene página; cambio de identidad desmonta datos privados |
+| D03 | Resuelto local | Últimos 7 días (168 h), todo historial, resumen del intervalo, filtros/CSV secundarios |
+| D04 | Resuelto local | UUID sólo en diagnóstico admin/dev/demo/loopback; sin nuevos roles |
+| D05 | Resuelto local | Reportes propios visibles, conteos, respuesta, enlace y aviso físico por agarre suelto |
+
+QR público sigue bloqueado según Ola 0. G01/G02 y L1–L3 conservan sus puertas remotas/físicas. A04, B07, C04, workspace staff/Ola 2, operaciones/Ola 3 y composición/Ola 4 siguen fuera de esta entrega.
