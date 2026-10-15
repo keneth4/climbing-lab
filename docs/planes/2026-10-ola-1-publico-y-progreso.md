@@ -1,6 +1,6 @@
 # Ola 1 · Claridad y continuidad para visitante y escalador
 
-**Estado:** implementado y verificado localmente; PR independiente pendiente de revisión.
+**Estado:** primera entrega implementada y verificada localmente; **revisión humana realizada con correcciones bloqueantes pendientes antes de fusionar el PR #8**. Ver extensión al final.
 **Base:** `main@96c11e7`, PR #7 integrado el 15 de octubre de 2026.
 **Rama:** `codex/ux-publico-y-progreso`.
 **Fuente:** auditoría `docs/auditoria-flujo-integral-ux-2026-10` @ `d0cefd5`, A01–A03, B01–B05, C01–C03, D01–D05 y F06 (texto público solamente). A05 se atiende con ese mismo ajuste de texto.
@@ -100,3 +100,108 @@ Conservar filtrado cliente en esta entrega. B03/B04 permanecen parciales; una ev
 ### Puertas abiertas
 
 L1/L2: recursos, origen público, callbacks y recuperación remota conjunta. L3: teléfonos, lector de pantalla, QR impreso y rendimiento físico. La revisión humana previa de D04/Main Gym se conserva, pero no acredita las tareas moderadas nuevas de Ola 1. No se ejecutaron migraciones, despliegues ni publicaciones reales en esta entrega.
+
+## Extensión de Ola 1 — Revisión manual del propietario (15 de octubre de 2026)
+
+**Estado:** la revisión humana de la primera implementación del PR #8 se realizó y reveló **cinco mejoras bloqueantes pendientes**. No fusionar todavía. Esta sección es el nuevo contrato de implementación para Codex en esta misma rama; conserva las pruebas previas pero exige una nueva revisión humana del resultado. No reescribir retroactivamente el historial de la entrega anterior.
+
+### Hallazgos confirmados y decisiones de diseño
+
+| ID | Observación | Evidencia en rama | Implementación requerida |
+| --- | --- | --- | --- |
+| O1-H01 | Inicio y final se confunden con agarres numerados | `SplatRuntime.svelte` genera I1 y F9 a partir del índice del arreglo | Inicio **I**, Final **F**, sin numeración; marcadores más distintivos y accesibles, intermedios discretos |
+| O1-H02 | Grado y sector se pierden junto al nombre | `App.svelte` dibuja nombre y grado dentro del mismo h2 y sector debajo | Título solo para el nombre; **Grado: V1** y **Sector: Spray Wall** en piezas separadas y prominentes |
+| O1-H03 | «Información de ruta» contiene solo número de revisión y UUID | `App.svelte` incluye «Revisión 4 · Identificador ...» | Mostrar **grado, sector, inicio, final y reglas si existen**; metadatos internos fuera de la ficha, incluso para staff habitual |
+| O1-H04 | «Agarres y reglas sin beta» es poco útil; beta/reglas vacías agregan ruido | `RoutePresentation.svelte` lista todos los agarres por ordinal y rellena reglas vacías; `App.svelte` muestra beta vacía | Eliminar lista numérica pública, poner leyenda compacta; beta y reglas **completamente ausentes** cuando están vacías |
+| O1-H05 | «Editar ruta» despliega editor dentro de ficha de lectura | `App.svelte` monta `RouteEditor` dentro de details | Botón «Editar ruta» solo staff → **pantalla de edición separada** con los seis pasos y mismo visor |
+
+**Ejemplo:** «Prueba D04 · Crux local» es un **nombre** de prueba; V1 es su **grado**. Nunca extraer nivel del texto del nombre ni modificar datos guardados para disimular un problema de jerarquía.
+
+### Investigación: qué aprender de otras interfaces
+
+- [MoonBoard — reglas oficiales](https://moonclimbing.com/using-your-moonboard) y [guía del sistema LED](https://static1.squarespace.com/static/5b680ff22714e5a2859144bf/t/5e4422a70c7e7311c6a60ecc/1581523625176/how%2Bto%2Buse%2Bthe%2Bmoonboard.pdf): inicio(s), agarres permitidos y final(es) son funciones distintas. Verde/azul/rojo ofrece reconocimiento rápido, pero se necesita un segundo canal visual.
+- [Stōkt — Features](https://www.getstokt.com/features): los **circuitos** numerados son una modalidad específica. Un problema habitual no debe asumir un orden obligatorio de movimientos.
+- [Clift — Special Holds](https://www.cliftclimbing.com/post/setting-routes-with-special-holds-using-clift): inicio, normal y final son roles asignados a cada presa; etiquetas externas pueden distinguirlos sin cubrir la geometría.
+- [W3C WCAG 2.2 — Use of Color](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html): forma, etiqueta y descripción deben acompañar al color.
+
+Estas referencias sustentan las recomendaciones, no sustituyen la validación manual en Crux.
+
+### O1-H01. Marcadores: contrato visual, semántico y de exportación
+
+1. **Ruta convencional por defecto:** `inicio → I`, `final → F`, `intermedio → punto azul discreto`. No mostrar números de inicio/final. **Intermedios sin número público por defecto**: no existe una secuencia obligatoria de beta. Si se necesita índice para editar, mostrarlo en inspector/lista de staff o un modo «Mostrar índices» solo allí; un futuro «Circuito numerado» requeriría feature separado.
+2. **Distinguir de inmediato:** verde + letra **I** + forma/contorno para inicio; terracota/rojo + **F** + forma/contorno diferente para final; azul discreto para intermedios. Incluir leyenda visible **«I Inicio · F Final · • Intermedio»** cerca de la imagen y del visor 3D, sin depender solo del color, y nombres accesibles completos.
+3. **Múltiples presas:** conservar todos los `holds3D` y sus roles. I/I y F/F son correctos cuando hay dos inicios/finales; no inferir «mano izquierda/derecha», orden de escalada ni regla de pies del índice del arreglo. No renumerar ni modificar ID/posición/datos históricos.
+4. **No tapar la presa:** mantener ancla proyectada pequeña, líder y pastilla desplazada de UX-P0, hitbox invisible de ~48 CSS px para edición; **nunca** volver al círculo opaco centrado sobre el agarre. Dar prioridad a I/F en algoritmo de colisiones. Mantener selección, ocultar etiquetas, «Solo inicio y final», manejo de densidad, dispositivos táctiles y teclado.
+5. **Unificar marcador visible y exportado:** cambiar la función de rótulos de `src/SplatRuntime.svelte`, helper semántico y diseño en `src/marker-layout.ts`, `src/RouteMarkerOverlay.svelte` y `drawMarkerLayout()` para PNG nuevo. Las marcas de **paradas de tour** siguen numeradas por parada, independientes de roles de ruta: no alterar `tourMode`.
+6. **Imágenes históricas:** `RoutePresentation` lee una imagen PNG **ya anotada**. Los símbolos I1/F9 de un PNG antiguo no desaparecen al cambiar el DOM o el visor. **No sobreescribir R2 ni revisiones históricas.** Regenerar imagen de la ruta D04 para nueva revisión **solo tras revisión y autorización explícita del propietario**. Documentar la diferencia temporal de imagen vieja y overlay actualizado; no declarar corregida la foto existente sin regenerarla.
+7. Probar DPR 1/2/3, CSS→PNG, desplazamiento de canvas, 320/390/768/1440 px, alto contraste y varios agarres adyacentes. Nunca multiplicar `screenToWorld` por el tamaño de framebuffer.
+
+### O1-H02/H03/H04. Ficha: información necesaria y nada de relleno
+
+**Orden de lectura esperado:**
+
+- «Volver a Rutas» / retorno contextual a la parada del tour.
+- Título **solo nombre**. Debajo, chips o ficha breve de alto contraste **GRADO V1** y **SECTOR Spray Wall** (zona opcional con nombre conocido). Si la ruta está retirada, mostrar el estado excepcional claramente; no repetir «Activa» innecesariamente.
+- Imagen anotada/preview, o fallback honesto; leyenda visible I/F y referencia a intermedios cuando haya marcadores verificados.
+- **Información de ruta** breve, sin esconder datos útiles: etiqueta grado, sector, indicación textual de agarres de inicio y final (y sus cantidades si están verificadas), más «Reglas» **solo** si `route.rules?.trim()` tiene contenido. Evitar repetir varias veces el mismo dato en grandes párrafos; accesibilidad semántica mediante `dl`/etiquetas según presentación.
+- «Ver beta» plegada **solo** si `route.beta?.trim()` tiene contenido (no autogenerar movimientos ni texto de relleno). Si no hay reglas/beta, **no renderizar** sus encabezados ni placeholders.
+- Registrar actividad, Guardar proyecto, Compartir y Reportar permanecen funcionales y sin regresión; la información del problema debe estar disponible antes de iniciar sesión o descargar 3D.
+- Quitar la lista pública «Agarre 1, Agarre 2...»: comunica un orden potencialmente falso. Staff accede al inventario técnico de agarres **en el editor**, sin duplicarlo en ficha de lectura.
+- **Nunca mostrar UUID ni revisión técnica sin contexto** en «Información de ruta», tarjetas, exportaciones públicas o la vista ordinaria de staff. Una vista explícita «Detalles técnicos/Historial» solo en administración puede ofrecer versión e ID copiable cuando tenga uso real. Mantener IDs y revisiones en API/URL/logs para enlaces estables e historia.
+
+**Ejemplo de jerarquía:**
+
+    ← Volver a Rutas
+    Prueba D04 · Crux local
+    [ GRADO  V1 ] [ SECTOR  Spray Wall ]
+    [ Imagen del muro con I / F y puntos intermedios ]
+    I Inicio  ·  F Final   [· Intermedios]
+    Información de ruta: Inicio (I) / Final (F)
+    Reglas: ...       [solo cuando existen]
+    Ver beta          [solo cuando existe]
+    [ Explorar 3D ] [ Registrar actividad ]
+    Staff: [ Editar ruta → pantalla independiente ]
+
+Esta jerarquía puede ajustarse al ancho sin cambiar la semántica o esconder el grado.
+
+### O1-H05. Pantalla independiente de edición (staff)
+
+- Sustituir `<details><summary>Editar ruta</summary><RouteEditor .../></details>` de la ficha por un **botón real** «Editar ruta». Mostrarlo únicamente con staff/rol vigente confirmado, y autorizar lecturas/escrituras **en el Worker**; ocultar el botón no es control de acceso.
+- Reutilizar **el mismo `RouteEditor` y sus seis pasos** dentro de un `EditorWorkspace` o shell de pantalla propio: nombre de ruta, estado, retorno a ficha, visor persistente, barra Guardar borrador/Actualizar/Publicar y avisos de cambios locales.
+- Para deep link privado evitar `?ruta=ID` porque `viewFromUrl()` lo interpreta siempre como Catálogo. Opción de URL: `/?vista=EditarRuta&editar=ID` y, si se integra creación, `/?vista=CrearRuta&seccion=ID`. Preservar `/?ruta=ID` para lectores/QR y `?vista=Recorrido` para tours. Validar IDs y parámetros, no implementar URLs de retorno abiertas.
+- Acceso desde **Staff → lista → Editar** y desde la ficha para staff; vuelta, Atrás/Adelante, recarga, expiración de sesión y enlace privado abierto sin permisos deben mostrar estados correctos. Nunca presentar datos de edición a escalador con 401/403 ni seleccionar silenciosamente otra ruta.
+- Reutilizar `editorPreparation`, `onDraft`, `onPreparing`, `onReload`, `onSaved`, `viewerWorkspace`, permisos, cámara, snapshot y revisiones; **no crear un segundo renderer** ni alterar geometría o contratos del backend.
+- Si existen cambios no guardados, preguntar **«Seguir editando» o «Salir sin guardar»**. Distinguir «Preparación local (se perderá al recargar)» de «Borrador guardado» y «Publicado»; **la persistencia de borrador de nuevas revisiones en servidor pertenece a Ola 2**. No prometer recuperación después de reload completa.
+- Tras guardar/publicar, volver a la ficha de **la misma ruta** con datos actualizados; cancelar vuelve sin crear una revisión ni borrar preparación indebidamente. Preservar retorno desde tour al consultar ruta y luego editor.
+- La UI de edición debe seguir funcionando en inspector lateral de PC y bottom sheet móvil. Mostrar solo tareas del editor, sin registrar actividad/reportes/compras/FAQ en esa pantalla.
+
+### Commits posteriores a este commit documental
+
+| Commit | Cambio de código | Evidencia requerida |
+| --- | --- | --- |
+| O1-1 | Semántica y apariencia de marcadores I/F + leyenda + export PNG; modo tour sin cambios | Unit de roles, multiples I/F, DPR, densidad, CSS→PNG, teclado, lectura, tour |
+| O1-2 | Ficha: chips grado/sector; información útil; omisión de beta/reglas vacías; eliminar UUID y lista confusa | E2E rutas con/sin reglas y beta, antiguas/retiradas, dos temas, 320/390/768/1440 |
+| O1-3 | Pantalla de edición y rutas privadas protegidas; 6 pasos existentes y regreso | E2E staff/no staff, reload/popstate, permisos, draft/cancelar/guardar, visor único |
+| O1-4 | QA integral, documentación, evidencia y **segunda aceptación humana** antes de merge | Suite completa Ola 1, 6 smoke públicos sin reset, Crux manual sin editar/publicar salvo autorización |
+
+### Criterios de aceptación bloqueantes para PR #8
+
+- [ ] En D04 local con nueve agarres, **I/F son evidentes** y no aparecen I1/F9; puntos intermedios no sugieren secuencia.
+- [ ] Una ruta con dos agarres de inicio/final los muestra y describe correctamente; sin depender exclusivamente de verde/rojo.
+- [ ] Encabezado separa **nombre**, **Grado V1**, **Sector Spray Wall**; se reconocen a primera vista en desktop/móvil y con 200% zoom.
+- [ ] Información de ruta contiene **grado, sector, inicio/final** y **reglas solo si las escribió el staff**; no UUID ni revisión técnica irrelevante.
+- [ ] Sin beta/reglas no hay controles ni texto de relleno; con beta se mantiene opción «Ver beta» sin spoilers.
+- [ ] La lista numérica de agarres se elimina de la ficha pública, conservando roles y accesibilidad en editor.
+- [ ] Staff abre editor en pantalla separada, sin herramientas de escalador mezcladas; cuenta ajena no puede entrar por URL directa.
+- [ ] Guardar/cancelar/volver no cambia permisos, revisión ni datos ajenos; historial y QR públicos continúan intactos.
+- [ ] Vista 3D y nuevas exportaciones PNG comparten semántica; PNG antiguos conservados, Crux real no republicado automáticamente.
+- [ ] El tour conserva números de **paradas** y accesos zona→ruta; registro rápido, privacidad/logout y seis smoke reales no retroceden.
+- [ ] **Propietario revisa de nuevo** la ficha y su editor en el mismo Crux y confirma claridad del inicio/final, grado/sector y navegación antes del merge.
+
+**Comprobaciones:** `npm run check`, `npm run check:api`, `npm run format:check`, `npm test`, `npm run test:api`, `npm run build`, `npm run test:e2e`. Smoke público sin interceptar API solo con `DEMO_REUSE_SERVER=1` en demo persistente; **nunca** ejecutar `demo:setup`, `demo:reset` o `demo:smoke` que reinicialicen Crux. Especificar en el PR qué se verificó con fixtures y qué quedó pendiente de teléfonos físicos/lector.
+
+### Una elección de producto a confirmar sin bloquear el inicio
+
+**Numeración de agarres intermedios:** recomiendo **ocultarla en rutas normales del público**, y conservarla como ayuda opcional en el editor de staff. Alternativa: hacerla visible al visitante mediante «Mostrar números»; eso podría interpretarse como beta secuencial. Se puede implementar el valor recomendado y reconsiderar después de la segunda revisión del propietario. Inicio y Final sí son siempre I/F sin números.
+
+**Fuera del alcance de esta extensión:** detección automática de agarres, nuevas funciones de circuito, diseño de tres gimnasios, migraciones, nuevas rutas reales, edición de tour, staging y habilitación de pagos.
