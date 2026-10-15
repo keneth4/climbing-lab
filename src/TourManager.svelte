@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { untrack, tick } from 'svelte';
   import { api, ApiError, supabase } from './auth';
   import TourPoster from './TourPoster.svelte';
   import SplatViewer from './SplatViewer.svelte';
@@ -52,6 +52,7 @@
     >();
   let command = $state<{ id: number; camera: TourCamera } | undefined>(),
     commandId = 0;
+  let preparationEpoch = 0;
   let mutation: { key: string; requestId: string } | undefined;
   let imageRetry = $state<
     { key: string; requestId: string; blob: Blob } | undefined
@@ -124,6 +125,7 @@
     busy = true;
     try {
       const r = await api('/staff/tours/' + value);
+      preparationEpoch++;
       id = r.id;
       revision = r.revision;
       published = r.publishedRevision;
@@ -160,6 +162,7 @@
     imageRetry = undefined;
     pendingImage = undefined;
     mutation = undefined;
+    preparationEpoch++;
     id = '';
     revision = 0;
     published = null;
@@ -178,13 +181,14 @@
     past = [];
     future = [];
     candidate = undefined;
-    scene = false;
+    scene = true;
     conflict = false;
     reviewed = false;
     base = undefined;
   }
   function discard() {
     if (busy) return;
+    preparationEpoch++;
     imageRetry = undefined;
     pendingImage = undefined;
     content = baseline ? JSON.parse(baseline) : undefined;
@@ -227,6 +231,10 @@
     next.startStopId ||= stopId;
     change(next);
     selectStop(stopId);
+    void tick().then(() => {
+      guideHeading?.focus();
+      guideHeading?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    });
   }
   function rebaseCapture() {
     if (!content || !capture || busy) return;
@@ -286,6 +294,7 @@
             ? 'Recorrido retirado; conserva su enlace y respaldo.'
             : 'Borrador guardado; la versión pública no cambió.';
       await refresh();
+      return true;
     } catch (e) {
       conflict = e instanceof ApiError && e.status === 409;
       message = (e as Error).message;
@@ -388,12 +397,48 @@
     { stopId: string; camera: TourCamera; context: string } | undefined
   >();
   function snapshot(stopId: string) {
-    const capture = snapshotFor(stopId);
+    const epoch = preparationEpoch,
+      originTour = id;
     const context = content ? captureStamp(content) : '';
-    return (blob: Blob, camera: TourCamera) => {
+    return async (blob: Blob, camera: TourCamera) => {
+      if (
+        busy ||
+        epoch !== preparationEpoch ||
+        id !== originTour ||
+        !content ||
+        captureStamp(content) !== context ||
+        !content.stops.some((s) => s.id === stopId)
+      )
+        return;
+      // The visual action creates/saves the private draft context before PNG upload.
+      if ((!id || dirty) && !(await save())) return;
+      if (
+        epoch !== preparationEpoch ||
+        !content ||
+        captureStamp(content) !== context
+      )
+        return;
       pendingImage = { stopId, camera, context };
-      void capture(blob, camera);
+      await snapshotFor(stopId)(blob, camera);
     };
+  }
+  let stopHeading = $state<HTMLHeadingElement>();
+  let guideHeading = $state<HTMLHeadingElement>();
+  async function reviewStop() {
+    await tick();
+    stopHeading?.focus();
+    stopHeading?.scrollIntoView({ block: 'start', behavior: 'instant' });
+  }
+  function stopStatus(s: TourStop) {
+    if (!s.camera || !s.imageId) return 'Encuadre pendiente';
+    if (!s.verified) return 'Revisión pendiente';
+    const saved: TourContent | undefined = baseline
+      ? JSON.parse(baseline)
+      : undefined;
+    return JSON.stringify(saved?.stops.find((p) => p.id === s.id)) ===
+      JSON.stringify(s)
+      ? 'Guardada y revisada'
+      : 'Sin guardar';
   }
   function keydown(event: KeyboardEvent) {
     if (
@@ -453,6 +498,81 @@
         ? 'Cambios sin guardar'
         : 'Sin cambios pendientes'}
     </p>
+    <section class="tour-guide" aria-label="Guía para crear el recorrido">
+      <h2 tabindex="-1" bind:this={guideHeading}>
+        Crea el recorrido desde el Splat
+      </h2>
+      <details open={!stop}>
+        <summary>Cómo añadir, guardar y revisar una parada</summary>
+        <p>
+          La consulta pública de imágenes funciona sin 3D. Para preparar las
+          paradas, explora esta captura y guarda tus propios encuadres.
+        </p>
+        <ol>
+          <li>
+            <strong>1. Añade una parada.</strong> Explora el muro y pulsa «Añadir
+            parada». No se escribe ninguna coordenada.
+          </li>
+          <li>
+            <strong>2. Guarda el encuadre.</strong> Usa «Guardar cámara e imagen de
+            parada». Prepararemos el borrador privado automáticamente; esto todavía
+            no publica el recorrido.
+          </li>
+          <li>
+            <strong>3. Revisa y guarda.</strong> Completa el título, revisa desde
+            dos ángulos, confirma la revisión y guarda la parada.
+          </li>
+        </ol>
+      </details>
+      {#if !stop}<button
+          class="primary"
+          disabled={busy || !!candidate}
+          onclick={() => {
+            add();
+            scene = true;
+          }}>Añadir primera parada desde el Splat</button
+        >
+      {:else}<p role="status">
+          Parada {content.stops.findIndex((s) => s.id === selected) + 1}: {stopStatus(
+            stop,
+          )}
+        </p>
+        <button disabled={busy || !!candidate} onclick={reviewStop}
+          >Completar y revisar esta parada</button
+        >
+      {/if}
+      {#if !scene}<button
+          disabled={busy || !compatible}
+          onclick={() => {
+            scene = true;
+            if (stop?.camera)
+              command = { id: ++commandId, camera: stop.camera };
+          }}>Abrir Splat para preparar paradas</button
+        >{/if}
+    </section>
+    {#if scene && capture && compatible}<SplatViewer
+        {capture}
+        routeId={'tour-editor-' + (id || 'new')}
+        staff={false}
+        tourMode
+        tourCommand={command}
+        onSave={() => {}}
+        toolsDisabled={busy || !!candidate}
+        onTourSnapshot={stop ? snapshot(stop.id) : undefined}
+        onPoint={stop
+          ? (_, world) => {
+              candidate = {
+                stopId: stop!.id,
+                point: world,
+                context: captureStamp(content!),
+              };
+            }
+          : undefined}
+        previewPoint={candidate?.point}
+        spatialMode={candidate ? 'review-candidate' : undefined}
+        onCancelTool={() => (candidate = undefined)}
+        onExit={() => (scene = false)}
+      />{/if}
     <fieldset disabled={busy}>
       <label
         >Título del recorrido<input
@@ -501,7 +621,10 @@
             <button
               aria-current={s.id === selected ? 'step' : undefined}
               onclick={() => selectStop(s.id)}
-              >{i + 1}. {s.title || 'Parada sin título'}</button
+              aria-label={`${i + 1}. ${s.title || 'Parada sin título'}`}
+              >{i + 1}. {s.title || 'Parada sin título'}<small
+                >{stopStatus(s)}</small
+              ></button
             ><button
               aria-label={`Subir parada ${i + 1}`}
               disabled={!i || !!candidate}
@@ -538,7 +661,7 @@
             >
           </li>{/each}
       </ol>
-      {#if stop}<h2>
+      {#if stop}<h2 tabindex="-1" bind:this={stopHeading}>
           Preparar parada {content.stops.findIndex((s) => s.id === stop.id) + 1}
         </h2>
         <label
@@ -565,35 +688,40 @@
             }}
           />Parada inicial</label
         >
-        <label
-          >Zona vinculada<select
-            value={stop.section?.id || ''}
-            onchange={(e) => {
-              const section = sections.find(
-                (s) => s.id === e.currentTarget.value,
-              );
-              updateStop({
-                section: section
-                  ? { id: section.id, revision: section.revision || 1 }
-                  : undefined,
-              });
-            }}
-            ><option value="">Sin zona</option>{#each sections as s}<option
-                value={s.id}>{s.name}</option
-              >{/each}</select
-          ></label
-        >
-        <label
-          >Ruta vinculada<select
-            value={stop.linkedRouteId || ''}
-            onchange={(e) =>
-              updateStop({ linkedRouteId: e.currentTarget.value || undefined })}
-            ><option value="">Sin ruta</option
-            >{#each routes.filter((r) => r.status !== 'borrador') as r}<option
-                value={r.id}>{r.name}</option
-              >{/each}</select
-          ></label
-        >
+        <details>
+          <summary>Vínculos opcionales a zonas y rutas</summary>
+          <label
+            >Zona vinculada<select
+              value={stop.section?.id || ''}
+              onchange={(e) => {
+                const section = sections.find(
+                  (s) => s.id === e.currentTarget.value,
+                );
+                updateStop({
+                  section: section
+                    ? { id: section.id, revision: section.revision || 1 }
+                    : undefined,
+                });
+              }}
+              ><option value="">Sin zona</option>{#each sections as s}<option
+                  value={s.id}>{s.name}</option
+                >{/each}</select
+            ></label
+          >
+          <label
+            >Ruta vinculada<select
+              value={stop.linkedRouteId || ''}
+              onchange={(e) =>
+                updateStop({
+                  linkedRouteId: e.currentTarget.value || undefined,
+                })}
+              ><option value="">Sin ruta</option
+              >{#each routes.filter((r) => r.status !== 'borrador') as r}<option
+                  value={r.id}>{r.name}</option
+                >{/each}</select
+            ></label
+          >
+        </details>
         {#if stop.imageId}<TourPoster
             imageId={stop.imageId}
             title={stop.title}
@@ -613,12 +741,12 @@
           />Revisé esta parada y su punto de interés desde dos ángulos</label
         >
         <p>
-          Guarda el borrador antes de preparar imágenes. En el visor, encuadra y
-          usa «Guardar cámara e imagen de parada». Cambiar la cámara exige una
-          imagen nueva.
+          El botón del visor guarda juntos la cámara y el PNG. Después de
+          revisar desde dos ángulos, confirma la casilla y guarda esta parada.
+          Cambiar el encuadre requiere generar otra imagen.
         </p>
         <button
-          disabled={!id || !compatible || !!candidate}
+          disabled={!compatible || !!candidate}
           onclick={() => {
             if (!scene && stop?.camera)
               command = { id: ++commandId, camera: stop.camera };
@@ -628,6 +756,31 @@
             ? 'Cerrar preparación del recorrido'
             : 'Preparar parada en 3D'}</button
         >
+        <div class="actions">
+          <button
+            class="primary"
+            disabled={!stop.title.trim() ||
+              !stop.camera ||
+              !stop.imageId ||
+              !stop.verified ||
+              !!candidate ||
+              conflict}
+            onclick={async () => {
+              if (await save())
+                message =
+                  'Parada guardada y revisada. Puedes añadir la siguiente o previsualizar el recorrido.';
+            }}>Guardar parada revisada</button
+          >
+          <button
+            disabled={content.stops.length >= 20 ||
+              !!candidate ||
+              stopStatus(stop) !== 'Guardada y revisada'}
+            onclick={() => {
+              add();
+              scene = true;
+            }}>Añadir siguiente parada desde el Splat</button
+          >
+        </div>
         {#if stop.hotspot}<button
             onclick={() => updateStop({ hotspot: undefined, verified: false })}
             >Quitar punto de interés</button
@@ -750,31 +903,23 @@
           >
         </div>{/if}
     </fieldset>
-    {#if scene && capture && compatible && stop}<SplatViewer
-        {capture}
-        routeId={'tour-editor-' + (id || 'new')}
-        staff={false}
-        tourMode
-        tourCommand={command}
-        onSave={() => {}}
-        toolsDisabled={busy || !!candidate}
-        onTourSnapshot={snapshot(stop.id)}
-        onPoint={(_, world) => {
-          candidate = {
-            stopId: stop!.id,
-            point: world,
-            context: captureStamp(content!),
-          };
-        }}
-        previewPoint={candidate?.point}
-        spatialMode={candidate ? 'review-candidate' : undefined}
-        onCancelTool={() => (candidate = undefined)}
-        onExit={() => (scene = false)}
-      />{/if}
   {/if}
 </section>
 
 <style>
+  .tour-guide {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+  }
+  .tour-guide li {
+    display: list-item;
+  }
+  small {
+    display: block;
+    font-weight: normal;
+  }
   .tour-manager {
     min-width: 0;
   }

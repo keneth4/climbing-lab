@@ -187,3 +187,12 @@ PR #4 de UX-P1A integrado en main; UX-P1B desarrollado en `codex/section-editor-
 ### UX-P2B — Recorrido virtual por paradas implementado localmente
 
 PR #5 integrado en main; entrega en `codex/gym-guided-tour` para PR independiente. [Plan y evidencia](planes/ux/05-tour-paradas.md#entrega-local--14-de-octubre-de-2026): borradores staff, publicación/retiro admin, revisiones inmutables, imágenes privadas en R2 y recorrido público accesible con enlaces profundos, cambios directos de cámara/FOV y visor único. Migración 0010 aplicada únicamente al demo persistente con comando protegido, repetida sin cambios; A/B, Crux y D04 conservados. Tipos/formato/build, 36 frontend, 57 API, 6 guardas, 108 e2e y 6 smoke públicos aprobados. La publicación de tres paradas reales de Crux requiere todavía selección y revisión humanas. Sin merge de este PR, despliegue ni validación física; UX-P2A y L1–L3 mantienen sus puertas anteriores.
+
+### Siguientes pasos tras el flujo guiado del recorrido
+
+1. Completar la aceptación real UX-P2B: seleccionar al menos tres cámaras/paradas de Crux, revisar sus imágenes/textos y navegación, y autorizar su publicación únicamente local. La interfaz guiada y sus fixtures no sustituyen esta revisión. Revisar el PR #6 antes de integrarlo; sin fusión automática.
+2. Ejecutar la validación física pendiente (P1-B): Android/iPhone, reconocimiento de agarres, gestos, lector de pantalla, QR impreso, red y rendimiento con capturas reales. Usar los resultados para priorizar correcciones; no declarar L3 sin esa evidencia.
+3. Preparar L1/P1-A y el endurecimiento P1-C: configuración de staging del gimnasio único, callbacks, permisos, límites, backup/restauración y monitoreo. Desplegar requiere recursos, contenido autorizado para internet y aprobación específica; Crux sigue solo local.
+4. UX-P2A, biblioteca de agarres reutilizables, permanece opcional y condicionada a pruebas con setters que confirmen el beneficio. Necesita plan propio de identidad por captura/sección, API/migración, conflictos y snapshots históricos; no se activa automáticamente por cerrar el tour.
+
+Estas líneas son las puertas vigentes, no una nueva etapa comercial ni multigimnasio. L2 y L3 requieren pruebas remotas/controladas y físicas adicionales a L0.

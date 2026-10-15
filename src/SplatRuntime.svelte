@@ -1253,13 +1253,25 @@
 </script>
 
 <div class="splat-viewer" use:mountViewer>
+  {#if onTourSnapshot}<button
+      type="button"
+      disabled={!ready || loading || toolsDisabled}
+      onclick={() => {
+        if (!controller) return;
+        const view = controller.tourSnapshot();
+        const deliver = onTourSnapshot;
+        canvas.toBlob((blob) => {
+          if (blob) deliver?.(blob, view);
+        }, 'image/png');
+      }}>Guardar cámara e imagen de parada</button
+    >{/if}
   <div hidden={!!editorStep && [1, 6].includes(editorStep)}>
     <h3>Captura 3D del gimnasio</h3>
     {#if !capture}<p>
         No hay una captura publicada. El administrador debe subirla desde
         Capturas.
       </p>{:else}<p>{capture.filename} · Versión del gimnasio</p>{/if}
-    <details open={!editorStep}>
+    <details open={!editorStep && !tourMode}>
       <summary>Calidad y opciones avanzadas</summary><label
         >Calidad 3D<select
           bind:value={quality}
@@ -1434,18 +1446,7 @@
         }}>Descargar vista 3D</button
       >
     </div>
-    {#if onTourSnapshot}<button
-        type="button"
-        disabled={!ready || loading || toolsDisabled}
-        onclick={() => {
-          if (!controller) return;
-          const view = controller.tourSnapshot();
-          const deliver = onTourSnapshot;
-          canvas.toBlob((blob) => {
-            if (blob) deliver?.(blob, view);
-          }, 'image/png');
-        }}>Guardar cámara e imagen de parada</button
-      >{/if}
+
     {#if onImage && (!editorStep || editorStep === 5)}<button
         disabled={!ready || loading || preparing || toolsDisabled}
         onclick={() => {

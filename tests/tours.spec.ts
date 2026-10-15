@@ -567,3 +567,137 @@ test('staff snapshot binds PNG to the selected stop camera and FOV and invalidat
     .toContain('"fov":57');
   expect(await canvas.count()).toBe(1);
 });
+
+test('guided creation opens the splat first and prepares draft context automatically before saving a reviewed stop', async ({
+  page,
+}) => {
+  const state = await staffFixture(page);
+  await page.goto('/?vista=Recorridos');
+  await page
+    .getByRole('button', { name: 'Crear recorrido', exact: true })
+    .click();
+  const canvas = page.locator('canvas[data-camera-view]');
+  await expect(canvas).toBeVisible({ timeout: 30000 });
+  await canvas.evaluate((el) => ((el as any).__guidedIdentity = 'retained'));
+  expect(state.writes).toHaveLength(0);
+  await page
+    .getByRole('button', {
+      name: 'Añadir primera parada desde el Splat',
+      exact: true,
+    })
+    .click();
+  await page
+    .getByLabel('Título del recorrido', { exact: true })
+    .fill('Creado desde el Splat');
+  await page
+    .getByLabel('Título de parada', { exact: true })
+    .fill('Entrada del muro');
+  state.fail = 503;
+  await page
+    .getByRole('button', {
+      name: 'Guardar cámara e imagen de parada',
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByText('Error de red simulado', { exact: true }),
+  ).toBeVisible();
+  expect(state.images).toHaveLength(0);
+  await expect(
+    page.getByLabel('Título de parada', { exact: true }),
+  ).toHaveValue('Entrada del muro');
+  state.fail = 0;
+  await page
+    .getByRole('button', {
+      name: 'Guardar cámara e imagen de parada',
+      exact: true,
+    })
+    .click();
+  await expect(page.getByText(/Cámara e imagen preparadas/)).toBeVisible();
+  expect(state.writes[0].requestId).toBe(state.writes[1].requestId);
+  expect(state.images).toHaveLength(1);
+  await page
+    .getByRole('button', {
+      name: 'Completar y revisar esta parada',
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Preparar parada 1', exact: true }),
+  ).toBeFocused();
+  await page
+    .getByLabel('Revisé esta parada y su punto de interés desde dos ángulos')
+    .check();
+  await page
+    .getByRole('button', { name: 'Guardar parada revisada', exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      'Parada guardada y revisada. Puedes añadir la siguiente o previsualizar el recorrido.',
+    ),
+  ).toBeVisible();
+  expect(state.draft.stops[0].verified).toBe(true);
+  expect(state.draft.stops[0].imageId).toBe('captured-1');
+  await page
+    .getByRole('button', {
+      name: 'Añadir siguiente parada desde el Splat',
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Preparar parada 2', exact: true }),
+  ).toBeVisible();
+  expect(await canvas.evaluate((el) => (el as any).__guidedIdentity)).toBe(
+    'retained',
+  );
+  expect(await canvas.count()).toBe(1);
+  await page.screenshot({
+    path: '/tmp/tour-guided-editor.png',
+    fullPage: true,
+  });
+});
+
+test('discarding preparation cancels a pending PNG callback instead of uploading into the restored draft', async ({
+  page,
+}) => {
+  const state = await staffFixture(page);
+  await page.goto('/?vista=Recorridos');
+  await page.getByRole('button', { name: /Abrir recorrido tour-1/ }).click();
+  await page
+    .getByRole('button', { name: 'Preparar parada en 3D', exact: true })
+    .click();
+  await expect(page.locator('canvas')).toHaveAttribute(
+    'data-camera-view',
+    /fov/,
+  );
+  await page.evaluate(() => {
+    const original = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+      original.call(
+        this,
+        (blob) => {
+          (window as any).releaseTourPng = () => callback(blob);
+        },
+        ...args,
+      );
+    };
+  });
+  await page
+    .getByRole('button', {
+      name: 'Guardar cámara e imagen de parada',
+      exact: true,
+    })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).releaseTourPng))
+    .toBe('function');
+  await page
+    .getByRole('button', { name: 'Descartar preparación local', exact: true })
+    .click();
+  await page.evaluate(() => (window as any).releaseTourPng());
+  await expect(
+    page.getByText('Preparación descartada; la versión pública no cambió.'),
+  ).toBeVisible();
+  expect(state.images).toHaveLength(0);
+  expect(state.writes).toHaveLength(0);
+});
