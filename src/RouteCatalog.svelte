@@ -8,6 +8,7 @@
     query = $bindable(),
     grade = $bindable(),
     sectorFilter = $bindable(),
+    zoneFilter = $bindable(),
     scaleFilter = $bindable(),
     minGrade = $bindable(),
     maxGrade = $bindable(),
@@ -24,6 +25,7 @@
     query: string;
     grade: string;
     sectorFilter: string;
+    zoneFilter: string;
     scaleFilter: string;
     minGrade: string;
     maxGrade: string;
@@ -40,6 +42,11 @@
 <section class="catalog" aria-label="Catálogo de rutas">
   <h1 tabindex="-1">Rutas</h1>
   <p>Encuentra tu siguiente reto por grado o sector.</p>
+  {#if zoneFilter}<button
+      onclick={() => (zoneFilter = '')}
+      aria-label="Quitar filtro de zona"
+      >Zona seleccionada · quitar filtro</button
+    >{/if}
   <button disabled={loading} onclick={retry}>Actualizar rutas</button
   >{#if loadError && filtered.length}<p role="alert">
       No se pudo actualizar. Se muestran las rutas cargadas anteriormente. {loadError}

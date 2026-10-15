@@ -48,6 +48,7 @@ beforeAll(async () => {
       '0007_projects.sql',
       '0008_operations.sql',
       '0009_pilot_ux.sql',
+      '0010_gym_tours.sql',
     ]) {
       const sql = await readFile(
         new URL('../migrations/' + file, import.meta.url),

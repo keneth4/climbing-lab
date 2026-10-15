@@ -1,3 +1,4 @@
+import { tourApi } from './tours';
 import { demoAsset } from './demo';
 import { pilotApi, requestKey, writeOnce, presentationKey } from './pilot';
 import { operationsApi } from './operations';
@@ -229,6 +230,10 @@ export async function handle(
     const path = url.pathname;
     const illustration = await demoAsset(request, env);
     if (illustration) return illustration;
+    const tourResponse = await tourApi(request, env, () =>
+      authenticate(request, env),
+    );
+    if (tourResponse) return tourResponse;
     const pilotResponse = await pilotApi(request, env, () =>
       authenticate(request, env),
     );

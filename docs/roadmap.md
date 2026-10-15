@@ -183,3 +183,23 @@ Seis pasos, preparación local de rutas publicadas, revisión de diferencias, er
 ### UX-P1B — Zonas y planos inclinados implementados localmente
 
 PR #4 de UX-P1A integrado en main; UX-P1B desarrollado en `codex/section-editor-oriented-geometry` para PR independiente. [Entrega y evidencia](planes/ux/03-zonas-planos-inclinados.md): editor de cuatro pasos, geometría orientada compatible, edición reversible, conflictos y referencias históricas conservadas incluso al editar rutas. Tipos, formato, build, 32 pruebas frontend, 51 API, 4 controles demo, 88 e2e y 6 smoke públicos aprobados. Sin migraciones SQL, reset ni despliegue; ruta/sección D04 originales intactas. Delimitación humana de una zona nueva en Crux y validación física pendientes. UX-P2A sigue condicionada a pruebas con setters; UX-P2B/tour continúa como feature independiente.
+
+### UX-P2B — Recorrido virtual por paradas implementado localmente
+
+PR #5 integrado en main; entrega en `codex/gym-guided-tour` para PR independiente. [Plan y evidencia](planes/ux/05-tour-paradas.md#entrega-local--14-de-octubre-de-2026): borradores staff, publicación/retiro admin, revisiones inmutables, imágenes privadas en R2 y recorrido público accesible con enlaces profundos, cambios directos de cámara/FOV y visor único. Migración 0010 aplicada únicamente al demo persistente con comando protegido, repetida sin cambios; A/B, Crux y D04 conservados. Tipos/formato/build, 36 frontend, 57 API, 6 guardas, 108 e2e y 6 smoke públicos aprobados. La aceptación humana local quedó cerrada posteriormente: Main Gym publicado en revisión 19 con tres paradas verificadas, imágenes y exploración confirmada por el propietario. Sin merge de este PR, despliegue ni validación física; UX-P2A y L1–L3 mantienen sus puertas anteriores.
+
+### Siguientes pasos tras el flujo guiado del recorrido
+
+1. **Aceptación real local UX-P2B completada:** Main Gym publicado por el propietario, revisión 19 y tres paradas verificadas, con guardado/exploración confirmados. [Cierre y alcance](planes/ux/05-tour-paradas.md#cierre-de-aceptación-funcional-local--14-de-octubre-de-2026). Revisar el PR #6 antes de integrarlo; sin fusión automática.
+2. Ejecutar la validación física pendiente (P1-B): Android/iPhone, reconocimiento de agarres, gestos, lector de pantalla, QR impreso, red y rendimiento con capturas reales. Usar los resultados para priorizar correcciones; no declarar L3 sin esa evidencia.
+3. Preparar L1/P1-A y el endurecimiento P1-C: configuración de staging del gimnasio único, callbacks, permisos, límites, backup/restauración y monitoreo. Desplegar requiere recursos, contenido autorizado para internet y aprobación específica; Crux sigue solo local.
+4. UX-P2A, biblioteca de agarres reutilizables, permanece opcional y condicionada a pruebas con setters que confirmen el beneficio. Necesita plan propio de identidad por captura/sección, API/migración, conflictos y snapshots históricos; no se activa automáticamente por cerrar el tour.
+
+Estas líneas son las puertas vigentes, no una nueva etapa comercial ni multigimnasio. L2 y L3 requieren pruebas remotas/controladas y físicas adicionales a L0.
+
+
+### Próximo batch de desarrollo tras cerrar UX-P2B local
+
+Preparar **P1-A/P1-C: staging del gimnasio único y endurecimiento**, partiendo del runbook y herramientas existentes, sin desplegar automáticamente ni rehacer módulos. Revisar brechas de configuración/orígenes/callbacks, límites y rate limiting, auditoría/monitoreo y backup/restauración conjunta D1+R2 (incluyendo recorridos e imágenes). Definir un plan ejecutable y pruebas aisladas antes de implementar; no declarar comprobada la restauración R2/remota que aún no se haya ejecutado. La integración del PR #6 requiere autorización independiente.
+
+En paralelo, **P1-B** exige QA física con teléfonos/QR/lector/red/rendimiento; sus resultados decidirán ajustes de visor. **UX-P2A** sigue opcional, después de validar la necesidad con setters. No se adelantan marcas múltiples ni funcionalidades comerciales por cerrar el tour local.

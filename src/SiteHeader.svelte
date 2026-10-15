@@ -22,7 +22,7 @@
     logout: () => void;
   } = $props();
   const accountViews = ['Bitácora', 'Proyectos', 'Cuenta'];
-  const staffViews = ['Staff', 'Capturas', 'Recepción'];
+  const staffViews = ['Staff', 'Capturas', 'Recepción', 'Recorridos'];
 </script>
 
 <a class="skip-link" href="#tools-panel">Saltar al contenido</a>
@@ -79,7 +79,7 @@
 {:else if staffViews.includes(tab) && staff}
   <nav aria-label="Staff" class="subnav">
     <span>Operación · {site.brand.name}</span>
-    {#each ['Staff', ...(admin ? ['Capturas'] : []), 'Recepción'] as view}<button
+    {#each ['Staff', 'Recorridos', ...(admin ? ['Capturas'] : []), 'Recepción'] as view}<button
         disabled={locked}
         aria-current={tab === view ? 'page' : undefined}
         onclick={() => navigate(view)}

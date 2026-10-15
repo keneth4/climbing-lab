@@ -6,12 +6,14 @@
     onSelect,
     disabled = false,
     clipBottom = 0,
+    selectionLabel = 'Seleccionar agarre',
   }: {
     markers: MarkerLayout[];
     viewport: Rect & { zoom?: number };
     onSelect?: (id: string) => void;
     disabled?: boolean;
     clipBottom?: number;
+    selectionLabel?: string;
   } = $props();
 </script>
 
@@ -55,7 +57,7 @@
         <button
           type="button"
           {disabled}
-          aria-label={`Seleccionar agarre ${m.label} · ${m.role}`}
+          aria-label={`${selectionLabel} ${m.label} · ${m.role}`}
           aria-pressed={!!m.active}
           style:left={`${m.labelPoint.x}px`}
           style:top={`${m.labelPoint.y}px`}

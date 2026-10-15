@@ -1,6 +1,8 @@
 <script lang="ts">
   import SiteHeader from './SiteHeader.svelte';
   import SitePublic from './SitePublic.svelte';
+  import TourPage from './TourPage.svelte';
+  import TourManager from './TourManager.svelte';
   import SiteFooter from './SiteFooter.svelte';
   import RouteCatalog from './RouteCatalog.svelte';
   import { site, viewFromUrl, pageTitle } from './site';
@@ -460,6 +462,9 @@
   let query = $state(initialUrl.searchParams.get('buscar') || '');
   let grade = $state(initialUrl.searchParams.get('grado') || '');
   let sectorFilter = $state(initialUrl.searchParams.get('sector') || '');
+  let zoneFilter = $state(initialUrl.searchParams.get('zona') || '');
+  let tourSelection = $state(initialUrl.searchParams.get('tour') || '');
+  let stopSelection = $state(initialUrl.searchParams.get('parada') || '');
   let scaleFilter = $state(initialUrl.searchParams.get('escala') || '');
   let minGrade = $state(initialUrl.searchParams.get('desde') || '');
   let maxGrade = $state(initialUrl.searchParams.get('hasta') || '');
@@ -472,6 +477,7 @@
           (r.status === 'activa' || (showRetired && r.status === 'retirada')) &&
           (!grade || r.grade === grade) &&
           (!sectorFilter || r.sector === sectorFilter) &&
+          (!zoneFilter || r.sectionId === zoneFilter) &&
           (!scaleFilter ||
             (r.gradeScale || gradeScale(r.grade)) === scaleFilter) &&
           (!minGrade ||
@@ -493,6 +499,7 @@
       buscar: query,
       grado: grade,
       sector: sectorFilter,
+      zona: zoneFilter,
       escala: scaleFilter,
       desde: minGrade,
       hasta: maxGrade,
@@ -565,6 +572,7 @@
       buscar: query,
       grado: grade,
       sector: sectorFilter,
+      zona: zoneFilter,
       escala: scaleFilter,
       desde: minGrade,
       hasta: maxGrade,
@@ -583,6 +591,10 @@
       '',
       previous,
     );
+    if (view === 'Recorrido' && tab !== 'Recorrido') {
+      tourSelection = '';
+      stopSelection = '';
+    }
     tab = view;
     if (id) selectedId = id;
     detailMode = !!id;
@@ -593,10 +605,15 @@
     url.search = '';
     if (view !== 'Inicio') url.searchParams.set('vista', view);
     if (id) url.searchParams.set('ruta', id);
+    if (view === 'Recorrido') {
+      if (tourSelection) url.searchParams.set('tour', tourSelection);
+      if (stopSelection) url.searchParams.set('parada', stopSelection);
+    }
     for (const [k, v] of Object.entries({
       buscar: query,
       grado: grade,
       sector: sectorFilter,
+      zona: zoneFilter,
       escala: scaleFilter,
       desde: minGrade,
       hasta: maxGrade,
@@ -620,6 +637,18 @@
       }
     });
   }
+  function selectTour(id: string, stop: string, replace = false) {
+    if (tab !== 'Recorrido') return;
+    tourSelection = id;
+    stopSelection = stop;
+    const url = new URL(location.href);
+    url.searchParams.delete('ruta');
+    url.searchParams.set('vista', 'Recorrido');
+    url.searchParams.set('tour', id);
+    if (stop) url.searchParams.set('parada', stop);
+    if (replace) history.replaceState({ ...history.state }, '', url);
+    else history.pushState({ scroll: 0 }, '', url);
+  }
   onMount(() => {
     if (initialUrl.searchParams.has('ruta')) measure('qr_open');
     const pop = () => {
@@ -630,6 +659,9 @@
       query = url.searchParams.get('buscar') || '';
       grade = url.searchParams.get('grado') || '';
       sectorFilter = url.searchParams.get('sector') || '';
+      zoneFilter = url.searchParams.get('zona') || '';
+      tourSelection = url.searchParams.get('tour') || '';
+      stopSelection = url.searchParams.get('parada') || '';
       scaleFilter = url.searchParams.get('escala') || '';
       minGrade = url.searchParams.get('desde') || '';
       maxGrade = url.searchParams.get('hasta') || '';
@@ -676,6 +708,7 @@
     query = '';
     grade = '';
     sectorFilter = '';
+    zoneFilter = '';
     scaleFilter = '';
     minGrade = '';
     maxGrade = '';
@@ -1001,7 +1034,23 @@
     aria-label="Contenido del gimnasio"
     tabindex="-1"
   >
-    {#if tab === 'Inicio' || tab === 'El gimnasio'}<SitePublic
+    {#if tab === 'Recorrido'}<TourPage
+        tourId={tourSelection}
+        stopId={stopSelection}
+        onSelect={selectTour}
+        onRoute={(id) => navigate('Catálogo', id)}
+        onZone={(id) => {
+          zoneFilter = id;
+          navigate('Catálogo');
+        }}
+      />
+    {:else if tab === 'Recorridos' && userId}{#key userId}<TourManager
+          admin={adminRole}
+          available={staff && sessionReady}
+          owner={userId}
+          routes={db.routes}
+        />{/key}
+    {:else if tab === 'Inicio' || tab === 'El gimnasio'}<SitePublic
         view={tab}
         {navigate}
       />
@@ -1055,6 +1104,7 @@
             bind:query
             bind:grade
             bind:sectorFilter
+            bind:zoneFilter
             bind:scaleFilter
             bind:minGrade
             bind:maxGrade
