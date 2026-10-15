@@ -522,7 +522,7 @@ it('stores bounded PNG route images in R2, keeps drafts private and publishes ma
     'SELECT active_capture_id FROM gym_state WHERE id=1',
   ).first<string>('active_capture_id');
   const section = await a.DB.prepare(
-    'SELECT id FROM sections LIMIT 1',
+    "SELECT id FROM sections WHERE kind='wall' LIMIT 1",
   ).first<string>('id');
   const camera = {
     captureId: current,
@@ -669,4 +669,170 @@ it('restores a previous published capture with new revisions and preserves the a
       })
     ).status,
   ).toBe(409);
+});
+
+it('validates oriented sections through the API and keeps old route geometry pinned', async () => {
+  const { planeFromPoints } = await import('../shared/sections');
+  const geometry = {
+    type: 'oriented-polygon',
+    plane: planeFromPoints([
+      [1, 2, 3],
+      [3, 2, 3],
+      [1, 4, 5],
+    ]),
+    verticesUV: [
+      [0, 0],
+      [2, 0],
+      [2, 2],
+      [0, 2],
+    ],
+    thickness: 0.3,
+  };
+  for (const invalid of [
+    { ...geometry, plane: { ...geometry.plane, u: [2, 0, 0] } },
+    {
+      ...geometry,
+      verticesUV: [
+        [0, 0],
+        [1, 1],
+        [0, 1],
+        [1, 0],
+      ],
+    },
+    { ...geometry, thickness: 0 },
+  ])
+    expect(
+      (
+        await post('/api/sections', {
+          name: 'Invalid tilted',
+          geometry: invalid,
+        })
+      ).status,
+    ).toBe(400);
+  const created = await post('/api/sections', {
+    name: 'Tilted wall',
+    geometry,
+  });
+  expect(created.status).toBe(201);
+  const { id } = await created.json();
+  const first = (
+    await (await get(`/api/sections/${id}/revisions/1`, a, 'visitor')).json()
+  ).section;
+  expect(first.geometry).toEqual(JSON.parse(JSON.stringify(geometry)));
+  const original = JSON.stringify({
+    name: 'Pinned oriented',
+    sectionId: id,
+    sectionRevision: 1,
+    holds: [],
+    holds3D: [{ id: 'h', position: [1, 2, 3], role: 'inicio' }],
+    imageId: 'historical-image',
+  });
+  await a.DB.prepare(
+    "INSERT INTO routes(id,name,grade,sector,section_id) VALUES('oriented-pinned','Pinned oriented','V1','Wall',?)",
+  )
+    .bind(id)
+    .run();
+  await a.DB.prepare(
+    "INSERT INTO route_revisions(route_id,revision,snapshot) VALUES('oriented-pinned',1,?)",
+  )
+    .bind(original)
+    .run();
+  const edit = (expectedRevision: number) =>
+    handle(
+      new Request(`https://local.test/api/sections/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Tilted changed',
+          geometry: { ...geometry, thickness: 0.6 },
+          expectedRevision,
+        }),
+      }),
+      a,
+      identity(),
+    );
+  const results = await Promise.all([edit(1), edit(1)]);
+  expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+  expect(
+    (await (await get(`/api/sections/${id}/revisions/1`, a, 'visitor')).json())
+      .section,
+  ).toEqual(first);
+  expect(
+    await a.DB.prepare(
+      "SELECT snapshot FROM route_revisions WHERE route_id='oriented-pinned'",
+    ).first('snapshot'),
+  ).toBe(original);
+  expect(
+    (await get(`/api/sections/${id}/revisions/1`, b, 'visitor')).status,
+  ).toBe(404);
+  const changeKind = await handle(
+    new Request(`https://local.test/api/sections/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Now visitable',
+        kind: 'accessible-area',
+        geometry,
+        expectedRevision: 2,
+      }),
+    }),
+    a,
+    identity(),
+  );
+  expect(changeKind.status).toBe(200);
+  const retired = await handle(
+    new Request('https://local.test/api/routes/oriented-pinned', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Pinned oriented',
+        grade: 'V1',
+        sector: 'Wall',
+        beta: '',
+        sectionId: id,
+        expectedRevision: 1,
+        status: 'retirada',
+        changeReason: 'Prueba de continuidad histórica',
+        holds: [],
+        holds3D: [],
+      }),
+    }),
+    a,
+    identity(),
+  );
+  expect(retired.status).toBe(200);
+  const updated = await (
+    await get('/api/routes/oriented-pinned', a, 'visitor')
+  ).json();
+  expect(updated.snapshot.sectionRevision).toBe(1);
+  expect(
+    await a.DB.prepare(
+      "SELECT snapshot FROM route_revisions WHERE route_id='oriented-pinned' AND revision=1",
+    ).first('snapshot'),
+  ).toBe(original);
+  const area = await (
+    await post('/api/sections', {
+      name: 'Walk only',
+      kind: 'accessible-area',
+      geometry,
+    })
+  ).json();
+  const rejected = await post(
+    '/api/routes',
+    {
+      name: 'Forbidden area route',
+      beta: '',
+      grade: 'V1',
+      gradeScale: 'V',
+      sector: 'Floor',
+      status: 'borrador',
+      sectionId: area.id,
+      holds: [],
+      holds3D: [],
+    },
+    a,
+    'editor',
+  );
+  expect(rejected.status).toBe(400);
+  expect((await rejected.json()).error).toContain('visitables');
 });

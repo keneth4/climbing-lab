@@ -41,6 +41,8 @@ export class ViewerWorkspace {
         toolsDisabled: false,
         editorStep: undefined,
         focusRequest: 0,
+        sectionCamera: undefined,
+        sectionEditing: false,
         onReady: undefined,
         onExit: undefined,
         staff: false,

@@ -3,13 +3,8 @@
   import { api, supabase } from './auth';
   import SplatViewer from './SplatViewer.svelte';
   import type { Capture, Section, Fiducial } from './twin';
-  import {
-    projectVertex,
-    polygonGeometry,
-    polygonBounds,
-    planeAxes,
-    type SectionGeometry,
-  } from '../shared/sections';
+  import SectionEditor from './SectionEditor.svelte';
+  import type { SectionTool } from './section-tool';
   import type { Point } from '../shared/alignment';
   import type { Route, CameraView } from './domain';
   let {
@@ -17,11 +12,13 @@
     onPublished,
     currentCapture,
     owner,
+    onCreateRoute,
   }: {
     routes: Route[];
     onPublished: () => void;
     currentCapture?: Capture;
     owner: string;
+    onCreateRoute: (id: string) => void;
   } = $props();
   const captureOwner = untrack(() => owner);
   let captures = $state<Capture[]>([]),
@@ -35,42 +32,16 @@
     progress = $state('');
   let readyStamp = $state('');
   let selected = $derived(captures.find((c) => c.id === selectedId));
-  let sectionName = $state(''),
-    minimum = $state(''),
-    maximum = $state(''),
-    referenceLabel = $state(''),
+  let referenceLabel = $state(''),
     referencePosition = $state(''),
     observations = $state<Record<string, string>>({}),
     changed = $state<string[]>([]),
     imports = $state<string[]>([]),
     reviewed = $state<string[]>([]),
-    reviewedAlignment = $state(false),
-    previewSectionId = $state('');
-  let editingSection = $state(false);
-  let center = $state<Point>([0, 0, 0]);
-  let dimensions = $state<Point>([2, 2, 1]);
-  let sceneBounds = $state<{ min: Point; max: Point } | undefined>();
-  let boundsStamp = '';
+    reviewedAlignment = $state(false);
+  let sceneBounds = $state<Section['bounds'] | undefined>();
   let picked = $state<{ raw: Point; world: Point } | undefined>();
-  let draftSection = $derived<Section>({
-    id: 'preview',
-    name: sectionName || 'Sección en preparación',
-    bounds: {
-      min: center.map((n, i) => n - dimensions[i] / 2) as Point,
-      max: center.map((n, i) => n + dimensions[i] / 2) as Point,
-    },
-  });
-  function startSection() {
-    if (sceneBounds) {
-      center = sceneBounds.min.map(
-        (n, i) => (n + sceneBounds!.max[i]) / 2,
-      ) as Point;
-      dimensions = sceneBounds.min.map((n, i) =>
-        Math.max((sceneBounds!.max[i] - n) * 0.3, 0.1),
-      ) as Point;
-    }
-    editingSection = true;
-  }
+  let sectionTool = $state<SectionTool>();
   async function saveInitial(view: CameraView) {
     if (!selected) return;
     const c = selected;
@@ -81,98 +52,6 @@
       });
       await refresh();
       message = 'Cámara inicial guardada. Se restaurará al abrir esta captura.';
-    });
-  }
-  let polygonMode = $state(false),
-    vertices = $state<Point[]>([]);
-  let plane = $state<SectionGeometry['plane']>('XY'),
-    elevation = $state(0),
-    thickness = $state(0.5);
-  let gridVisible = $state(true),
-    gridStep = $state(0.5),
-    snapGrid = $state(false);
-  let sectionKind = $state<'wall' | 'accessible-area'>('wall');
-  let polygon = $derived<SectionGeometry>({
-    type: 'polygon',
-    plane,
-    elevation,
-    thickness,
-    vertices: vertices.map((p) => projectVertex(p, plane, elevation)),
-  });
-  let polygonPreview = $derived<Section>({
-    id: 'polygon-preview',
-    name: sectionName || 'Contorno en preparación',
-    geometry: polygon,
-    kind: sectionKind,
-    bounds: vertices.length ? polygonBounds(polygon) : draftSection.bounds,
-  });
-  function addVertex(world: Point) {
-    if (vertices.length >= 32) {
-      message = 'Máximo 32 vértices por sección.';
-      return;
-    }
-    vertices = [
-      ...vertices,
-      projectVertex(world, plane, elevation, snapGrid ? gridStep : 0),
-    ];
-  }
-  function beginPolygon() {
-    editingSection = true;
-    polygonMode = true;
-    vertices = [];
-  }
-  let editId = $state(''),
-    editRevision = $state(0);
-  let sectionHistory = $state<
-    { revision: number; section: Section; createdAt: string }[]
-  >([]);
-  let historyId = $state('');
-  function cancelRegion() {
-    editId = '';
-    editRevision = 0;
-    editingSection = false;
-    polygonMode = false;
-    vertices = [];
-    sectionName = '';
-    minimum = '';
-    maximum = '';
-    message = 'Edición cancelada; no se guardaron cambios.';
-  }
-  function editRegion(region: Section) {
-    editId = region.id;
-    editRevision = region.revision || 1;
-    sectionName = region.name;
-    sectionKind = region.kind || 'wall';
-    editingSection = true;
-    center = region.bounds.min.map(
-      (n, i) => (n + region.bounds.max[i]) / 2,
-    ) as Point;
-    dimensions = region.bounds.min.map(
-      (n, i) => region.bounds.max[i] - n,
-    ) as Point;
-    minimum = region.bounds.min.join(', ');
-    maximum = region.bounds.max.join(', ');
-    polygonMode = !!region.geometry;
-    if (region.geometry) {
-      plane = region.geometry.plane;
-      elevation = region.geometry.elevation;
-      thickness = region.geometry.thickness;
-      vertices = region.geometry.vertices.map((p) => [...p] as Point);
-    } else vertices = [];
-    message =
-      'Editando revisión ' +
-      editRevision +
-      '. Las rutas conservarán su revisión de sección anterior hasta que sean revisadas.';
-  }
-  async function historyRegion() {
-    if (!previewSectionId) return;
-    const id = previewSectionId;
-    await operation(async () => {
-      const data = await api(`/sections/${id}/revisions`);
-      if (previewSectionId === id) {
-        sectionHistory = data.revisions;
-        historyId = id;
-      }
     });
   }
   const coordinates = (value: string) => {
@@ -251,9 +130,6 @@
       await api(`/captures/${metadata.id}/complete`, {});
       await refresh();
       selectedId = metadata.id;
-      editingSection = false;
-      editId = '';
-      editRevision = 0;
       picked = undefined;
       reviewedAlignment = false;
       progress = 'Captura completa subida como borrador.';
@@ -380,9 +256,6 @@
     bind:value={selectedId}
     onchange={() => {
       reviewedAlignment = false;
-      editingSection = false;
-      editId = '';
-      editRevision = 0;
       picked = undefined;
       reviewed = [];
       imports = [];
@@ -395,40 +268,40 @@
       >{/each}</select
   ></label
 >
-{#if selected?.upload_state === 'ready'}<label
-    >Mostrar sección en la vista<select bind:value={previewSectionId}
-      ><option value="">Ninguna</option>{#each sections as s}<option
-          value={s.id}>{s.name}</option
-        >{/each}</select
-    ></label
-  ><SplatViewer
+{#if selected?.upload_state === 'ready'}<SplatViewer
     capture={selected}
     {fiducials}
     onReady={(id, version) => (readyStamp = id + ':' + version)}
     onInitialSave={selected.status === 'draft' ? saveInitial : undefined}
     onPoint={(raw, world) => {
       picked = { raw, world };
-      if (polygonMode && editingSection) addVertex(world);
+      sectionTool?.pick(world);
     }}
     onBounds={(bounds) => {
       sceneBounds = bounds;
-      if (boundsStamp !== selectedId) {
-        boundsStamp = selectedId;
-        center = bounds.min.map((n, i) => (n + bounds.max[i]) / 2) as Point;
-      }
     }}
-    continuousPick={polygonMode && editingSection}
-    grid={gridVisible
-      ? { plane, elevation, step: gridStep, center: center }
+    continuousPick={sectionTool?.picking || false}
+    spatialMode={sectionTool?.active
+      ? sectionTool.picking
+        ? 'pick-hold'
+        : 'explore'
       : undefined}
-    section={editingSection
-      ? polygonMode
-        ? polygonPreview
-        : draftSection
-      : sections.find((s) => s.id === previewSectionId)}
+    section={sectionTool?.section}
+    sectionCamera={sectionTool?.camera}
+    sectionEditing={sectionTool?.active}
+    selectedHoldId={sectionTool?.selected}
+    focusPoint={sectionTool?.focusPoint}
+    focusRequest={sectionTool?.focusRequest || 0}
+    onHoldSelect={sectionTool?.active ? sectionTool.select : undefined}
+    onModeChange={sectionTool?.active
+      ? (mode) => sectionTool?.setPicking(mode === 'pick-hold')
+      : undefined}
+    onCancelTool={sectionTool?.cancel}
     routeId={reviewingRoute || 'capture-preview'}
     saved={reviewCamera}
-    holds3D={reviewRoute?.holds3D || []}
+    holds3D={sectionTool?.markers.length
+      ? sectionTool.markers
+      : reviewRoute?.holds3D || []}
     staff={!!reviewRoute}
     onSave={(view) => {
       reviewCamera = view;
@@ -442,7 +315,7 @@
       : undefined}
   />
   {#if selected.initialCamera}<p>Cámara inicial del gimnasio guardada.</p>{/if}
-  {#if picked}<section class="point-review">
+  {#if picked && !sectionTool?.active}<section class="point-review">
       <h2>Confirmar posición seleccionada</h2>
       <p>Centro gaussiano aproximado. Comprueba el marcador antes de usarlo.</p>
       <p>
@@ -450,17 +323,8 @@
         {picked.raw.map((n) => n.toFixed(4)).join(', ')}
       </p>
       <div class="actions">
-        <button
-          onclick={() => {
-            center = [...picked!.world];
-            editingSection = true;
-          }}>Centrar sección en este punto</button
-        >
         <button onclick={() => (referencePosition = picked!.world.join(', '))}
           >Usar como referencia permanente</button
-        >
-        <button onclick={() => (elevation = picked!.world[planeAxes(plane)[2]])}
-          >Posicionar plano en este punto</button
         >
         <button onclick={() => (picked = undefined)}>Descartar posición</button>
       </div>
@@ -473,243 +337,15 @@
   />
 {/if}
 <div class="forms">
-  <form
-    onsubmit={(e) => {
-      e.preventDefault();
-      operation(async () => {
-        await api(
-          editId ? `/sections/${editId}` : '/sections',
-          {
-            ...(editId ? { expectedRevision: editRevision } : {}),
-            name: sectionName,
-            kind: sectionKind,
-            ...(polygonMode && editingSection
-              ? { geometry: polygonGeometry(polygon) }
-              : {}),
-            min: editingSection
-              ? draftSection.bounds.min
-              : coordinates(minimum),
-            max: editingSection
-              ? draftSection.bounds.max
-              : coordinates(maximum),
-          },
-          editId ? 'PUT' : 'POST',
-        );
-        await refresh();
-        editId = '';
-        editRevision = 0;
-        sectionHistory = [];
-        sectionName = '';
-        editingSection = false;
-        polygonMode = false;
-        vertices = [];
-        message = 'Sección guardada en las coordenadas del gimnasio.';
-      });
-    }}
-  >
-    <h2>Definir sección estable</h2>
-    <div class="actions">
-      <button
-        type="button"
-        disabled={busy || !previewSectionId}
-        onclick={() => {
-          const r = sections.find((s) => s.id === previewSectionId);
-          if (r) editRegion(r);
-        }}>Editar sección seleccionada</button
-      >
-      <button
-        type="button"
-        disabled={busy || !previewSectionId}
-        onclick={historyRegion}>Ver historial de sección</button
-      >
-    </div>
-    {#if editId}<p>
-        Editando sección existente · revisión {editRevision}. Guardar conserva
-        su identidad.
-      </p>
-      <button type="button" disabled={busy} onclick={cancelRegion}
-        >Cancelar edición de sección</button
-      >{/if}
-    {#if historyId === previewSectionId && sectionHistory.length}<details open>
-        <summary>Historial de sección</summary>
-        <ol>
-          {#each sectionHistory as r}<li>
-              Revisión {r.revision} · {r.section.name} · {r.createdAt}<button
-                type="button"
-                onclick={() => {
-                  editRegion(r.section);
-                  editRevision =
-                    sections.find((s) => s.id === r.section.id)?.revision || 1;
-                  message =
-                    'Revisión histórica preparada como borrador. Guardar creará una revisión nueva.';
-                }}>Preparar esta revisión para restaurar</button
-              >
-            </li>{/each}
-        </ol>
-      </details>{/if}
-    <label
-      >Tipo de región<select bind:value={sectionKind}
-        ><option value="wall">Sección de pared</option><option
-          value="accessible-area">Área accesible</option
-        ></select
-      ></label
-    >
-    <button
-      type="button"
-      disabled={!selected || !sceneBounds}
-      onclick={beginPolygon}>Delimitar con vértices</button
-    >
-    <label
-      >Plano de referencia<select
-        bind:value={plane}
-        onchange={() => {
-          vertices = [];
-        }}><option>XY</option><option>XZ</option><option>YZ</option></select
-      ></label
-    >
-    <label
-      >Posición del plano<input
-        type="number"
-        step="any"
-        bind:value={elevation}
-      /></label
-    >
-    <label
-      >Espesor de región<input
-        type="number"
-        min="0.01"
-        step="any"
-        bind:value={thickness}
-      /></label
-    >
-    <label
-      >Paso de cuadrícula<input
-        type="number"
-        min="0.01"
-        step="any"
-        bind:value={gridStep}
-      /></label
-    >
-    <label class="toggle"
-      ><input type="checkbox" bind:checked={gridVisible} />Mostrar cuadrícula</label
-    >
-    <label class="toggle"
-      ><input type="checkbox" bind:checked={snapGrid} />Ajustar nuevos vértices
-      a cuadrícula</label
-    >
-    <p>
-      XY suele servir para paredes; XZ para suelo, si Y es vertical. Usa
-      coordenadas alineadas del gimnasio. El paso representa unidades del clon,
-      no metros hasta calibrar escala.
-    </p>
-    {#if polygonMode && editingSection}<p>
-        Activa Seleccionar punto en el visor y marca el contorno en orden. Cada
-        punto se proyecta al plano elegido. Usa al menos tres vértices; no
-        cruces los bordes.
-      </p>
-      <ol>
-        {#each vertices as v, i}<li>
-            <div class="spatial-fields">
-              {#each planeAxes(plane).slice(0, 2) as axis}<label
-                  >Vértice {i + 1}
-                  {['X', 'Y', 'Z'][axis]}<input
-                    type="number"
-                    step="any"
-                    required
-                    bind:value={vertices[i][axis]}
-                  /></label
-                >{/each}
-            </div>
-            Vértice {i + 1}: {projectVertex(v, plane, elevation)
-              .map((n) => n.toFixed(3))
-              .join(', ')}
-            <button
-              type="button"
-              onclick={() => (vertices = vertices.filter((_, j) => j !== i))}
-              >Eliminar vértice {i + 1}</button
-            >
-          </li>{/each}
-      </ol>
-      <button
-        type="button"
-        disabled={!vertices.length}
-        onclick={() => (vertices = vertices.slice(0, -1))}
-        >Deshacer vértice</button
-      >
-    {/if}
-    <button
-      type="button"
-      disabled={!selected || !sceneBounds}
-      onclick={() => {
-        polygonMode = false;
-        startSection();
-      }}>Preparar sección visual</button
-    >
-    {#if editingSection && !polygonMode}<p>
-        El volumen verde muestra la sección en preparación. Ajusta su centro y
-        tamaño; guardar confirma los límites.
-      </p>
-      <div class="spatial-fields">
-        {#each ['X', 'Y', 'Z'] as axis, i}
-          <label
-            >Centro {axis}<input
-              type="number"
-              step="any"
-              required
-              bind:value={center[i]}
-            /></label
-          >
-          <label
-            >Tamaño {axis}<input
-              type="number"
-              min="0.01"
-              step="any"
-              required
-              bind:value={dimensions[i]}
-            /></label
-          >
-        {/each}
-      </div>
-      <p>
-        Límites: {draftSection.bounds.min.map((n) => n.toFixed(3)).join(', ')} → {draftSection.bounds.max
-          .map((n) => n.toFixed(3))
-          .join(', ')}
-      </p>
-      <button
-        type="button"
-        onclick={() => {
-          if (editId) cancelRegion();
-          else editingSection = false;
-        }}>Cancelar preparación visual</button
-      >
-    {/if}
-    <label
-      >Nombre de sección<input
-        bind:value={sectionName}
-        required
-        maxlength="80"
-      /></label
-    >{#if !editingSection}<label
-        >Límite mínimo X, Y, Z<input
-          bind:value={minimum}
-          placeholder="0, 0, 0"
-          required
-        /></label
-      ><label
-        >Límite máximo X, Y, Z<input
-          bind:value={maximum}
-          placeholder="5, 4, 1"
-          required
-        /></label
-      >{/if}<button
-      disabled={busy || (polygonMode && editingSection && vertices.length < 3)}
-      >{editId ? 'Guardar cambios de sección' : 'Crear sección'}</button
-    >
-    <p>
-      Los límites están en el sistema de coordenadas del gimnasio y permanecen
-      entre capturas.
-    </p>
-  </form>
+  <SectionEditor
+    {sections}
+    capture={selected}
+    bounds={sceneBounds}
+    {routes}
+    onTool={(tool) => (sectionTool = tool)}
+    onRefresh={refresh}
+    {onCreateRoute}
+  />
   <form
     onsubmit={(e) => {
       e.preventDefault();
@@ -849,11 +485,6 @@
 {#if message}<p role="status">{message}</p>{/if}
 
 <style>
-  .spatial-fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
   .point-review {
     padding: 12px;
     background: white;

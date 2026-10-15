@@ -1,16 +1,98 @@
 import { point, type Point } from './alignment';
-export type SectionGeometry = {
+export type AxisPolygon = {
   type: 'polygon';
   plane: 'XY' | 'XZ' | 'YZ';
   elevation: number;
   thickness: number;
   vertices: Point[];
 };
-export const planeAxes = (plane: SectionGeometry['plane']) =>
+export type OrientedPlane = {
+  origin: Point;
+  u: Point;
+  v: Point;
+  normal: Point;
+};
+export type OrientedPolygon = {
+  type: 'oriented-polygon';
+  plane: OrientedPlane;
+  verticesUV: [number, number][];
+  thickness: number;
+};
+export type SectionGeometry = AxisPolygon | OrientedPolygon;
+const dot = (a: Point, b: Point) => a.reduce((sum, n, i) => sum + n * b[i], 0);
+const sub = (a: Point, b: Point) => a.map((n, i) => n - b[i]) as Point;
+const cross = (a: Point, b: Point): Point => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+const unit = (a: Point): Point => {
+  const size = Math.hypot(...a);
+  if (size < 1e-5)
+    throw new Error('Selecciona tres puntos distintos y no alineados.');
+  return a.map((n) => n / size) as Point;
+};
+export function planeFromPoints(points: Point[]): OrientedPlane {
+  if (points.length !== 3) throw new Error('Selecciona tres puntos del muro.');
+  const [origin, second, third] = points.map(point);
+  const u = unit(sub(second, origin)),
+    direction = unit(sub(third, origin));
+  const normal = unit(cross(u, direction)),
+    v = cross(normal, u);
+  return { origin, u, v, normal };
+}
+export function validatePlane(value: unknown): OrientedPlane {
+  const p = value as OrientedPlane;
+  if (!p) throw new Error('Plano inválido.');
+  const origin = point(p.origin),
+    u = point(p.u),
+    v = point(p.v),
+    normal = point(p.normal);
+  if (
+    [u, v, normal].some((a) => Math.abs(Math.hypot(...a) - 1) > 1e-5) ||
+    Math.abs(dot(u, v)) > 1e-5 ||
+    Math.abs(dot(u, normal)) > 1e-5 ||
+    Math.abs(dot(v, normal)) > 1e-5 ||
+    dot(cross(u, v), normal) < 1 - 1e-5
+  )
+    throw new Error('El plano debe tener una base ortonormal orientada.');
+  return { origin, u, v, normal };
+}
+export function worldToUV(p: Point, plane: OrientedPlane): [number, number] {
+  const relative = sub(p, plane.origin);
+  return [dot(relative, plane.u), dot(relative, plane.v)];
+}
+export function uvToWorld(
+  uv: [number, number],
+  plane: OrientedPlane,
+  offset = 0,
+): Point {
+  return plane.origin.map(
+    (n, i) =>
+      n + uv[0] * plane.u[i] + uv[1] * plane.v[i] + offset * plane.normal[i],
+  ) as Point;
+}
+export function geometryPlane(g: SectionGeometry): OrientedPlane {
+  if (g.type === 'oriented-polygon') return g.plane;
+  const [a, b, n] = planeAxes(g.plane),
+    origin: Point = [0, 0, 0],
+    u: Point = [0, 0, 0],
+    v: Point = [0, 0, 0];
+  origin[n] = g.elevation;
+  u[a] = 1;
+  v[b] = 1;
+  return { origin, u, v, normal: cross(u, v) };
+}
+export function geometryVertices(g: SectionGeometry): Point[] {
+  return g.type === 'polygon'
+    ? g.vertices
+    : g.verticesUV.map((uv) => uvToWorld(uv, g.plane));
+}
+export const planeAxes = (plane: AxisPolygon['plane']) =>
   plane === 'XY' ? [0, 1, 2] : plane === 'XZ' ? [0, 2, 1] : [1, 2, 0];
 export function projectVertex(
   p: Point,
-  plane: SectionGeometry['plane'],
+  plane: AxisPolygon['plane'],
   elevation: number,
   snap = 0,
 ): Point {
@@ -24,7 +106,37 @@ export function projectVertex(
   return result;
 }
 export function polygonGeometry(value: unknown): SectionGeometry {
-  const v = value as SectionGeometry;
+  if ((value as OrientedPolygon)?.type === 'oriented-polygon') {
+    const v = value as OrientedPolygon,
+      plane = validatePlane(v.plane);
+    if (
+      !Array.isArray(v.verticesUV) ||
+      v.verticesUV.some(
+        (uv) =>
+          !Array.isArray(uv) ||
+          uv.length !== 2 ||
+          !uv.every((n) => Number.isFinite(n) && Math.abs(n) <= 1e6),
+      )
+    )
+      throw new Error('Vértices UV inválidos.');
+    // Reuse the same contour validation and limits for both wire formats.
+    const checked = polygonGeometry({
+      type: 'polygon',
+      plane: 'XY',
+      elevation: 0,
+      thickness: v.thickness,
+      vertices: v.verticesUV.map((uv) => [uv[0], uv[1], 0]),
+    }) as AxisPolygon;
+    const result: OrientedPolygon = {
+      type: 'oriented-polygon',
+      plane,
+      verticesUV: checked.vertices.map((p) => [p[0], p[1]]),
+      thickness: checked.thickness,
+    };
+    geometryVertices(result).forEach(point);
+    return result;
+  }
+  const v = value as AxisPolygon;
   if (
     !v ||
     v.type !== 'polygon' ||
@@ -88,14 +200,17 @@ export function polygonGeometry(value: unknown): SectionGeometry {
   };
 }
 export function polygonBounds(g: SectionGeometry): { min: Point; max: Point } {
-  const [, , n] = planeAxes(g.plane);
-  const min = [0, 1, 2].map((a) =>
-    Math.min(...g.vertices.map((p) => p[a])),
-  ) as Point;
-  const max = [0, 1, 2].map((a) =>
-    Math.max(...g.vertices.map((p) => p[a])),
-  ) as Point;
-  min[n] = g.elevation - g.thickness / 2;
-  max[n] = g.elevation + g.thickness / 2;
-  return { min, max };
+  const vertices = geometryVertices(g),
+    normal = geometryPlane(g).normal;
+  if (!vertices.length) throw new Error('El contorno no tiene vértices.');
+  const corners = vertices.flatMap((p) =>
+    [-1, 1].map(
+      (sign) =>
+        p.map((n, i) => n + ((sign * g.thickness) / 2) * normal[i]) as Point,
+    ),
+  );
+  return {
+    min: [0, 1, 2].map((a) => Math.min(...corners.map((p) => p[a]))) as Point,
+    max: [0, 1, 2].map((a) => Math.max(...corners.map((p) => p[a]))) as Point,
+  };
 }

@@ -395,11 +395,13 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await markerEditor
     .getByRole('button', { name: 'Seleccionar punto', exact: true })
     .click();
-  const bounds = await markerEditor.locator('canvas').boundingBox();
+  const bounds = await page
+    .getByLabel('Visor de Gaussian Splatting', { exact: true })
+    .boundingBox();
   const ratio =
     bounds!.height /
     (2 * Math.tan(Math.PI / 8) * (Math.sqrt(0.9 ** 2 * 2) * 2.5));
-  await markerEditor.locator('canvas').click({
+  await page.getByLabel('Visor de Gaussian Splatting', { exact: true }).click({
     position: {
       x: bounds!.width / 2 - 0.1 * ratio,
       y: bounds!.height / 2 + 0.1 * ratio,
@@ -417,7 +419,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await markerEditor
     .getByRole('button', { name: 'Seleccionar punto', exact: true })
     .click();
-  await markerEditor.locator('canvas').click({
+  await page.getByLabel('Visor de Gaussian Splatting', { exact: true }).click({
     position: {
       x: bounds!.width / 2 + 0.1 * ratio,
       y: bounds!.height / 2 - 0.1 * ratio,
@@ -434,8 +436,8 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     .getByRole('button', { name: 'Guardar cámara para esta ruta' })
     .click();
   expect(current.revision).toBe(1);
-  await markerEditor
-    .locator('canvas')
+  await page
+    .getByLabel('Visor de Gaussian Splatting', { exact: true })
     .screenshot({ path: `/tmp/route-markers-${test.info().project.name}.png` });
   await go(page, 4);
   await page.getByLabel('Revisé la vista frontal').check();

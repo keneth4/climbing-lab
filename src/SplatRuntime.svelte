@@ -2,7 +2,11 @@
   import { visibleSceneHeight } from './editor-flow';
   import { untrack } from 'svelte';
   import { renderCard, downloadBlob, type CardInfo } from './media';
-  import { planeAxes } from '../shared/sections';
+  import {
+    planeAxes,
+    geometryPlane,
+    geometryVertices,
+  } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
   import RouteMarkerOverlay from './RouteMarkerOverlay.svelte';
   import type { SpatialMode } from './route-editing';
@@ -32,6 +36,7 @@
     onExit,
     onRecording,
     mount,
+    canvasMount,
     saved,
     onSave,
     staff,
@@ -56,6 +61,8 @@
     toolsDisabled = false,
     editorStep,
     focusRequest = 0,
+    sectionCamera,
+    sectionEditing = false,
   }: {
     exportInfo?: CardInfo;
     visible?: boolean;
@@ -63,6 +70,7 @@
     onExit?: () => void;
     onRecording?: (active: boolean) => void;
     mount?: (node: HTMLElement) => void;
+    canvasMount?: (node: HTMLCanvasElement) => void;
     holds3D?: Hold3D[];
     previewPoint?: Point;
     selectedHoldId?: string;
@@ -74,6 +82,8 @@
     toolsDisabled?: boolean;
     editorStep?: number;
     focusRequest?: number;
+    sectionCamera?: import('./section-tool').SectionTool['camera'];
+    sectionEditing?: boolean;
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
@@ -100,6 +110,35 @@
         if (focusPoint?.every(Number.isFinite)) controller?.focus(focusPoint);
       });
   });
+  let beforeSectionView: CameraView | undefined;
+  $effect(() => {
+    if (!sectionEditing) beforeSectionView = undefined;
+  });
+  $effect(() => {
+    const command = sectionCamera;
+    if (command)
+      untrack(() => {
+        if (!controller || !ready) return;
+        if (command.plane) {
+          beforeSectionView ||= controller.save();
+          const current = controller.save(),
+            normal = command.plane.normal;
+          controller.apply({
+            ...current,
+            target: command.plane.origin,
+            yaw: Math.atan2(normal[0], normal[2]),
+            pitch: Math.asin(Math.max(-1, Math.min(1, normal[1]))),
+          });
+        } else if (beforeSectionView) {
+          controller.apply(beforeSectionView);
+          beforeSectionView = undefined;
+        }
+      });
+  });
+  function mountSceneCanvas(node: HTMLCanvasElement) {
+    canvasMount?.(node);
+    return { destroy: () => node.remove() };
+  }
   function mountViewer(node: HTMLElement) {
     mount?.(node);
   }
@@ -512,7 +551,7 @@
             [direction.x, direction.y, direction.z],
             localTarget.distance(origin),
             (Math.tan((camera.camera!.fov * Math.PI) / 360) * 16) / rect.height,
-            section && onHoldSelect
+            section && onHoldSelect && !sectionEditing
               ? (point) => {
                   const aligned = entity!
                     .getWorldTransform()
@@ -1024,9 +1063,13 @@
             height: rect.height,
             zoom: canvas.offsetWidth > 0 ? rect.width / canvas.offsetWidth : 1,
           };
-          const inspector = editorStep
-            ? document.getElementById('tools-panel')?.getBoundingClientRect()
-            : undefined;
+          const inspector = sectionEditing
+            ? document
+                .querySelector('.section-editor.preparing')
+                ?.getBoundingClientRect()
+            : editorStep
+              ? document.getElementById('tools-panel')?.getBoundingClientRect()
+              : undefined;
           overlayClipBottom =
             viewport.height - visibleSceneHeight(viewport, inspector);
           if (JSON.stringify(viewport) !== JSON.stringify(markerViewport))
@@ -1071,34 +1114,30 @@
           }
           if (visibleSection?.geometry) {
             const g = visibleSection.geometry,
-              [, , n] = planeAxes(g.plane),
+              vertices = geometryVertices(g),
+              normal = geometryPlane(g).normal,
               color = new pc.Color(0.1, 1, 0.4);
-            for (let i = 0; i < g.vertices.length; i++) {
-              const p = g.vertices[i],
-                q = g.vertices[(i + 1) % g.vertices.length];
-              const lower = [...p] as Point,
-                upper = [...p] as Point;
-              lower[n] -= g.thickness / 2;
-              upper[n] += g.thickness / 2;
+            for (let i = 0; i < vertices.length; i++) {
+              const p = vertices[i],
+                q = vertices[(i + 1) % vertices.length];
+              const offset = (point: Point, distance: number) =>
+                new pc.Vec3(
+                  ...(point.map((n, a) => n + distance * normal[a]) as Point),
+                );
               app.drawLine(
-                new pc.Vec3(...lower),
-                new pc.Vec3(...upper),
+                offset(p, -g.thickness / 2),
+                offset(p, g.thickness / 2),
                 color,
                 false,
               );
-              if (g.vertices.length > 1)
-                for (const offset of [-g.thickness / 2, 0, g.thickness / 2]) {
-                  const start = [...p] as Point,
-                    end = [...q] as Point;
-                  start[n] += offset;
-                  end[n] += offset;
+              if (vertices.length > 1)
+                for (const distance of [-g.thickness / 2, 0, g.thickness / 2])
                   app.drawLine(
-                    new pc.Vec3(...start),
-                    new pc.Vec3(...end),
+                    offset(p, distance),
+                    offset(q, distance),
                     color,
                     false,
                   );
-                }
             }
           } else if (visibleSection) {
             const { min, max } = visibleSection.bounds;
@@ -1204,6 +1243,7 @@
   <canvas
     class="workspace-canvas"
     bind:this={canvas}
+    use:mountSceneCanvas
     aria-label="Visor de Gaussian Splatting"
     tabindex="0"
   ></canvas>
