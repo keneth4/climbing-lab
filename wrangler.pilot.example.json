@@ -5,11 +5,17 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-13",
   "workers_dev": true,
-  "observability": { "enabled": true, "traces": { "enabled": true } },
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true
+    }
+  },
   "vars": {
     "GYM_ID": "replace-pilot-gym",
     "AUTH_ISSUER": "https://defblrjdwgnqyzzgozdf.supabase.co/auth/v1",
-    "AUTH_AUDIENCE": "authenticated"
+    "AUTH_AUDIENCE": "authenticated",
+    "PUBLIC_ORIGIN": "https://replace-public-origin"
   },
   "assets": {
     "directory": "./dist",
@@ -25,6 +31,19 @@
     }
   ],
   "r2_buckets": [
-    { "binding": "CAPTURES", "bucket_name": "replace-captures-bucket" }
+    {
+      "binding": "CAPTURES",
+      "bucket_name": "replace-captures-bucket"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "WRITE_LIMITER",
+      "namespace_id": "1004",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
   ]
 }

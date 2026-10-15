@@ -22,6 +22,12 @@ it('streams binary multipart upload through the actual Worker runtime', async ()
       compatibilityDate: '2026-10-12',
       d1Databases: { DB: 'runtime-upload' },
       r2Buckets: { CAPTURES: 'runtime-upload' },
+      ratelimits: {
+        WRITE_LIMITER: {
+          namespace_id: '9001',
+          simple: { limit: 120, period: 60 },
+        },
+      },
       bindings: {
         GYM_ID: 'test',
         AUTH_ISSUER: 'https://auth.invalid',

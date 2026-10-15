@@ -142,6 +142,7 @@ beforeAll(async () => {
       GYM_ID: id,
       AUTH_ISSUER: 'https://auth.invalid',
       AUTH_AUDIENCE: 'authenticated',
+      WRITE_LIMITER: { limit: async () => ({ success: true }) },
     });
   }
   [a, b] = envs as Env[];
@@ -1426,4 +1427,66 @@ it('rejects a stale image when publishing a new camera or marker presentation', 
   expect(
     (await handle(req('/api/routes', payload), a, asUser('alice'))).status,
   ).toBe(201);
+});
+
+it('guards all API writes by verified user and gym, preserves reads and recovers after the window', async () => {
+  let now = 0;
+  const windows = new Map<string, { at: number; count: number }>();
+  const keys: string[] = [];
+  const limiter = {
+    limit: async ({ key }: { key: string }) => {
+      keys.push(key);
+      const window = windows.get(key);
+      const current =
+        !window || now - window.at >= 60000 ? { at: now, count: 0 } : window;
+      windows.set(key, current);
+      return { success: ++current.count <= 120 };
+    },
+  };
+  const env = { ...a, WRITE_LIMITER: limiter };
+  let checks = 0;
+  const auth = async () => {
+    checks++;
+    return 'limiter-user';
+  };
+  for (let i = 0; i < 120; i++) {
+    const r = await handle(req('/api/unknown', {}), env, auth);
+    expect(r.status).toBe(404);
+  }
+  const limited = await handle(req('/api/staff/tours', {}), env, auth);
+  expect(limited.status).toBe(429);
+  expect(limited.headers.get('Retry-After')).toBe('60');
+  expect((await handle(req('/api/health'), env, auth)).status).toBe(200);
+  expect(
+    (await handle(req('/api/unknown', {}), env, asUser('other-user'))).status,
+  ).toBe(404);
+  expect(
+    (
+      await handle(
+        req('/api/unknown', {}),
+        { ...env, GYM_ID: 'other-gym' },
+        auth,
+      )
+    ).status,
+  ).toBe(404);
+  expect(keys).toContain(JSON.stringify(['gym-a', 'limiter-user']));
+  expect(keys).toContain(JSON.stringify(['other-gym', 'limiter-user']));
+  now = 60000;
+  expect((await handle(req('/api/unknown', {}), env, auth)).status).toBe(404);
+  const before = checks;
+  await handle(req('/api/entries', {}), env, auth);
+  expect(checks - before).toBe(1);
+});
+
+it('fails closed for writes when the rate binding is absent, while public reading survives', async () => {
+  const env = { ...a };
+  Reflect.deleteProperty(env, 'WRITE_LIMITER');
+  const result = await handle(
+    req('/api/unknown', {}),
+    env,
+    asUser('limiter-user'),
+  );
+  expect(result.status).toBe(503);
+  expect(result.headers.get('Retry-After')).toBe('60');
+  expect((await handle(req('/api/health'), env)).status).toBe(200);
 });

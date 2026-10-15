@@ -1214,18 +1214,26 @@
                   >Preparar imagen de ruta</button
                 ><a href={routeUrl(selected.id)}>Enlace de ruta</a>
                 <details>
-                  <summary>QR de la ruta</summary>{#if qr}<img
+                  <summary>Vista previa del QR</summary>{#if qr}<img
                       src={qr}
                       alt="QR del enlace a esta ruta"
                       width="220"
                       height="220"
                     /><button
                       onclick={() => download(qr, `${selectedId}-qr.png`)}
-                      >Descargar QR</button
+                      >Descargar vista previa del QR</button
                     >{/if}
                   <p>
-                    Destino: {routeUrl(selected.id)}. Comprueba que sea
-                    accesible en los teléfonos del gimnasio antes de imprimir.
+                    Destino: {routeUrl(selected.id)}. Vista previa para pruebas;
+                    la impresión pública requiere verificar el origen HTTPS y el
+                    acceso remoto.
+                  </p>
+                  <button disabled aria-describedby="qr-print-pending"
+                    >Imprimir QR público</button
+                  >
+                  <p id="qr-print-pending">
+                    Pendiente de verificación remota. Configurar una URL no
+                    habilita la impresión pública.
                   </p>
                 </details>
                 {#if shareOpen}<SharePreview

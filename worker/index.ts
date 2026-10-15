@@ -228,6 +228,48 @@ export async function handle(
   try {
     const url = new URL(request.url);
     const path = url.pathname;
+    // Memoized per request: middleware and endpoint share verified identity.
+    const verifyIdentity = authenticate;
+    let verified: Promise<string> | undefined;
+    authenticate = () => (verified ??= verifyIdentity(request, env));
+    if (
+      path.startsWith('/api/') &&
+      !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
+    ) {
+      const user =
+        path === '/api/ux-events'
+          ? 'public:ux-events'
+          : await authenticate(request, env);
+      if (!env.WRITE_LIMITER) {
+        return new Response(
+          JSON.stringify({ error: 'Protección de escrituras no disponible.' }),
+          {
+            status: 503,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': '60',
+            },
+          },
+        );
+      }
+      const { success } = await env.WRITE_LIMITER.limit({
+        key: JSON.stringify([env.GYM_ID, user]),
+      });
+      if (!success)
+        return new Response(
+          JSON.stringify({
+            error:
+              'Demasiadas escrituras. Espera un minuto antes de reintentar.',
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': '60',
+            },
+          },
+        );
+    }
     const illustration = await demoAsset(request, env);
     if (illustration) return illustration;
     const tourResponse = await tourApi(request, env, () =>

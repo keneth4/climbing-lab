@@ -77,6 +77,7 @@
           );
           c.drawImage(qr, 200, 360, 680, 680);
           c.font = '24px system-ui';
+          c.fillText('VISTA PREVIA · impresión pública pendiente', 60, 320);
           wrap(c, url, 60, 1120, 960, 32);
           c.fillText(`Revisión ${revision} · Escanea para consultar`, 60, 1300);
         } else {
@@ -161,8 +162,8 @@
   <h3>Vista previa para compartir</h3>
   <p>Descargar guarda un archivo en tu dispositivo; no publica en redes.</p>
   <label class="toggle"
-    ><input type="checkbox" bind:checked={printable} />Tarjeta QR para imprimir
-    (108 × 135 mm a 254 ppp)</label
+    ><input type="checkbox" bind:checked={printable} />Vista previa de tarjeta
+    QR (108 × 135 mm a 254 ppp)</label
   >
   {#if busy}<p role="status">Preparando vista previa…</p>{/if}
   {#if error}<p role="alert">{error}</p>{/if}
@@ -176,14 +177,16 @@
       if (output) {
         downloadBlob(
           output,
-          printable ? 'ruta-qr-imprimible.png' : 'ruta-tarjeta.png',
+          printable ? 'ruta-qr-vista-previa.png' : 'ruta-tarjeta.png',
         );
         measure('export_done');
         error = '';
       }
     }}>Descargar tarjeta (PNG)</button
   >
+  <button disabled>Imprimir QR público</button>
   {#if preview}<p>
-      Vista previa lista. Comprueba el destino antes de distribuir el QR.
+      Vista previa lista. La impresión pública permanece pendiente de verificar
+      el origen HTTPS y el acceso remoto.
     </p>{/if}
 </section>
