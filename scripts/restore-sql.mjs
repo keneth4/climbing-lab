@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 /** @param {string} source */
-export function prepareRestore(source) {
+export function splitSql(source) {
   const statements = [];
   let start = 0,
     quote = '',
@@ -54,6 +54,11 @@ export function prepareRestore(source) {
   }
   if (quote || blockComment) throw new Error('SQL incompleto.');
   if (source.slice(start).trim()) statements.push(source.slice(start).trim());
+  return statements;
+}
+/** @param {string} source */
+export function prepareRestore(source) {
+  const statements = splitSql(source);
   /** @param {string} s */
   const clean = (s) => s.replace(/^\s*(?:--[^\n]*\n\s*)*/, '').trim();
   if (statements.some((s) => /^CREATE\s+(?:TEMP\s+)?TRIGGER\b/i.test(clean(s))))

@@ -18,6 +18,19 @@
     }
   ],
   "r2_buckets": [
-    { "binding": "CAPTURES", "bucket_name": "climbing-lab-demo-local-assets" }
+    {
+      "binding": "CAPTURES",
+      "bucket_name": "climbing-lab-demo-local-assets"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "WRITE_LIMITER",
+      "namespace_id": "1003",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
   ]
 }

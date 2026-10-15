@@ -38,7 +38,10 @@
     "demo:auth": "node scripts/demo-auth.mjs",
     "demo:private": "node scripts/demo-private.mjs",
     "test:demo-tools": "node --test scripts/demo-private-guards.test.mjs scripts/demo-migrate-guards.test.mjs",
-    "demo:migrate": "node scripts/demo-migrate.mjs"
+    "demo:migrate": "node scripts/demo-migrate.mjs",
+    "pilot:rehearse": "node scripts/recovery-local.mjs rehearse",
+    "pilot:restore-local": "node scripts/recovery-local.mjs restore",
+    "test:readiness": "node --test scripts/pilot-config.test.mjs scripts/recovery.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",

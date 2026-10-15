@@ -42,9 +42,15 @@ test('real local visitor uses D1 catalog and R2 illustrations without HTTP mocks
   await expect(
     page.getByText('Enlace y QR locales: no accesibles desde internet.'),
   ).toBeVisible();
-  await page.getByText('QR de la ruta', { exact: true }).click();
+  await page.getByText('Vista previa del QR', { exact: true }).click();
   await expect(
-    page.getByRole('button', { name: 'Descargar QR' }),
+    page.getByRole('button', { name: 'Imprimir QR público' }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText('Pendiente de verificación remota.', { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Descargar vista previa del QR' }),
   ).toBeEnabled();
   await page.reload();
   await expect(photo).toBeVisible();

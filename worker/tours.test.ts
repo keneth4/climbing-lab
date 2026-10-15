@@ -127,6 +127,7 @@ beforeAll(async () => {
       GYM_ID: 'gym-' + name,
       AUTH_ISSUER: 'https://auth.invalid',
       AUTH_AUDIENCE: 'authenticated',
+      WRITE_LIMITER: { limit: async () => ({ success: true }) },
     });
   }
   [a, b] = envs as Env[];

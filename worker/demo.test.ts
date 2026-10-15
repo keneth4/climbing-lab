@@ -30,6 +30,7 @@ beforeAll(async () => {
     GYM_ID: 'gym-demo',
     AUTH_ISSUER: 'https://defblrjdwgnqyzzgozdf.supabase.co/auth/v1',
     AUTH_AUDIENCE: 'authenticated',
+    WRITE_LIMITER: { limit: async () => ({ success: true }) },
   } as Env;
   for (const sql of seedSql().split('\n')) await DB.prepare(sql).run();
   for (const r of manifest.routes.filter((r) => r.illustrationId))

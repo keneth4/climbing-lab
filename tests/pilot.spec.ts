@@ -107,9 +107,17 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
     path: `/tmp/workspace-open-${test.info().project.name}.png`,
   });
   await page.getByText('Compartir', { exact: true }).click();
-  await page.getByText('QR de la ruta', { exact: true }).click();
+  await page.getByText('Vista previa del QR', { exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Imprimir QR público' }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText('Pendiente de verificación remota.', { exact: false }),
+  ).toBeVisible();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Descargar QR' }).click();
+  await page
+    .getByRole('button', { name: 'Descargar vista previa del QR' })
+    .click();
   expect((await download).suggestedFilename()).toBe('route-a-qr.png');
   await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
   await expect(
