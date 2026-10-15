@@ -329,6 +329,12 @@ export async function handle(
             .first<string>('section_id')
         : null;
       payload.sectionId = payload.sectionId || existingSection || undefined;
+      const previousRoute = routeMatch
+        ? await revision(env, routeMatch[1])
+        : null;
+      const previousSnapshot = previousRoute
+        ? JSON.parse(previousRoute.snapshot)
+        : null;
       const section = payload.sectionId
         ? await env.DB.prepare('SELECT revision,kind FROM sections WHERE id=?')
             .bind(payload.sectionId)
@@ -336,12 +342,30 @@ export async function handle(
         : null;
       if (!section && payload.status !== 'borrador')
         throw new HttpError(400, 'Selecciona una sección del gimnasio.');
-      if (section?.kind === 'accessible-area')
+      const pinnedRevision =
+        previousSnapshot && existingSection === payload.sectionId
+          ? previousSnapshot.sectionRevision || 1
+          : section?.revision;
+      let sectionKind = section?.kind;
+      if (section && pinnedRevision !== section.revision) {
+        const historical = await env.DB.prepare(
+          'SELECT snapshot FROM section_revisions WHERE section_id=? AND revision=?',
+        )
+          .bind(payload.sectionId, pinnedRevision)
+          .first<string>('snapshot');
+        if (!historical)
+          throw new HttpError(
+            409,
+            'La sección histórica no está disponible. Revisa la ruta antes de guardar.',
+          );
+        sectionKind = JSON.parse(historical).kind || 'wall';
+      }
+      if (sectionKind === 'accessible-area')
         throw new HttpError(
           400,
           'Las áreas visitables no admiten rutas ni agarres.',
         );
-      payload.sectionRevision = section?.revision;
+      payload.sectionRevision = pinnedRevision;
       if (
         !routeMatch &&
         !gym.active_capture_id &&
@@ -367,7 +391,7 @@ export async function handle(
       const id = routeMatch ? routeMatch[1] : crypto.randomUUID();
       let next = 1;
       if (routeMatch) {
-        const current = await revision(env, id);
+        const current = previousRoute!;
         const state = await env.DB.prepare(
           'SELECT publication_state FROM routes WHERE id=?',
         )

@@ -202,6 +202,7 @@
       message = 'La captura o sección cambió; preparación temporal cancelada.';
     }
   });
+  let sectionVersionNotice = $state('');
   let sections = $state<Section[]>([]),
     sectionId = $state(
       restored?.sectionId ||
@@ -213,7 +214,24 @@
       .then((data) => (currentCapture = data.capture || undefined))
       .catch((e) => (message = e.message));
     api('/sections')
-      .then((data) => {
+      .then(async (data) => {
+        const current = data.sections.find(
+          (section: Section) => section.id === initial?.sectionId,
+        );
+        const pinned = initial?.sectionRevision || 1;
+        if (
+          initial?.sectionId &&
+          current &&
+          (current.revision || 1) !== pinned
+        ) {
+          const historical = await api(
+            `/sections/${initial.sectionId}/revisions/${pinned}`,
+          );
+          data.sections = data.sections.map((section: Section) =>
+            section.id === initial.sectionId ? historical.section : section,
+          );
+          sectionVersionNotice = `Esta ruta conserva la revisión ${pinned} de su zona. La zona actual tiene revisión ${current.revision}.`;
+        }
         sections = data.sections;
         sectionId =
           restored?.sectionId || initial?.sectionId || initialSectionId;
@@ -733,6 +751,11 @@
     >{/if}
   <form onsubmit={(e) => e.preventDefault()}>
     <div hidden={step !== 1}>
+      {#if sectionVersionNotice && sectionId === initial?.sectionId}<p
+          role="status"
+        >
+          {sectionVersionNotice}
+        </p>{/if}
       <h3 tabindex="-1" id={`editor-${initial?.id || 'new'}-1`}>
         Datos de la ruta
       </h3>

@@ -765,6 +765,51 @@ it('validates oriented sections through the API and keeps old route geometry pin
   expect(
     (await get(`/api/sections/${id}/revisions/1`, b, 'visitor')).status,
   ).toBe(404);
+  const changeKind = await handle(
+    new Request(`https://local.test/api/sections/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Now visitable',
+        kind: 'accessible-area',
+        geometry,
+        expectedRevision: 2,
+      }),
+    }),
+    a,
+    identity(),
+  );
+  expect(changeKind.status).toBe(200);
+  const retired = await handle(
+    new Request('https://local.test/api/routes/oriented-pinned', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Pinned oriented',
+        grade: 'V1',
+        sector: 'Wall',
+        beta: '',
+        sectionId: id,
+        expectedRevision: 1,
+        status: 'retirada',
+        changeReason: 'Prueba de continuidad histórica',
+        holds: [],
+        holds3D: [],
+      }),
+    }),
+    a,
+    identity(),
+  );
+  expect(retired.status).toBe(200);
+  const updated = await (
+    await get('/api/routes/oriented-pinned', a, 'visitor')
+  ).json();
+  expect(updated.snapshot.sectionRevision).toBe(1);
+  expect(
+    await a.DB.prepare(
+      "SELECT snapshot FROM route_revisions WHERE route_id='oriented-pinned' AND revision=1",
+    ).first('snapshot'),
+  ).toBe(original);
   const area = await (
     await post('/api/sections', {
       name: 'Walk only',
