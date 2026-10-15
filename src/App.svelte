@@ -27,6 +27,10 @@
   const viewerWorkspace = new ViewerWorkspace();
   setContext(VIEWER_CONTEXT, viewerWorkspace);
   let viewerHome: HTMLDivElement;
+  let sceneMount: HTMLDivElement;
+  function placeCanvas(node: HTMLCanvasElement) {
+    sceneMount.appendChild(node);
+  }
   function placeViewer(node: HTMLElement) {
     $effect(() => {
       const target = viewerWorkspace.active?.target || viewerHome;
@@ -975,6 +979,7 @@
       class="scene-backdrop"
       aria-hidden="true"
     ></div>{/if}
+  <div bind:this={sceneMount} class="scene-layer"></div>
   <div bind:this={viewerHome} class="viewer-home">
     {#if viewerStarted}<SplatRuntime
         {...viewerWorkspace.active?.options ||
@@ -987,6 +992,7 @@
         visible={!!viewerWorkspace.active}
         onRecording={(active) => (viewerWorkspace.locked = active)}
         mount={placeViewer}
+        canvasMount={placeCanvas}
       />{/if}
   </div>
   <main

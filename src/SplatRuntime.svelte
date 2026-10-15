@@ -36,6 +36,7 @@
     onExit,
     onRecording,
     mount,
+    canvasMount,
     saved,
     onSave,
     staff,
@@ -69,6 +70,7 @@
     onExit?: () => void;
     onRecording?: (active: boolean) => void;
     mount?: (node: HTMLElement) => void;
+    canvasMount?: (node: HTMLCanvasElement) => void;
     holds3D?: Hold3D[];
     previewPoint?: Point;
     selectedHoldId?: string;
@@ -133,6 +135,10 @@
         }
       });
   });
+  function mountSceneCanvas(node: HTMLCanvasElement) {
+    canvasMount?.(node);
+    return { destroy: () => node.remove() };
+  }
   function mountViewer(node: HTMLElement) {
     mount?.(node);
   }
@@ -1237,6 +1243,7 @@
   <canvas
     class="workspace-canvas"
     bind:this={canvas}
+    use:mountSceneCanvas
     aria-label="Visor de Gaussian Splatting"
     tabindex="0"
   ></canvas>
