@@ -37,7 +37,8 @@
     "demo:staff": "node scripts/demo-staff.mjs",
     "demo:auth": "node scripts/demo-auth.mjs",
     "demo:private": "node scripts/demo-private.mjs",
-    "test:demo-tools": "node --test scripts/demo-private-guards.test.mjs"
+    "test:demo-tools": "node --test scripts/demo-private-guards.test.mjs",
+    "demo:migrate": "node scripts/demo-migrate.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",
