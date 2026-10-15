@@ -27,7 +27,7 @@ const original = {
     target: [0, 0, 0],
   },
 };
-async function setup(page: Page, published = false) {
+async function setup(page: Page, published = false, sectionUpdated = false) {
   const exp = Math.floor(Date.now() / 1000) + 3600;
   const token =
     'eyJhbGciOiJIUzI1NiJ9.' +
@@ -145,8 +145,24 @@ async function setup(page: Page, published = false) {
           id,
           name: id === 'section-p0' ? 'Muro' : 'Otra sección',
           bounds: { min: [-2, -2, -1], max: [2, 2, 1] },
-          revision: 1,
+          revision: sectionUpdated && id === 'section-p0' ? 2 : 1,
+          ...(sectionUpdated && id === 'section-p0'
+            ? {
+                kind: 'accessible-area',
+                bounds: { min: [10, 10, 10], max: [20, 20, 20] },
+              }
+            : {}),
         })),
+      };
+    if (path === '/api/sections/section-p0/revisions/1')
+      payload = {
+        section: {
+          id: 'section-p0',
+          name: 'Muro histórico',
+          revision: 1,
+          kind: 'wall',
+          bounds: { min: [-2, -2, -1], max: [2, 2, 1] },
+        },
       };
     if (path === '/api/captures/current')
       payload = {
@@ -505,6 +521,8 @@ test('marker anchors survive resize, themes, inspector scroll and CSS zoom witho
         );
       })
       .toBeLessThan(2);
+    // CSS zoom can center the old overlay before the next frame updates label clipping.
+    await expect(page.locator('.route-marker-overlay button')).toHaveCount(2);
     const boxes = await page
       .locator('.route-marker-overlay button')
       .evaluateAll((nodes) =>
@@ -1049,4 +1067,49 @@ test('server rejection marks the responsible step and incomplete draft can omit 
   expect(state.writes[0].status).toBe('borrador');
   expect(state.writes[0].imageId).toBe('');
   expect(state.writes[0].holds3D).toEqual(original.holds3D);
+});
+
+test('route preparation keeps the historical wall when its current section becomes a visitable area', async ({
+  page,
+}) => {
+  const state = await setup(page, true, true);
+  await go(page, 1);
+  await expect(
+    page.getByText(
+      'Esta ruta conserva la revisión 1 de su zona. La zona actual tiene revisión 2.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('combobox', { name: 'Sección', exact: true }),
+  ).toHaveValue('section-p0');
+  await expect(
+    page.getByRole('option', { name: 'Muro histórico', exact: true }),
+  ).toHaveCount(1);
+  await go(page, 3);
+  await page
+    .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
+    .click();
+  await expect(
+    page.getByText('fixture.ply · 0 MB · captura del gimnasio', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Seleccionar punto', exact: true })
+    .click();
+  const c = page.getByLabel('Visor de Gaussian Splatting', { exact: true });
+  const r = (await c.boundingBox())!;
+  await c.click({ position: { x: r.width / 2, y: r.height / 2 } });
+  await expect(
+    page.getByRole('heading', {
+      name: 'Confirmar agarre seleccionado',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Descartar agarre seleccionado', exact: true })
+    .click();
+  expect(state.writes).toHaveLength(0);
+  expect(state.images).toHaveLength(0);
 });

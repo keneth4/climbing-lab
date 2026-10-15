@@ -1,8 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { gaussianFixture } from './fixtures';
+import { polygonBounds } from '../shared/sections';
 test('admin uploads one complete scene, previews and publishes it', async ({
   page,
 }) => {
+  test.setTimeout(60000);
+  page.setDefaultTimeout(5000);
   const exp = Math.floor(Date.now() / 1000) + 3600,
     token = `${Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url')}.${Buffer.from(JSON.stringify({ sub: 'owner', exp })).toString('base64url')}.test`;
   await page.addInitScript(
@@ -81,7 +84,9 @@ test('admin uploads one complete scene, previews and publishes it', async ({
         id: 'section-' + (sections.length + 1),
         revision: 1,
         name: b.name,
-        bounds: { min: b.min, max: b.max },
+        bounds: b.geometry
+          ? polygonBounds(b.geometry)
+          : { min: b.min, max: b.max },
       });
       const r = sections.at(-1);
       sectionHistories[r.id] = [
@@ -96,7 +101,9 @@ test('admin uploads one complete scene, previews and publishes it', async ({
       Object.assign(r, {
         name: b.name,
         kind: b.kind,
-        bounds: { min: b.min, max: b.max },
+        bounds: b.geometry
+          ? polygonBounds(b.geometry)
+          : { min: b.min, max: b.max },
         geometry: b.geometry || null,
         revision: r.revision + 1,
       });
@@ -105,7 +112,7 @@ test('admin uploads one complete scene, previews and publishes it', async ({
         section: structuredClone(r),
         createdAt: '2026-10-12',
       });
-      json = { section: r };
+      json = { id: r.id, section: r };
     } else if (path.endsWith('/revisions'))
       json = { revisions: sectionHistories[path.split('/')[3]] || [] };
     else if (path === '/api/sections') json = { sections };
@@ -200,17 +207,33 @@ test('admin uploads one complete scene, previews and publishes it', async ({
     .click();
   await expect.poll(() => capture.version).toBe(3);
   expect(capture.initialCamera).toEqual(initialCamera);
+  const zoneStep = async (step: number) => {
+    await page
+      .getByRole('combobox', { name: 'Paso de zona', exact: true })
+      .selectOption(String(step));
+  };
+  const reviewZone = async () => {
+    await zoneStep(4);
+    await page
+      .getByLabel('Revisé la superficie y el volumen desde dos ángulos')
+      .check();
+  };
   await page.getByRole('button', { name: 'Preparar sección visual' }).click();
+  await zoneStep(1);
   await page
     .getByLabel('Nombre de sección', { exact: true })
     .fill('Spray izquierda');
+  await zoneStep(3);
   await page.getByLabel('Centro X', { exact: true }).fill('0.25');
   await page.getByLabel('Tamaño X', { exact: true }).fill('0.5');
+  await reviewZone();
   await page
     .getByRole('button', { name: 'Crear sección', exact: true })
     .click();
   await expect(
-    page.getByText('Sección guardada en las coordenadas del gimnasio.'),
+    page.getByText(
+      'Zona guardada. Las rutas anteriores conservan su revisión histórica.',
+    ),
   ).toBeVisible();
   expect(sections[0].bounds.min[0]).toBe(0);
   expect(sections[0].bounds.max[0]).toBe(0.5);
@@ -254,13 +277,15 @@ test('admin uploads one complete scene, previews and publishes it', async ({
   await page
     .getByRole('button', { name: 'Delimitar con vértices', exact: true })
     .click();
+  await zoneStep(1);
   await page
     .getByLabel('Nombre de sección', { exact: true })
     .fill('Contorno prueba');
-  await page.getByLabel('Ajustar nuevos vértices a cuadrícula').check();
+  await zoneStep(3);
   await page
-    .getByRole('button', { name: 'Seleccionar punto', exact: true })
+    .getByRole('button', { name: 'Añadir vértices', exact: true })
     .click();
+
   for (const [x, y] of [
     [0.4, 0.4],
     [-0.4, 0.4],
@@ -281,6 +306,10 @@ test('admin uploads one complete scene, previews and publishes it', async ({
   await expect(
     page.getByRole('button', { name: 'Eliminar vértice 4', exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Cerrar contorno', exact: true })
+    .click();
+  await reviewZone();
   await page
     .getByRole('button', { name: 'Crear sección', exact: true })
     .click();
@@ -311,9 +340,10 @@ test('admin uploads one complete scene, previews and publishes it', async ({
   await page
     .getByLabel('Nombre de sección', { exact: true })
     .fill('Spray revisada');
+  await zoneStep(3);
   await page.getByLabel('Centro X', { exact: true }).fill('0.3');
   await page
-    .locator('form')
+    .locator('.section-editor')
     .filter({
       has: page.getByRole('heading', {
         name: 'Definir sección estable',
@@ -321,12 +351,14 @@ test('admin uploads one complete scene, previews and publishes it', async ({
       }),
     })
     .screenshot({ path: `/tmp/section-edit-${test.info().project.name}.png` });
+  await reviewZone();
   await page
     .getByRole('button', { name: 'Guardar cambios de sección' })
     .click();
   await expect.poll(() => sections[0].revision).toBe(2);
   expect(sections[0].id).toBe('section-1');
   await page.getByRole('button', { name: 'Ver historial de sección' }).click();
+  await page.getByText('Historial de sección', { exact: true }).click();
   await expect(
     page.getByText('Revisión 1 · Spray izquierda', { exact: false }),
   ).toBeVisible();
@@ -334,11 +366,84 @@ test('admin uploads one complete scene, previews and publishes it', async ({
     .getByRole('button', { name: 'Preparar esta revisión para restaurar' })
     .last()
     .click();
+  await reviewZone();
   await page
     .getByRole('button', { name: 'Guardar cambios de sección' })
     .click();
   await expect.poll(() => sections[0].revision).toBe(3);
   expect(sections[0].name).toBe('Spray izquierda');
+  // Oriented contour uses real Gaussian picking, not injected geometry.
+  await page
+    .getByRole('button', { name: 'Plano inclinado · tres puntos', exact: true })
+    .click();
+  await zoneStep(1);
+  await page
+    .getByLabel('Nombre de sección', { exact: true })
+    .fill('Plano D04 sintético');
+  await zoneStep(2);
+  const pickAt = async (x: number, y: number) => {
+    const box = await page.locator('canvas').boundingBox();
+    const ratio =
+      box!.height /
+      (2 * Math.tan(Math.PI / 8) * capture.initialCamera.distance);
+    await page.locator('canvas').click({
+      position: {
+        x: box!.width / 2 + (x - capture.initialCamera.target[0]) * ratio,
+        y: box!.height / 2 - (y - capture.initialCamera.target[1]) * ratio,
+      },
+    });
+  };
+  await pickAt(-0.6, 0.6);
+  await pickAt(0.6, 0.6);
+  await pickAt(-0.6, 0.2);
+  await expect(
+    page.getByText('Plano definido. Continúa al contorno.', { exact: true }),
+  ).toBeVisible();
+  await zoneStep(3);
+  await page
+    .getByRole('button', { name: 'Añadir vértices', exact: true })
+    .click();
+  await pickAt(-0.6, 0.6);
+  await pickAt(0.6, 0.6);
+  await pickAt(0.6, 0.2);
+  await pickAt(-0.6, 0.2);
+  await page
+    .getByRole('button', { name: 'Terminar de añadir', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Seleccionar vértice 1', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Aumentar U', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Cancelar ajuste', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Seleccionar vértice 1', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Aumentar U', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Aplicar ajuste', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Deshacer zona', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Rehacer zona', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Cerrar contorno', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Vista perpendicular', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Restaurar cámara', exact: true })
+    .click();
+  await reviewZone();
+  await page
+    .getByRole('button', { name: 'Crear sección', exact: true })
+    .click();
+  await expect.poll(() => sections.length).toBe(3);
+  expect(sections[2].geometry.type).toBe('oriented-polygon');
+  expect(sections[2].geometry.verticesUV).toHaveLength(4);
   await expect(
     page.getByText('Esta ruta aún no está vinculada al clon.', {
       exact: false,
