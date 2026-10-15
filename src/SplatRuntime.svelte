@@ -2,7 +2,11 @@
   import { visibleSceneHeight } from './editor-flow';
   import { untrack } from 'svelte';
   import { renderCard, downloadBlob, type CardInfo } from './media';
-  import { planeAxes } from '../shared/sections';
+  import {
+    planeAxes,
+    geometryPlane,
+    geometryVertices,
+  } from '../shared/sections';
   import { principalBounds, selectCenter } from './spatial';
   import RouteMarkerOverlay from './RouteMarkerOverlay.svelte';
   import type { SpatialMode } from './route-editing';
@@ -1071,34 +1075,30 @@
           }
           if (visibleSection?.geometry) {
             const g = visibleSection.geometry,
-              [, , n] = planeAxes(g.plane),
+              vertices = geometryVertices(g),
+              normal = geometryPlane(g).normal,
               color = new pc.Color(0.1, 1, 0.4);
-            for (let i = 0; i < g.vertices.length; i++) {
-              const p = g.vertices[i],
-                q = g.vertices[(i + 1) % g.vertices.length];
-              const lower = [...p] as Point,
-                upper = [...p] as Point;
-              lower[n] -= g.thickness / 2;
-              upper[n] += g.thickness / 2;
+            for (let i = 0; i < vertices.length; i++) {
+              const p = vertices[i],
+                q = vertices[(i + 1) % vertices.length];
+              const offset = (point: Point, distance: number) =>
+                new pc.Vec3(
+                  ...(point.map((n, a) => n + distance * normal[a]) as Point),
+                );
               app.drawLine(
-                new pc.Vec3(...lower),
-                new pc.Vec3(...upper),
+                offset(p, -g.thickness / 2),
+                offset(p, g.thickness / 2),
                 color,
                 false,
               );
-              if (g.vertices.length > 1)
-                for (const offset of [-g.thickness / 2, 0, g.thickness / 2]) {
-                  const start = [...p] as Point,
-                    end = [...q] as Point;
-                  start[n] += offset;
-                  end[n] += offset;
+              if (vertices.length > 1)
+                for (const distance of [-g.thickness / 2, 0, g.thickness / 2])
                   app.drawLine(
-                    new pc.Vec3(...start),
-                    new pc.Vec3(...end),
+                    offset(p, distance),
+                    offset(q, distance),
                     color,
                     false,
                   );
-                }
             }
           } else if (visibleSection) {
             const { min, max } = visibleSection.bounds;
