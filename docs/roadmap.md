@@ -179,3 +179,7 @@ Dos cuentas reales verificadas en el navegador interno completaron proyecto/acti
 ### UX-P1A — Editor guiado implementado localmente
 
 Seis pasos, preparación local de rutas publicadas, revisión de diferencias, errores por paso y panel móvil accesible implementados en `codex/route-editor-guided-ux`, para PR independiente a main. [Entrega y evidencia](planes/ux/02-flujo-editor-rutas.md#entrega-y-evidencia-local--14-de-octubre-de-2026): 76 e2e y 6 smoke públicos reales aprobados, además de tipos, dominio/API y build. Crux y la ruta D04 original permanecen intactas; sin migraciones, reset, merge ni despliegue. Las etapas posteriores de UX siguen separadas; teléfonos, lector y rendimiento físico pendientes.
+
+### UX-P1B — Zonas y planos inclinados implementados localmente
+
+PR #4 de UX-P1A integrado en main; UX-P1B desarrollado en `codex/section-editor-oriented-geometry` para PR independiente. [Entrega y evidencia](planes/ux/03-zonas-planos-inclinados.md): editor de cuatro pasos, geometría orientada compatible, edición reversible, conflictos y referencias históricas conservadas incluso al editar rutas. Tipos, formato, build, 32 pruebas frontend, 51 API, 4 controles demo, 88 e2e y 6 smoke públicos aprobados. Sin migraciones SQL, reset ni despliegue; ruta/sección D04 originales intactas. Delimitación humana de una zona nueva en Crux y validación física pendientes. UX-P2A sigue condicionada a pruebas con setters; UX-P2B/tour continúa como feature independiente.
