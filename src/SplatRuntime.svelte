@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tourPose, type TourCamera } from '../shared/tours';
   import { visibleSceneHeight } from './editor-flow';
   import { untrack } from 'svelte';
   import { renderCard, downloadBlob, type CardInfo } from './media';
@@ -63,6 +64,10 @@
     focusRequest = 0,
     sectionCamera,
     sectionEditing = false,
+    tourCommand,
+    onTourSnapshot,
+    onExplore,
+    tourMode = false,
   }: {
     exportInfo?: CardInfo;
     visible?: boolean;
@@ -84,6 +89,10 @@
     focusRequest?: number;
     sectionCamera?: import('./section-tool').SectionTool['camera'];
     sectionEditing?: boolean;
+    tourCommand?: { id: number; camera: TourCamera };
+    onTourSnapshot?: (blob: Blob, camera: TourCamera) => void;
+    onExplore?: () => void;
+    tourMode?: boolean;
     saved?: CameraView;
     onSave: (view: CameraView) => void;
     staff: boolean;
@@ -134,6 +143,11 @@
           beforeSectionView = undefined;
         }
       });
+  });
+  $effect(() => {
+    const command = tourCommand;
+    const available = ready;
+    if (available) untrack(() => controller?.tour(command?.camera));
   });
   function mountSceneCanvas(node: HTMLCanvasElement) {
     canvasMount?.(node);
@@ -307,6 +321,8 @@
         ) => void;
         apply: (view?: CameraView) => void;
         save: () => CameraView;
+        tour: (view?: TourCamera) => void;
+        tourSnapshot: () => TourCamera;
         reset: () => void;
         orient: () => void;
         zoom: (factor: number) => void;
@@ -383,6 +399,7 @@
           window.devicePixelRatio,
           1.5,
         );
+        let beforeTour: { view: CameraView; fov: number } | undefined;
         const camera = new pc.Entity('camera');
         camera.addComponent('camera', {
           clearColor: new pc.Color(0.09, 0.13, 0.17),
@@ -496,6 +513,7 @@
             pitch,
             distance,
             target: [target.x, target.y, target.z],
+            ...(tourMode ? { fov: camera.camera!.fov } : {}),
           });
         };
         const apply = (view?: CameraView) => {
@@ -516,12 +534,14 @@
         resize.observe(canvas);
         const abort = new AbortController();
         const move = (dx: number, dy: number) => {
+          onExplore?.();
           target
             .add(camera.right.clone().mulScalar(-dx * distance * 0.002))
             .add(camera.up.clone().mulScalar(dy * distance * 0.002));
           update();
         };
         const zoom = (factor: number) => {
+          onExplore?.();
           distance = Math.max(0.05, Math.min(10000, distance * factor));
           update();
         };
@@ -645,6 +665,7 @@
             if (e.shiftKey || navigation === 'pan') {
               move(dx, dy);
             } else {
+              onExplore?.();
               yaw -= dx * 0.008;
               pitch = Math.max(-1.4, Math.min(1.4, pitch + dy * 0.008));
             }
@@ -778,6 +799,26 @@
           );
         };
         controller = {
+          tour: (view) => {
+            if (view && view.captureId === captureId) {
+              beforeTour ||= {
+                view: controller!.save(),
+                fov: camera.camera!.fov,
+              };
+              camera.camera!.fov = view.fov;
+              apply(tourPose(view));
+            } else if (!view && beforeTour) {
+              const original = beforeTour;
+              beforeTour = undefined;
+              camera.camera!.fov = original.fov;
+              if (original.view.captureId === captureId) apply(original.view);
+            }
+          },
+          tourSnapshot: () => ({
+            ...controller!.save(),
+            fov: camera.camera!.fov,
+          }),
+
           quality: (value) => {
             app.graphicsDevice.maxPixelRatio =
               value === 'low'
@@ -1251,6 +1292,7 @@
       markers={screenMarkers}
       viewport={markerViewport}
       clipBottom={overlayClipBottom}
+      selectionLabel={tourMode ? 'Seleccionar parada' : 'Seleccionar agarre'}
       onSelect={onHoldSelect}
       disabled={recording || loading || toolsDisabled || preparing}
     />{/if}
@@ -1350,10 +1392,11 @@
         }}>Acercar al punto seleccionado</button
       >{/if}
     {#if holds3D.length || onHoldSelect}<label
-        >Etiquetas de agarres<select bind:value={labelVisibility}
-          ><option value="all">Todos</option><option value="ends"
-            >Solo inicio y final</option
-          ><option value="hidden">Ocultar etiquetas</option></select
+        >{tourMode ? 'Etiquetas de paradas' : 'Etiquetas de agarres'}<select
+          bind:value={labelVisibility}
+          ><option value="all">Todos</option>{#if !tourMode}<option value="ends"
+              >Solo inicio y final</option
+            >{/if}<option value="hidden">Ocultar etiquetas</option></select
         ></label
       >
       <p>
@@ -1375,7 +1418,7 @@
         type="button"
         disabled={!ready}
         onclick={() => controller?.reset()}>Vista general</button
-      >{#if staff && (!editorStep || editorStep === 2)}<button
+      >{#if staff && !tourMode && (!editorStep || editorStep === 2)}<button
           type="button"
           disabled={!ready || preparing || toolsDisabled}
           onclick={() => {
@@ -1392,6 +1435,18 @@
         }}>Descargar vista 3D</button
       >
     </div>
+    {#if onTourSnapshot}<button
+        type="button"
+        disabled={!ready || loading || toolsDisabled}
+        onclick={() => {
+          if (!controller) return;
+          const view = controller.tourSnapshot();
+          const deliver = onTourSnapshot;
+          canvas.toBlob((blob) => {
+            if (blob) deliver?.(blob, view);
+          }, 'image/png');
+        }}>Guardar cámara e imagen de parada</button
+      >{/if}
     {#if onImage && (!editorStep || editorStep === 5)}<button
         disabled={!ready || loading || preparing || toolsDisabled}
         onclick={() => {
