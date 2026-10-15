@@ -1,4 +1,24 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { api } from './auth';
+  import TourPoster from './TourPoster.svelte';
+  let poster = $state<{ imageId: string; title: string } | undefined>();
+  onMount(() => {
+    let active = true;
+    api('/tours')
+      .then((d) => {
+        const s =
+          d.tour?.content.stops.find(
+            (s: any) => s.id === d.tour.content.startStopId,
+          ) || d.tour?.content.stops[0];
+        if (active && s?.imageId)
+          poster = { imageId: s.imageId, title: s.title };
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  });
   import { site } from './site';
   let { view, navigate }: { view: string; navigate: (view: string) => void } =
     $props();
@@ -9,11 +29,12 @@
     <div>
       <p class="eyebrow">Escala · Explora · Progresa</p>
       <h1 id="home-title" tabindex="-1">{site.content.headline}</h1>
+      {#if site.editorial.hero}<img
+          src={site.editorial.hero.src}
+          alt={site.editorial.hero.alt}
+        />{/if}
       <p class="hero-description">{site.content.description}</p>
       <div class="actions">
-        <button onclick={() => navigate('Recorrido')}
-          >Recorrer el gimnasio</button
-        >
         <button class="primary" onclick={() => navigate('Catálogo')}
           >Explorar rutas</button
         ><button onclick={() => navigate('El gimnasio')}
@@ -54,6 +75,15 @@
       >
     </div>
   </section>
+  <section aria-labelledby="home-tour-title">
+    <h2 id="home-tour-title">Conoce el muro antes de explorar</h2>
+    <p>Consulta las paradas y sus imágenes; el 3D es opcional.</p>
+    {#if poster}<TourPoster
+        imageId={poster.imageId}
+        title={poster.title}
+      />{/if}
+    <button onclick={() => navigate('Recorrido')}>Recorrer el gimnasio</button>
+  </section>
   <section class="home-benefits" aria-label="Cómo usar el sitio">
     {#each [{ title: 'Descubre una ruta', text: 'Busca por nombre, sector o dificultad. Consulta las reglas y abre la beta cuando quieras.' }, { title: 'Reconoce los agarres', text: 'Empieza por la ficha y su imagen. Explora en 3D bajo demanda, sin perder la información esencial.' }, { title: 'Registra tu progreso', text: 'Guarda intentos, ascensos y proyectos en tu cuenta. Comparte solo los datos que elijas.' }] as item}<article
       >
@@ -76,6 +106,29 @@
       >Explorar rutas</button
     >
   </section>
+  {#if site.editorial.location}<section>
+      <h2>Ubicación</h2>
+      <p>{site.editorial.location.text}</p>
+      {#if site.editorial.location.mapUrl}<a
+          href={site.editorial.location.mapUrl}>Ver ubicación en el mapa</a
+        >{/if}
+    </section>{/if}
+  {#if site.editorial.hours}<section>
+      <h2>Horarios</h2>
+      <p>{site.editorial.hours}</p>
+    </section>{/if}
+  {#if site.editorial.services?.length}<section>
+      <h2>Servicios</h2>
+      <ul>
+        {#each site.editorial.services as service}<li>{service}</li>{/each}
+      </ul>
+    </section>{/if}
+  {#if site.editorial.contacts?.length}<section>
+      <h2>Contacto</h2>
+      {#each site.editorial.contacts as c}<p>
+          <a href={c.url}>{c.label}</a>
+        </p>{/each}
+    </section>{/if}
   <section aria-labelledby="faq-title">
     <h2 id="faq-title">Preguntas frecuentes</h2>
     {#each site.content.faq as item}<details class="faq">

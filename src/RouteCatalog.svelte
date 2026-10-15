@@ -4,6 +4,8 @@
   import RouteThumbnail from './RouteThumbnail.svelte';
   let {
     routes,
+    zoneName,
+    retryZone,
     filtered,
     query = $bindable(),
     grade = $bindable(),
@@ -21,6 +23,8 @@
     retry,
   }: {
     routes: Route[];
+    zoneName?: string;
+    retryZone: () => void;
     filtered: Route[];
     query: string;
     grade: string;
@@ -45,8 +49,21 @@
   {#if zoneFilter}<button
       onclick={() => (zoneFilter = '')}
       aria-label="Quitar filtro de zona"
-      >Zona seleccionada · quitar filtro</button
+      >{zoneName || 'Zona no disponible'} · quitar filtro</button
     >{/if}
+  {#if zoneFilter}<p>
+      {filtered.length}
+      {filtered.length === 1 ? 'ruta' : 'rutas'} de {zoneName ||
+        'zona no disponible'}
+    </p>
+    {#if !zoneName}<details>
+        <summary>Referencia de zona</summary>{zoneFilter}
+      </details>
+      <button onclick={retryZone}>Reintentar zona</button>{/if}{/if}
+  <button
+    onclick={() => (order = 'recientes')}
+    aria-pressed={order === 'recientes'}>Recientes</button
+  >
   <button disabled={loading} onclick={retry}>Actualizar rutas</button
   >{#if loadError && filtered.length}<p role="alert">
       No se pudo actualizar. Se muestran las rutas cargadas anteriormente. {loadError}
@@ -136,7 +153,7 @@
           ><strong>{r.name}</strong>{#if r.illustrationId && !r.imageId}<span
               >Ilustración de ejemplo; no fotografía del muro</span
             >{/if}<span>{r.grade} · {r.sector}</span><span
-            >{r.status === 'retirada' ? 'Retirada' : 'Activa'} · Revisión {r.revision}</span
+            >{r.status === 'retirada' ? 'Retirada' : 'Activa'}</span
           ></span
         ></button
       >{/each}

@@ -69,7 +69,12 @@ export function viewFromUrl(url: URL): string {
     : 'Inicio';
 }
 export function pageTitle(view: string, route?: string): string {
-  return `${view === 'Catálogo' ? route || 'Rutas' : view === 'Staff' ? 'Panel del staff' : view} · ${site.brand.name} — ${site.brand.subtitle.toLowerCase()}`;
+  const friendly: Record<string, string> = {
+    Bitácora: 'Mi actividad',
+    Cuenta: 'Cuenta y privacidad',
+  };
+  view = friendly[view] || view;
+  return `${view === 'Catálogo' ? route || 'Rutas' : view === 'Staff' ? 'Panel del staff' : view === 'Bitácora' ? 'Mi actividad' : view === 'Cuenta' ? 'Cuenta y privacidad' : view} · ${site.brand.name} — ${site.brand.subtitle.toLowerCase()}`;
 }
 export function cardPalette() {
   const style = getComputedStyle(document.documentElement);

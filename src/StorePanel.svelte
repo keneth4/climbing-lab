@@ -22,10 +22,10 @@
   });
 </script>
 
-<h1>Productos de escalada</h1>
+<h1>Productos disponibles</h1>
 <p>
-  Consulta disponibilidad y compra en recepción. Los pagos en línea todavía no
-  están habilitados.
+  Consulta en recepción para confirmar disponibilidad y compra. Los pagos en
+  línea todavía no están habilitados.
 </p>
 {#each products as p}<article>
     <h2>{p.product_name}</h2>

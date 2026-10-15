@@ -63,7 +63,7 @@
     {#if route.illustrationId && !route.imageId}<p>
         {illustrationLabel}. Sin captura 3D verificada.
       </p>{/if}
-    {route.sector} · Revisión {route.revision} · Inicio I · Final F
+    {route.sector} · Inicio I · Final F
   </figcaption>
 </figure>
 <details>

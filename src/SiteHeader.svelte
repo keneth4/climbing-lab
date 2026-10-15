@@ -21,7 +21,7 @@
     login: () => void;
     logout: () => void;
   } = $props();
-  const accountViews = ['Bitácora', 'Proyectos', 'Cuenta'];
+  const accountViews = ['Bitácora', 'Proyectos', 'Reportes', 'Cuenta'];
   const staffViews = ['Staff', 'Capturas', 'Recepción', 'Recorridos'];
 </script>
 
@@ -49,13 +49,13 @@
   </div>
 </header>
 <nav aria-label="Principal" class="site-nav">
-  {#each [{ view: 'Inicio', label: 'Inicio' }, { view: 'Catálogo', label: 'Rutas' }, { view: 'El gimnasio', label: 'El gimnasio' }, { view: 'Cuenta', label: 'Mi cuenta' }] as item}
+  {#each [{ view: 'Inicio', label: 'Inicio' }, { view: 'Catálogo', label: 'Rutas' }, { view: 'Recorrido', label: 'Recorrido' }, { view: 'El gimnasio', label: 'El gimnasio' }, { view: 'Bitácora', label: 'Mi escalada' }] as item}
     <button
       disabled={locked}
       class:active={tab === item.view ||
-        (item.view === 'Cuenta' && accountViews.includes(tab))}
+        (item.view === 'Bitácora' && accountViews.includes(tab))}
       aria-current={tab === item.view ||
-      (item.view === 'Cuenta' && accountViews.includes(tab))
+      (item.view === 'Bitácora' && accountViews.includes(tab))
         ? 'page'
         : undefined}
       onclick={() => navigate(item.view)}>{item.label}</button
@@ -70,7 +70,7 @@
 </nav>
 {#if accountViews.includes(tab)}
   <nav aria-label="Cuenta" class="subnav">
-    {#each [{ view: 'Bitácora', label: 'Mi actividad' }, { view: 'Proyectos', label: 'Proyectos' }, { view: 'Cuenta', label: 'Cuenta y privacidad' }] as item}<button
+    {#each [{ view: 'Bitácora', label: 'Mi actividad' }, { view: 'Proyectos', label: 'Proyectos' }, { view: 'Reportes', label: 'Mis reportes' }, { view: 'Cuenta', label: 'Cuenta y privacidad' }] as item}<button
         disabled={locked}
         aria-current={tab === item.view ? 'page' : undefined}
         onclick={() => navigate(item.view)}>{item.label}</button
