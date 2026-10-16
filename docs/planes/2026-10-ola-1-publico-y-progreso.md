@@ -205,3 +205,9 @@ Esta jerarquía puede ajustarse al ancho sin cambiar la semántica o esconder el
 **Numeración de agarres intermedios:** recomiendo **ocultarla en rutas normales del público**, y conservarla como ayuda opcional en el editor de staff. Alternativa: hacerla visible al visitante mediante «Mostrar números»; eso podría interpretarse como beta secuencial. Se puede implementar el valor recomendado y reconsiderar después de la segunda revisión del propietario. Inicio y Final sí son siempre I/F sin números.
 
 **Fuera del alcance de esta extensión:** detección automática de agarres, nuevas funciones de circuito, diseño de tres gimnasios, migraciones, nuevas rutas reales, edición de tour, staging y habilitación de pagos.
+
+### Decisiones confirmadas para la implementación
+
+- «Descartar cambios y salir» elimina únicamente la preparación temporal de la cuenta y ruta abiertas y vuelve a la versión guardada. Confirmación: «Se descartarán los cambios locales de esta ruta», con «Seguir editando» y «Descartar cambios y salir». No crea una revisión.
+- Mantener alcance de Ola 1: los borradores independientes de rutas publicadas en servidor siguen en Ola 2. La preparación actual permanece en memoria y no garantiza recuperación tras recargar ni entre dispositivos.
+- Intermedios públicos sin numeración. PNG históricos intactos; regenerar D04 exige revisión y autorización para una nueva revisión. Segunda aceptación humana pendiente antes de fusionar PR #8.
