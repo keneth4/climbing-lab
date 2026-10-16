@@ -1306,6 +1306,19 @@
         No hay una captura publicada. El administrador debe subirla desde
         Capturas.
       </p>{:else}<p>{capture.filename} · Versión del gimnasio</p>{/if}
+    {#if exportInfo?.title && !tourMode}<p aria-label="Ruta en visor 3D">
+        <strong>{exportInfo.title}</strong> · {holds3D.length}
+        {holds3D.length === 1 ? 'agarre' : 'agarres'} en esta ruta
+      </p>{/if}
+    {#if holds3D.length || onHoldSelect}
+      <label
+        >{tourMode ? 'Etiquetas de paradas' : 'Etiquetas de agarres'}<select
+          bind:value={labelVisibility}
+          ><option value="all">Todos</option>{#if !tourMode}<option value="ends"
+              >Solo inicio y final</option
+            >{/if}<option value="hidden">Ocultar etiquetas</option></select
+        ></label
+      >{/if}
     <details open={!editorStep && !tourMode}>
       <summary>Calidad y opciones avanzadas</summary><label
         >Calidad 3D<select
@@ -1437,14 +1450,7 @@
           }
         }}>Acercar al punto seleccionado</button
       >{/if}
-    {#if holds3D.length || onHoldSelect}<label
-        >{tourMode ? 'Etiquetas de paradas' : 'Etiquetas de agarres'}<select
-          bind:value={labelVisibility}
-          ><option value="all">Todos</option>{#if !tourMode}<option value="ends"
-              >Solo inicio y final</option
-            >{/if}<option value="hidden">Ocultar etiquetas</option></select
-        ></label
-      >
+    {#if holds3D.length || onHoldSelect}
       <p>
         Selección aproximada: las anclas pueden verse a través del muro.
         Comprueba la profundidad desde otro ángulo. Las etiquetas sin espacio se

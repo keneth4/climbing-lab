@@ -27,7 +27,12 @@ const original = {
     target: [0, 0, 0],
   },
 };
-async function setup(page: Page, published = false, sectionUpdated = false) {
+async function setup(
+  page: Page,
+  published = false,
+  sectionUpdated = false,
+  routeOverrides: Partial<typeof original> = {},
+) {
   const exp = Math.floor(Date.now() / 1000) + 3600;
   const token =
     'eyJhbGciOiJIUzI1NiJ9.' +
@@ -60,6 +65,7 @@ async function setup(page: Page, published = false, sectionUpdated = false) {
   const state = {
     route: {
       ...structuredClone(original),
+      ...routeOverrides,
       status: published ? 'activa' : 'borrador',
     },
     errorStatus: 0,
@@ -1276,4 +1282,98 @@ test('public route markers remain visible when reading tools are collapsed', asy
   await expect(
     page.getByLabel('Visor de Gaussian Splatting', { exact: true }),
   ).toHaveCount(1);
+});
+
+test('public offset wall camera projects nine holds before and after collapsing tools', async ({
+  page,
+}) => {
+  const camera = {
+    captureId: 'capture-p0',
+    yaw: 0.084,
+    pitch: -0.14,
+    distance: 4.65,
+    target: [-0.25, 2, -0.13],
+  };
+  const points = [
+    [0.5, 0.2, -1.4],
+    [0.1, 0.2, -1.4],
+    [-0.2, 1.2, -1.2],
+    [-0.3, 1.2, -1.2],
+    [0.65, 1.75, -0.6],
+    [0.2, 2.2, -0.25],
+    [-0.5, 2.5, 0.1],
+    [0.2, 3, 0.65],
+    [0.05, 3, 0.7],
+  ];
+  await setup(page, true, false, {
+    camera,
+    holds3D: points.map((position, i) => ({
+      id: `offset-${i}`,
+      position,
+      role: i < 4 ? 'inicio' : i > 6 ? 'final' : 'intermedio',
+    })),
+  });
+  await page
+    .getByRole('button', { name: 'Volver a la ficha', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Explorar en 3D', exact: true })
+    .click();
+  await expect(
+    page.getByText('fixture.ply · 0 MB · captura del gimnasio', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel('Ruta en visor 3D', { exact: true }),
+  ).toContainText('9 agarres en esta ruta');
+  await expect(page.locator('.route-marker-overlay circle')).toHaveCount(9);
+  await expect(
+    page.getByRole('img', { name: 'Inicio (I)', exact: true }).first(),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Plegar herramientas', exact: true })
+    .click();
+  await expect(
+    page.getByLabel('Ruta en visor 3D', { exact: true }),
+  ).toContainText('9 agarres en esta ruta');
+  await expect(page.locator('.route-marker-overlay circle')).toHaveCount(9);
+});
+
+test('scene annotations stay in viewport coordinates outside a clipped transformed inspector', async ({
+  page,
+}) => {
+  await setup(page, true);
+  await page
+    .getByRole('button', { name: 'Volver a la ficha', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Explorar en 3D', exact: true })
+    .click();
+  await expect(
+    page.getByRole('img', { name: 'Inicio (I)', exact: true }),
+  ).toBeVisible();
+  await page.locator('#tools-panel').evaluate((n) => {
+    n.style.transform = 'translateZ(0)';
+    n.style.contain = 'paint';
+  });
+  await expect
+    .poll(async () => {
+      const overlay = (await page
+        .locator('.route-marker-overlay')
+        .boundingBox())!;
+      const canvas = (await page
+        .getByLabel('Visor de Gaussian Splatting', { exact: true })
+        .boundingBox())!;
+      return Math.abs(overlay.x - canvas.x) + Math.abs(overlay.y - canvas.y);
+    })
+    .toBeLessThan(1);
+  await page
+    .getByRole('button', { name: 'Plegar herramientas', exact: true })
+    .click();
+  await expect(
+    page.getByRole('img', { name: 'Inicio (I)', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
+  await expect(page.locator('.route-marker-overlay')).toHaveCount(0);
 });

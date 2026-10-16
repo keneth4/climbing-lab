@@ -21,9 +21,16 @@
     clipBottom?: number;
     selectionLabel?: string;
   } = $props();
+  function mountInSceneLayer(node: HTMLElement) {
+    // Annotations use viewport coordinates, not the inspector's clipping or
+    // transformed containing block. Svelte still owns updates and cleanup.
+    document.body.appendChild(node);
+    return { destroy: () => node.remove() };
+  }
 </script>
 
 <div
+  use:mountInSceneLayer
   class="route-marker-overlay"
   aria-label="Marcadores sobre el muro"
   style:zoom={1 / (viewport.zoom || 1)}
