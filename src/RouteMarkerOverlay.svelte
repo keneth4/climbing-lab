@@ -68,7 +68,7 @@
           style:left={`${m.labelPoint.x}px`}
           style:top={`${m.labelPoint.y}px`}
           onclick={() => onSelect?.(m.id)}
-          ><svg class="glyph" viewBox="-25 -25 50 50" aria-hidden="true"
+          ><svg class="glyph" viewBox="-24 -24 48 48" aria-hidden="true"
             ><path
               d={markerPath(m)}
               fill={markerColor(m.role)}
@@ -77,7 +77,6 @@
             />{#if m.tour || m.role !== 'intermedio'}<text x="0" y="0"
                 >{m.label}</text
               >{/if}</svg
-          >
           ></button
         >
       {:else}
@@ -87,7 +86,7 @@
           aria-label={markerName(m)}
           style:left={`${m.labelPoint.x}px`}
           style:top={`${m.labelPoint.y}px`}
-          ><svg class="glyph" viewBox="-25 -25 50 50" aria-hidden="true"
+          ><svg class="glyph" viewBox="-24 -24 48 48" aria-hidden="true"
             ><path
               d={markerPath(m)}
               fill={markerColor(m.role)}
@@ -97,7 +96,6 @@
             />{#if m.tour || m.role !== 'intermedio'}<text x="0" y="0"
                 >{m.label}</text
               >{/if}</svg
-          >
           ></span
         >
       {/if}

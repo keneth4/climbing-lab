@@ -119,6 +119,19 @@
     const panel = editorRoot.closest('#tools-panel'),
       nav = editorRoot.querySelector('nav');
     const observer = new ResizeObserver(() => {
+      if (panel instanceof HTMLElement) {
+        const navHeight = nav?.offsetHeight || 0;
+        const saveHeight =
+          editorRoot.querySelector<HTMLElement>('.editor-save-bar')
+            ?.offsetHeight || 0;
+        // Do not let two sticky bars consume the entire compact inspector.
+        if (panel.clientHeight < navHeight + saveHeight + 120)
+          panel.dataset.editorTight = 'true';
+        else delete panel.dataset.editorTight;
+        panel.style.setProperty('--editor-save-height', `${saveHeight}px`);
+        panel.style.scrollPaddingTop = `${(nav && getComputedStyle(nav).position === 'sticky' ? navHeight : 0) + 12}px`;
+        panel.style.scrollPaddingBottom = `${saveHeight + 12}px`;
+      }
       const node = document.activeElement;
       if (
         node instanceof HTMLElement &&
@@ -129,7 +142,15 @@
     });
     if (panel) observer.observe(panel);
     if (nav) observer.observe(nav);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (panel instanceof HTMLElement) {
+        panel.style.removeProperty('scroll-padding-top');
+        panel.style.removeProperty('scroll-padding-bottom');
+        panel.style.removeProperty('--editor-save-height');
+        delete panel.dataset.editorTight;
+      }
+    };
   });
   function cancelTool() {
     const origin = document.activeElement;
@@ -1329,6 +1350,9 @@
     display: block;
     background: var(--surface);
   }
+  :global(.tools-panel[data-editor-tight]) nav {
+    position: static;
+  }
   .compact-step-nav {
     display: none;
   }
@@ -1382,7 +1406,7 @@
   }
   .transaction-actions {
     position: sticky;
-    bottom: 70px;
+    bottom: var(--editor-save-height, 70px);
     display: flex;
     flex-wrap: wrap;
     gap: 4px;

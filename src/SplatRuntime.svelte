@@ -821,6 +821,13 @@
                 height: r.height,
               };
             });
+          if (overlayClipBottom > 0)
+            blocked.push({
+              x: 0,
+              y: rect.height - overlayClipBottom,
+              width: rect.width,
+              height: overlayClipBottom,
+            });
           return layoutMarkers(
             projected,
             rect.width,

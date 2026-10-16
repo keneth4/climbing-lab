@@ -131,7 +131,16 @@
   }
   function discardEditorExit() {
     discardedPreparation = `${userId}:${selectedId}:${selected?.revision || 0}`;
-    delete editorDrafts[discardedPreparation];
+    // Older bases of this same working preparation must not reappear via
+    // editorPreparation's concurrent-revision fallback after an explicit discard.
+    const prefix = `${userId}:${selectedId}:`;
+    const revision = selected?.revision || 0;
+    for (const key of Object.keys(editorDrafts))
+      if (
+        key.startsWith(prefix) &&
+        Number(key.slice(prefix.length)) <= revision
+      )
+        delete editorDrafts[key];
     editorDirty = false;
     const action = pendingExit;
     pendingExit = undefined;
