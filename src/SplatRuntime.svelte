@@ -20,6 +20,7 @@
     type LabelVisibility,
     type Rect,
   } from './marker-layout';
+  import { markerLabel } from './marker-layout';
   import { onMount, tick } from 'svelte';
   import { measure } from './pilot';
   import { supabase } from './auth';
@@ -772,12 +773,8 @@
           const points = [
             ...holds3D.map((h, i) => ({
               ...h,
-              label:
-                h.role === 'inicio'
-                  ? `I${i + 1}`
-                  : h.role === 'final'
-                    ? `F${i + 1}`
-                    : String(i + 1),
+              label: markerLabel(h.role, i, tourMode),
+              tour: tourMode,
               active: includePreparation && h.id === selectedHoldId,
             })),
             ...(includePreparation && previewPoint
@@ -787,6 +784,7 @@
                     position: previewPoint,
                     role: 'candidate' as const,
                     label: '?',
+                    tour: false,
                     active: true,
                   },
                 ]
@@ -800,6 +798,7 @@
                     id: h.id,
                     label: h.label,
                     role: h.role,
+                    tour: h.tour,
                     active: h.active,
                     x: p.x,
                     y: p.y,
@@ -1325,6 +1324,9 @@
     aria-label="Visor de Gaussian Splatting"
     tabindex="0"
   ></canvas>
+  {#if visible && !tourMode}<p class="marker-legend">
+      I Inicio · F Final · • Intermedio
+    </p>{/if}
   {#if visible}<RouteMarkerOverlay
       markers={screenMarkers}
       viewport={markerViewport}
@@ -1552,6 +1554,9 @@
 </div>
 
 <style>
+  .marker-legend {
+    font-weight: 700;
+  }
   [hidden] {
     display: none !important;
   }
