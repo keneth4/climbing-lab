@@ -233,3 +233,10 @@ Esta jerarquía puede ajustarse al ancho sin cambiar la semántica o esconder el
 | Segunda aceptación / PNG histórico / dispositivos físicos | **Pendientes**. I1/F9 siguen en el PNG D04 antiguo; no se sobreescribió R2. Renovarlo requiere revisión y autorización para nueva revisión. Teléfonos, lector y rendimiento físico no acreditados |
 
 PR #8 permanece abierto: sin merge ni despliegue. Runbook en `docs/demo-local.md`. Las capturas Crux y las sesiones privadas no se adjuntan al PR ni a Git. Los borradores independientes en servidor quedan para Ola 2; no se promete recuperación entre dispositivos con la preparación temporal actual.
+
+
+### Corrección posterior: marcas ocultas al plegar herramientas
+
+El propietario reportó ausencia de marcas en la ficha D04 → Explorar en 3D. Se reprodujo con fixtures: «Plegar herramientas» aplicaba `visibility: hidden` al inspector y el overlay fijo heredaba esa visibilidad, mientras el canvas seguía visible. Se declara visibilidad explícita únicamente en el overlay; su montaje sigue condicionado a la vista 3D activa. No se cambian cámara, posiciones, datos ni PNG histórico D04. La API conserva los nueve agarres de revisión 4.
+
+Regresión roja antes del ajuste y verde después: inicio/final y anclas permanecen al plegar/abrir; navegar a Mi escalada desmonta el overlay y conserva un solo canvas. 50 pruebas focales ficha/editor aprobadas, más dos casos ampliados desktop/móvil; tipos, formato y build aprobados. Logs: `/tmp/ola1-markers-fixed.log` y `/tmp/ola1-markers-collapse.log`. La suite completa anterior de 136 es evidencia previa a este ajuste CSS; no se presenta como una pasada completa de 138. QA actual del demo en navegador interno continúa pendiente por el bloqueo de URL ya registrado.

@@ -105,6 +105,9 @@
 
 <style>
   .route-marker-overlay {
+    /* Scene annotations stay visible when their inspector is collapsed.
+       Runtime visibility still owns mounting/unmounting this overlay. */
+    visibility: visible;
     position: fixed;
     z-index: 8;
     pointer-events: none;

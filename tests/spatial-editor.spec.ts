@@ -1249,3 +1249,31 @@ test('discarding a preparation after concurrent reload does not resurrect its ol
   ).toBeVisible();
   expect(state.writes).toHaveLength(0);
 });
+
+test('public route markers remain visible when reading tools are collapsed', async ({
+  page,
+}) => {
+  await setup(page, true);
+  await page
+    .getByRole('button', { name: 'Volver a la ficha', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Explorar en 3D', exact: true })
+    .click();
+  const start = page.getByRole('img', { name: 'Inicio (I)', exact: true });
+  await expect(start).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Plegar herramientas', exact: true })
+    .click();
+  await expect(start).toBeVisible();
+  await expect(page.locator('.route-marker-overlay circle')).toHaveCount(2);
+  await page
+    .getByRole('button', { name: 'Abrir herramientas', exact: true })
+    .click();
+  await expect(start).toBeVisible();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
+  await expect(page.locator('.route-marker-overlay')).toHaveCount(0);
+  await expect(
+    page.getByLabel('Visor de Gaussian Splatting', { exact: true }),
+  ).toHaveCount(1);
+});
