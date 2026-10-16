@@ -121,3 +121,16 @@ Fuente adicional: rama `docs/auditoria-flujo-integral-ux-2026-10`, commit `d0cef
 | D05 | Resuelto local | Reportes propios visibles, conteos, respuesta, enlace y aviso físico por agarre suelto |
 
 QR público sigue bloqueado según Ola 0. G01/G02 y L1–L3 conservan sus puertas remotas/físicas. A04, B07, C04, workspace staff/Ola 2, operaciones/Ola 3 y composición/Ola 4 siguen fuera de esta entrega.
+
+
+## Ola 1 — correcciones de la revisión manual (15 de octubre de 2026)
+
+| Hallazgo | Estado de implementación local | Puerta humana |
+| --- | --- | --- |
+| O1-H01 | I/F y punto intermedio, forma diferenciada, SVG/PNG compartidos; tour numerado intacto | Parcial: imagen histórica D04 intacta; nueva imagen requiere autorización. Segunda revisión de legibilidad pendiente |
+| O1-H02 | Nombre separado de chips de grado, sector y zona | Segunda aceptación pendiente |
+| O1-H03 | Información útil de grado, sector, inicio/final y cantidades verificadas; sin UUID/revisión irrelevante | Segunda aceptación pendiente |
+| O1-H04 | Sin inventario numérico público ni reglas/beta vacías; beta real plegada | Segunda aceptación pendiente |
+| O1-H05 | Pantalla privada independiente, seis pasos, URL estable, descarte confirmado y retorno; un runtime | Segunda aceptación pendiente; borradores de nuevas revisiones en servidor pertenecen a Ola 2 |
+
+La revisión anterior del propietario motivó estas correcciones; no equivale a su aceptación. El acceso al demo mediante el navegador interno fue rechazado por la política de URL de la herramienta en esta sesión. La QA de esta extensión usa fixtures aislados; no acredita QA actual en Crux ni smoke real contra el demo. Se conservan las pruebas reales anteriores como historial, sin atribuirlas a esta corrección.

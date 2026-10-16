@@ -4,7 +4,12 @@ const image = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jAZ0AAAAASUVORK5CYII=',
   'base64',
 );
-async function fixture(page: Page, privateAccount = false, count = 1) {
+async function fixture(
+  page: Page,
+  privateAccount = false,
+  count = 1,
+  routeExtras: Record<string, unknown> = {},
+) {
   const state = {
     blocked: false,
     fail: false,
@@ -58,6 +63,7 @@ async function fixture(page: Page, privateAccount = false, count = 1) {
     rules: 'Pies libres',
     beta: 'Consejo',
     updatedAt: new Date().toISOString(),
+    ...routeExtras,
   }));
   const entries = Array.from({ length: 55 }, (_, i) => ({
     id: `entry-${i}`,
@@ -210,7 +216,7 @@ test('tour origin preserves historical stop through zone, route, reload and expl
   ).toBeVisible();
   await page.goBack();
   await expect(
-    page.getByRole('heading', { name: 'Ruta clara 0 V2' }),
+    page.getByRole('heading', { name: 'Ruta clara 0' }),
   ).toBeVisible();
   await page.goForward();
   await expect(
@@ -358,4 +364,97 @@ test('late activity response cannot repopulate private data after logout', async
   await expect(
     page.getByRole('heading', { name: /Actividad propia/ }),
   ).toHaveCount(0);
+});
+
+test('public hierarchy omits empty beta, rules and internal IDs at all widths and themes', async ({
+  page,
+}, info) => {
+  await fixture(page, false, 1, {
+    beta: '  ',
+    rules: ' ',
+    markersVerified: true,
+    holds3D: [
+      { id: 'i-a', role: 'inicio', position: [0, 0, 0] },
+      { id: 'i-b', role: 'inicio', position: [1, 0, 0] },
+      { id: 'f-a', role: 'final', position: [1, 1, 0] },
+      { id: 'f-b', role: 'final', position: [1, 2, 0] },
+    ],
+  });
+  await page.goto('/?ruta=route-0');
+  const detail = page.getByRole('region', {
+    name: 'Ficha de ruta',
+    exact: true,
+  });
+  await expect(
+    detail.getByRole('heading', { name: 'Ruta clara 0', exact: true }),
+  ).toBeVisible();
+  await expect(detail.getByText('Ver beta', { exact: true })).toHaveCount(0);
+  await expect(
+    detail.getByRole('heading', { name: 'Reglas', exact: true }),
+  ).toHaveCount(0);
+  await expect(detail).not.toContainText('Identificador');
+  await expect(detail).not.toContainText('Revisión 4');
+  await expect(detail).not.toContainText('Agarre 1');
+  await expect(
+    detail.getByText('I Inicio · F Final · • Intermedio', { exact: true }),
+  ).toBeVisible();
+  await expect(detail.locator('dl').last().locator('dd')).toHaveText([
+    'V2',
+    'Sur',
+    '2',
+    '2',
+  ]);
+  await expect(page.getByLabel('Visor de Gaussian Splatting')).toHaveCount(0);
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const theme of ['default', 'warm']) {
+      await expect(detail.locator('.route-facts')).toContainText(/Grado\s*V2/);
+      await expect(detail.locator('.route-facts')).toContainText(
+        /Sector\s*Sur/,
+      );
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        )
+        .toBe(true);
+      await page.screenshot({
+        path: `/tmp/ola1-corrections-detail-${info.project.name}-${width}-${theme}.png`,
+      });
+      await page
+        .getByRole('button', { name: 'Cambiar tema', exact: true })
+        .click();
+    }
+  }
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = '2';
+  });
+  await page.screenshot({
+    path: `/tmp/ola1-corrections-detail-${info.project.name}-zoom.png`,
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+    )
+    .toBe(true);
+});
+
+test('nonempty beta remains collapsed and withdrawn route keeps useful information', async ({
+  page,
+}) => {
+  await fixture(page, false, 1, { status: 'retirada' });
+  // Fixture list filtering is intentionally fixed; direct detail still returns the withdrawn snapshot.
+  await page.goto('/?ruta=route-0');
+  await expect(
+    page.getByText('Ruta retirada. El enlace y su historial se conservan.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText('Consejo', { exact: true })).not.toBeVisible();
+  await page.getByText('Ver beta', { exact: true }).click();
+  await expect(page.getByText('Consejo', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Reglas', exact: true }),
+  ).toBeVisible();
 });

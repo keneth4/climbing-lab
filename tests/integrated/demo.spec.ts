@@ -55,8 +55,9 @@ test('real local visitor uses D1 catalog and R2 illustrations without HTTP mocks
   await page.reload();
   await expect(photo).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: /Travesía tranquila V0/ }),
+    page.getByRole('heading', { name: 'Travesía tranquila', exact: true }),
   ).toBeVisible();
+  await expect(page.locator('.route-facts')).toContainText(/Grado\s*V0/);
   await page.screenshot({
     path: `/tmp/climbing-demo-detail-${info.project.name}.png`,
     fullPage: true,

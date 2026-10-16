@@ -1,6 +1,6 @@
 # Ola 1 · Claridad y continuidad para visitante y escalador
 
-**Estado:** primera entrega implementada y verificada localmente; **revisión humana realizada con correcciones bloqueantes pendientes antes de fusionar el PR #8**. Ver extensión al final.
+**Estado:** primera entrega y correcciones O1-H01–H05 implementadas localmente; **segunda aceptación humana, QA actual en Crux y renovación autorizada del PNG D04 pendientes antes de fusionar PR #8**. Ver evidencia de la corrección al final.
 **Base:** `main@96c11e7`, PR #7 integrado el 15 de octubre de 2026.
 **Rama:** `codex/ux-publico-y-progreso`.
 **Fuente:** auditoría `docs/auditoria-flujo-integral-ux-2026-10` @ `d0cefd5`, A01–A03, B01–B05, C01–C03, D01–D05 y F06 (texto público solamente). A05 se atiende con ese mismo ajuste de texto.
@@ -211,3 +211,25 @@ Esta jerarquía puede ajustarse al ancho sin cambiar la semántica o esconder el
 - «Descartar cambios y salir» elimina únicamente la preparación temporal de la cuenta y ruta abiertas y vuelve a la versión guardada. Confirmación: «Se descartarán los cambios locales de esta ruta», con «Seguir editando» y «Descartar cambios y salir». No crea una revisión.
 - Mantener alcance de Ola 1: los borradores independientes de rutas publicadas en servidor siguen en Ola 2. La preparación actual permanece en memoria y no garantiza recuperación tras recargar ni entre dispositivos.
 - Intermedios públicos sin numeración. PNG históricos intactos; regenerar D04 exige revisión y autorización para una nueva revisión. Segunda aceptación humana pendiente antes de fusionar PR #8.
+
+
+### Resultado de implementación y QA de la corrección — 15 de octubre de 2026
+
+**Código:** marcadores I/F/punto con forma y nombre accesibles, paths compartidos SVG/PNG y geometría CSS 1:1; numeración de paradas intacta. Ficha con nombre separado de grado/sector/zona, cantidades verificadas, omisión de reglas/beta vacías y metadatos técnicos. Editor independiente `?vista=EditarRuta&editar=ID`, permisos vigentes, seis pasos y runtime único; guardado vuelve a la misma ficha. Salida confirmada descarta la preparación de esa cuenta/ruta y sus bases obsoletas hasta la revisión abierta, conservando preparaciones ajenas. Atrás/Adelante, recarga, sesión vencida y retorno desde tour cubiertos.
+
+**Defectos observados y corregidos durante QA:** la navegación fija tapaba «Seleccionar punto» en móvil; las dos barras podían consumir el panel compacto; las etiquetas podían quedar bajo el inspector; una base antigua podía reaparecer después de descartar ante concurrencia. Se reservaron insets de desplazamiento, navegación no fija cuando no queda altura útil, acciones sobre la altura real de guardado, zona ocluida en colocación de etiquetas y eliminación de bases obsoletas de la misma preparación. No se mueve el renderer. Los tests de densidad usan el control Compacto cuando falta espacio, manteniendo anclas y selección desde lista; no se forzaron clicks a través de overlays.
+
+| Evidencia actual | Resultado |
+| --- | --- |
+| `npm run check`, `npm run check:api` | Aprobados; frontend sin errores ni advertencias |
+| `npm run format:check`, `npm run build` | Aprobados; persiste aviso conocido de chunks grandes |
+| `npm test`, `npm run test:api` | 40 frontend/dominio y 59 API aprobadas |
+| `npx playwright test --workers=2` sobre fixtures aislados en 5173 | **136 aprobadas en una pasada final**, después de corregir los fallos encontrados; log `/tmp/ola1-corrections-release.log` |
+| Matriz visual de fixtures | 320/390/768/1440, ambos temas, teclado, zoom 200 %, DPR 1/2/3, fallback sin WebGL, un canvas y controles alcanzables |
+| Inspección visual de capturas de fixtures | Ficha con chips claros e I/F diferenciados; evidencia fuera de Git en `/tmp/ola1-corrections-detail-*` y `/tmp/p0-layout-*` |
+| Demo persistente | Iniciado con `npm run demo:run`, sin setup/reset; 5174 HTTP 200 y `/api/health` vía Vite/Worker confirma gym-demo saludable. Comprobaciones reales de lectura D1/R2, ilustraciones y borrador protegido aprobadas al arrancar |
+| Integridad local conservada | API pública: D04 revisión 4, nueve agarres; Main Gym revisión 19; sin publicación ni reemplazo de imagen |
+| Navegador interno y smoke real de navegador de esta corrección | **Pendientes**: la herramienta rechazó el acceso al demo por política de URL. No se accedió por otro navegador como atajo. El smoke se dejó compatible con la ficha nueva; los seis smoke de la entrega anterior siguen como evidencia histórica |
+| Segunda aceptación / PNG histórico / dispositivos físicos | **Pendientes**. I1/F9 siguen en el PNG D04 antiguo; no se sobreescribió R2. Renovarlo requiere revisión y autorización para nueva revisión. Teléfonos, lector y rendimiento físico no acreditados |
+
+PR #8 permanece abierto: sin merge ni despliegue. Runbook en `docs/demo-local.md`. Las capturas Crux y las sesiones privadas no se adjuntan al PR ni a Git. Los borradores independientes en servidor quedan para Ola 2; no se promete recuperación entre dispositivos con la preparación temporal actual.

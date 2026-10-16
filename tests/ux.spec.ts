@@ -181,9 +181,7 @@ test('QR opens the public detail without 3D, filters normalize accents, navigati
     r.fulfill({ status: 404, body: 'Missing asset' }),
   );
   await page.goto('/?ruta=a');
-  await expect(
-    page.getByRole('heading', { name: 'Travesía V2' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Travesía' })).toBeVisible();
   await expect(page.getByLabel('Visor de Gaussian Splatting')).toHaveCount(0);
   expect(sceneRequests).toBe(0);
   await expect(

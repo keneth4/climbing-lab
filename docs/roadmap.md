@@ -10,9 +10,11 @@
 
 La auditoría fuente es `docs/auditoria-flujo-integral-ux-2026-10` @ `d0cefd5`, documento `docs/ux/2026-10-auditoria-flujo-integral.md` (G01/G02/B06/G05). Su rama documental no se fusiona como efecto de esta entrega.
 
-## Ola 1 — siguiente revisión de código
+## Ola 1 — correcciones tras revisión manual
 
-Implementación local en `codex/ux-publico-y-progreso`, desde main con PR #7 integrado (`96c11e7`). [Plan y QA](planes/2026-10-ola-1-publico-y-progreso.md): navegación pública con Recorrido, contexto histórico tour/zona/ruta, config editorial v2, registro breve y Mi escalada. 39 pruebas dominio/frontend, 59 API, 124 e2e y 6 smoke públicos reales aprobados; tipos/formato/build aprobados. B03/B04 parciales, sin backend de búsqueda ni etiquetas inventadas. Las puertas remotas/físicas continúan abiertas; siguiente bloque funcional: Ola 2 (workspace staff) tras revisar este PR. Sin adelantar operaciones monetarias ni composición multigimnasio.
+Implementación local en `codex/ux-publico-y-progreso`, PR #8 abierto. [Plan y QA](planes/2026-10-ola-1-publico-y-progreso.md): navegación pública/progreso ya implementados; la revisión manual del propietario identificó O1-H01–H05. Se corrigieron marcadores, jerarquía de ficha y pantalla independiente de edición con descarte explícito. La segunda aceptación humana sigue pendiente; no fusionar todavía. El PNG histórico de D04 no se sobrescribió y requiere autorización para renovarlo en una revisión nueva.
+
+Las pruebas de la primera entrega (39 frontend, 59 API, 124 e2e, 6 smoke públicos) son evidencia histórica. Corrección actual: 40 frontend/dominio, 59 API y 136 e2e aprobados; tipos/formato/build aprobados. La evidencia se registra por separado en el plan. El navegador interno rechazó el acceso al demo por su política de URL; QA Crux y repetición del smoke real pendientes, sin usar otro navegador como atajo. B03/B04 siguen parciales. Después: Ola 2, incluidos borradores independientes en servidor para continuar entre dispositivos. L1–L3 permanecen pendientes.
 
 ## Historial documental
 

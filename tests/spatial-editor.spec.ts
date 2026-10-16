@@ -196,10 +196,7 @@ async function setup(page: Page, published = false, sectionUpdated = false) {
   });
   await page.goto(`/?ruta=${original.id}`);
   await expect(page.getByText('Permisos confirmados · Staff')).toBeVisible();
-  await page
-    .locator('summary')
-    .filter({ hasText: /^Editar ruta$/ })
-    .click();
+  await page.getByRole('button', { name: 'Editar ruta', exact: true }).click();
   await expect(
     page.getByRole('combobox', { name: 'Sección', exact: true }),
   ).toHaveValue('section-p0');
@@ -361,9 +358,19 @@ for (const dpr of [1, 2, 3])
       await page
         .getByRole('button', { name: 'Añadir agarre a la ruta', exact: true })
         .click();
+      if (info.project.name === 'mobile') {
+        // Medium sheet may leave no room for three nearby 48px targets.
+        // Keep all anchors; compact exposes more scene without resizing it.
+        await expect(page.locator('.route-marker-overlay circle')).toHaveCount(
+          3,
+        );
+        await page
+          .getByRole('button', { name: 'Compacto', exact: true })
+          .click();
+      }
       await expect(
         page.getByRole('button', {
-          name: 'Seleccionar agarre 3 · intermedio',
+          name: 'Seleccionar agarre · Agarre intermedio',
           exact: true,
         }),
       ).toBeVisible();
@@ -372,7 +379,7 @@ for (const dpr of [1, 2, 3])
         .selectOption('hidden');
       await expect(
         page.getByRole('button', {
-          name: 'Seleccionar agarre 3 · intermedio',
+          name: 'Seleccionar agarre · Agarre intermedio',
           exact: true,
         }),
       ).toHaveCount(0);
@@ -381,7 +388,7 @@ for (const dpr of [1, 2, 3])
         .click();
       await expect(
         page.getByRole('button', {
-          name: 'Seleccionar agarre 3 · intermedio',
+          name: 'Seleccionar agarre · Agarre intermedio',
           exact: true,
         }),
       ).toBeVisible();
@@ -393,7 +400,7 @@ for (const dpr of [1, 2, 3])
         .selectOption('all');
       await page
         .getByRole('button', {
-          name: 'Seleccionar agarre 3 · intermedio',
+          name: 'Seleccionar agarre · Agarre intermedio',
           exact: true,
         })
         .focus();
@@ -596,10 +603,12 @@ test('guided steps preserve published preparation locally and require explicit c
   await page
     .getByRole('button', { name: 'Recargar versión guardada', exact: true })
     .click();
-  await page
-    .locator('summary')
-    .filter({ hasText: /^Editar ruta$/ })
-    .click();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Editar ruta · Cambio concurrente',
+      exact: true,
+    }),
+  ).toBeVisible();
   await expect(page.getByLabel('Nombre de ruta', { exact: true })).toHaveValue(
     'Preparación conservada',
   );
@@ -619,10 +628,7 @@ test('guided steps preserve published preparation locally and require explicit c
   await expect.poll(() => state.writes.length).toBe(1);
   expect(state.writes[0].expectedRevision).toBe(2);
   expect(state.writes[0].name).toBe('Preparación conservada');
-  await page
-    .locator('summary')
-    .filter({ hasText: /^Editar ruta$/ })
-    .click();
+  await page.getByRole('button', { name: 'Editar ruta', exact: true }).click();
   await expect(
     page.getByText('Sin cambios pendientes', { exact: true }),
   ).toBeVisible();
@@ -778,10 +784,6 @@ test('step navigation and mobile sheet heights retain one canvas, with usable no
     } as any;
   });
   await page.reload();
-  await page
-    .locator('summary')
-    .filter({ hasText: /^Editar ruta$/ })
-    .click();
   await go(page, 2);
   await page
     .getByRole('button', { name: 'Preparar agarres en 3D', exact: true })
@@ -1024,10 +1026,7 @@ test('retirement and reactivation require reasons and preserve the prepared snap
   await expect.poll(() => state.writes.length).toBe(1);
   expect(state.writes[0].status).toBe('retirada');
   expect(state.writes[0].holds3D).toEqual(original.holds3D);
-  await page
-    .locator('summary')
-    .filter({ hasText: /^Editar ruta$/ })
-    .click();
+  await page.getByRole('button', { name: 'Editar ruta', exact: true }).click();
   await go(page, 6);
   await expect(
     page.getByRole('button', { name: 'Reactivar ruta', exact: true }),
@@ -1112,4 +1111,141 @@ test('route preparation keeps the historical wall when its current section becom
     .click();
   expect(state.writes).toHaveLength(0);
   expect(state.images).toHaveLength(0);
+});
+
+test('separate editor guards navigation and discards only confirmed preparation across browser history', async ({
+  page,
+}) => {
+  const state = await setup(page, true);
+  await expect(page).toHaveURL(/vista=EditarRuta&editar=route-spatial/);
+  await expect(
+    page.getByRole('button', { name: 'Guardar actividad', exact: true }),
+  ).toHaveCount(0);
+  await go(page, 1);
+  const name = page.getByLabel('Nombre de ruta', { exact: true });
+  await name.fill('Cambios que se descartan');
+  await page
+    .getByRole('button', { name: 'Volver a la ficha', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText(
+    'Se descartarán los cambios locales de esta ruta',
+  );
+  await dialog
+    .getByRole('button', { name: 'Seguir editando', exact: true })
+    .click();
+  await expect(name).toHaveValue('Cambios que se descartan');
+  await page.goBack();
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(/vista=EditarRuta/);
+  await dialog
+    .getByRole('button', { name: 'Seguir editando', exact: true })
+    .click();
+  await expect(name).toHaveValue('Cambios que se descartan');
+  await page.goBack();
+  await expect(dialog).toBeVisible();
+  await dialog
+    .getByRole('button', { name: 'Descartar cambios y salir', exact: true })
+    .click();
+  await expect(page).toHaveURL(/ruta=route-spatial/);
+  await expect(
+    page.getByRole('heading', { name: original.name, exact: true }),
+  ).toBeVisible();
+  expect(state.writes).toHaveLength(0);
+  await page.goForward();
+  await expect(name).toHaveValue(original.name);
+  await expect(
+    page.getByText('Sin cambios pendientes', { exact: true }),
+  ).toBeVisible();
+  await name.fill('Recarga descarta memoria');
+  const unload = page.waitForEvent('dialog');
+  const reload = page.reload();
+  await (await unload).accept();
+  await reload;
+  await expect(name).toHaveValue(original.name);
+});
+
+test('private editor deep links preserve origin, reject nonstaff and never substitute an invalid route', async ({
+  page,
+}) => {
+  await setup(page, true);
+  await page.goto(
+    '/?vista=EditarRuta&editar=route-spatial&tourOrigen=tour-one&paradaOrigen=stop-one&revisionOrigen=19',
+  );
+  await expect(page.getByLabel('Nombre de ruta', { exact: true })).toHaveValue(
+    original.name,
+  );
+  await page
+    .getByRole('button', { name: 'Volver a la ficha', exact: true })
+    .click();
+  await expect(page).toHaveURL(
+    /tourOrigen=tour-one.*paradaOrigen=stop-one.*revisionOrigen=19/,
+  );
+  await page.goto('/?vista=EditarRuta&editar=%3Cinvalid%3E');
+  await expect(
+    page.getByText('Identificador de ruta no válido.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.route-editor')).toHaveCount(0);
+  await page.route('**/api/me', (r) =>
+    r.fulfill({ json: { userId: 'spatial-test', staff: null } }),
+  );
+  await page.goto('/?vista=EditarRuta&editar=route-spatial');
+  await expect(
+    page.getByText(
+      'Necesitas una sesión staff vigente para editar esta ruta.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel('Nombre de ruta', { exact: true })).toHaveCount(
+    0,
+  );
+});
+
+test('discarding a preparation after concurrent reload does not resurrect its older base', async ({
+  page,
+}) => {
+  const state = await setup(page, true);
+  await go(page, 1);
+  await page
+    .getByLabel('Nombre de ruta', { exact: true })
+    .fill('Base local obsoleta');
+  await page
+    .getByRole('button', { name: 'Conservar preparación local', exact: true })
+    .click();
+  state.route.revision = 2;
+  state.route.name = 'Nueva versión guardada';
+  await page.evaluate(() =>
+    window.dispatchEvent(new CustomEvent('climbing-session-expired')),
+  );
+  // The same authorized account can recheck permissions without changing identity.
+  await page
+    .getByRole('button', {
+      name: 'Reintentar',
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Editar ruta · Nueva versión guardada',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByLabel('Nombre de ruta', { exact: true })).toHaveValue(
+    'Base local obsoleta',
+  );
+  await page
+    .getByRole('button', { name: 'Volver a la ficha', exact: true })
+    .click();
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Descartar cambios y salir', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Editar ruta', exact: true }).click();
+  await expect(page.getByLabel('Nombre de ruta', { exact: true })).toHaveValue(
+    'Nueva versión guardada',
+  );
+  await expect(
+    page.getByText('Sin cambios pendientes', { exact: true }),
+  ).toBeVisible();
+  expect(state.writes).toHaveLength(0);
 });

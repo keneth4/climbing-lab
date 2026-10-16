@@ -77,7 +77,7 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
   const appErrors: string[] = [];
   page.on('pageerror', (e) => appErrors.push(e.message));
   await page.goto('/?ruta=route-a');
-  await expect(page.getByRole('heading', { name: 'Ruta A V2' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ruta A' })).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Guardar actividad' }),
   ).toBeDisabled();
@@ -95,14 +95,12 @@ test('anonymous catalog, login controls, QR and responsive layout', async ({
   expect(collapsed!.width * collapsed!.height).toBeGreaterThan(
     expanded!.width * expanded!.height,
   );
-  await expect(
-    page.getByRole('heading', { name: 'Ruta A V2' }),
-  ).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ruta A' })).not.toBeVisible();
   await page.screenshot({
     path: `/tmp/workspace-closed-${test.info().project.name}.png`,
   });
   await page.getByRole('button', { name: 'Abrir herramientas' }).click();
-  await expect(page.getByRole('heading', { name: 'Ruta A V2' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ruta A' })).toBeVisible();
   await page.screenshot({
     path: `/tmp/workspace-open-${test.info().project.name}.png`,
   });
@@ -215,7 +213,7 @@ test('published capture loads on demand and preserves scene context', async ({
   page,
 }) => {
   await page.goto('/?ruta=route-a');
-  await expect(page.getByRole('heading', { name: 'Ruta A V2' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ruta A' })).toBeVisible();
   await page.getByRole('button', { name: 'Explorar en 3D' }).click();
   await expect(
     page.getByText('fixture.ply · 0 MB · captura del gimnasio'),
@@ -275,6 +273,7 @@ test('published capture loads on demand and preserves scene context', async ({
 test('staff editor saves a version and keeps retired routes accessible', async ({
   page,
 }) => {
+  page.setDefaultTimeout(5000);
   const appErrors: string[] = [];
   page.on('pageerror', (e) => appErrors.push(e.message));
   const exp = Math.floor(Date.now() / 1000) + 3600;
@@ -394,7 +393,7 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await expect(
     page.getByRole('button', { name: 'Staff', exact: true }),
   ).toBeVisible();
-  await page.locator('summary').filter({ hasText: 'Editar ruta' }).click();
+  await page.getByRole('button', { name: 'Editar ruta', exact: true }).click();
   await page
     .getByLabel('Nombre de ruta', { exact: true })
     .fill('Ruta revisada');
@@ -481,10 +480,13 @@ test('staff editor saves a version and keeps retired routes accessible', async (
     .getByRole('button', { name: 'Actualizar ruta', exact: true })
     .click();
   await expect(
-    page.getByRole('heading', { name: 'Ruta revisada V2' }),
+    page.getByRole('heading', { name: 'Ruta revisada' }),
   ).toBeVisible();
   await expect(
-    page.getByText('Spray wall · Activa', { exact: true }),
+    page
+      .locator('.route-facts')
+      .getByText('Spray wall', { exact: true })
+      .first(),
   ).toBeVisible();
   expect(current.holds3D).toHaveLength(2);
   await page.getByRole('button', { name: 'Explorar en 3D' }).click();
@@ -496,18 +498,20 @@ test('staff editor saves a version and keeps retired routes accessible', async (
   await expect(labels).toBeVisible();
   await labels.selectOption('hidden');
   await expect(
-    page.getByRole('img', { name: 'Agarre I1 · inicio', exact: true }),
+    page.getByRole('img', { name: 'Inicio (I)', exact: true }),
   ).toHaveCount(0);
   await labels.selectOption('all');
   await expect(
-    page.getByRole('img', { name: 'Agarre I1 · inicio', exact: true }),
+    page.getByRole('img', { name: 'Inicio (I)', exact: true }),
   ).toBeVisible();
-  await page.locator('summary').filter({ hasText: 'Editar ruta' }).click();
+  await page.getByRole('button', { name: 'Editar ruta', exact: true }).click();
   await go(page, 6);
   await page.getByLabel('Motivo del cambio').fill('Armado retirado');
   await page.getByRole('button', { name: 'Confirmar retiro' }).click();
   await expect(
-    page.getByText('Spray wall · Retirada', { exact: true }),
+    page.getByText('Ruta retirada. El enlace y su historial se conservan.', {
+      exact: false,
+    }),
   ).toBeVisible();
   expect(appErrors).toEqual([]);
   await page.screenshot({

@@ -153,3 +153,16 @@ La preparación no guardada es local en memoria. Una comprobación temporal de s
 [Entrega, pruebas y puerta humana pendiente](planes/ux/05-tour-paradas.md#entrega-local--14-de-octubre-de-2026). Main Gym ya está publicado localmente en revisión 19 con tres paradas verificadas; el propietario confirmó guardado y exploración. [Cierre funcional local](planes/ux/05-tour-paradas.md#cierre-de-aceptación-funcional-local--14-de-octubre-de-2026). Teléfonos, lector, rendimiento y staging siguen pendientes. Repetir QA público con `DEMO_REUSE_SERVER=1 npx playwright test --config playwright.demo.config.ts`; no usar `demo:smoke` en este runtime persistente porque incluye setup.
 
 En una parada con «Cámara e imagen pendientes», usa el botón **Guardar cámara e imagen de parada** situado en ese mismo bloque; mover el visor o Guardar borrador no captura el encuadre. Si el visor está cerrado, ábrelo desde el bloque y espera su carga. Al capturar, se guardan la pose y referencia PNG en el borrador; luego revisa desde dos ángulos, confirma la casilla y usa Guardar parada revisada. Los errores aparecen junto al botón y conservan la preparación. Estas acciones no publican el recorrido.
+
+
+## Ola 1: ficha y editor independiente — revisión del 15 de octubre
+
+Staff puede abrir «Editar ruta» desde la ficha o la lista de Staff. URL privada: `/?vista=EditarRuta&editar=ID`; el lector y QR conservan `?ruta=ID`. La pantalla solo incluye edición; conserva los seis pasos y el mismo runtime. Volver tras guardar consulta la misma ruta actualizada. Los enlaces de origen del recorrido se conservan.
+
+Con cambios temporales, Volver, navegación interna y Atrás/Adelante piden confirmación: «Seguir editando» conserva el trabajo; «Descartar cambios y salir» elimina únicamente esa preparación y vuelve a la versión guardada. Recargar muestra la advertencia nativa del navegador cuando hay cambios. La preparación de una ruta publicada no es un borrador en servidor ni garantiza continuidad entre dispositivos: esa capacidad queda en Ola 2.
+
+La ficha presenta nombre, grado, sector y zona conocida; no lista los agarres por orden ni muestra metadatos técnicos. Inicio usa I verde en rectángulo redondeado; final F terracota en rombo; intermedio usa un punto azul. Las paradas del recorrido siguen numeradas. Reglas y beta vacías no crean secciones; beta con contenido empieza plegada.
+
+Para la segunda aceptación, abrir D04 como lector, revisar grado/sector y luego «Explorar en 3D»; comprobar I/F y puntos sin números. Como staff, abrir el editor separado y revisar navegación/inspector. Se puede cambiar temporalmente el nombre, volver, elegir «Seguir editando», y después «Descartar cambios y salir»; no pulsar Actualizar/Publicar en D04 durante ese ensayo. Verificar que la ficha conserva su nombre y revisión guardados.
+
+El PNG histórico D04 sigue anotado con I1/F9: no se sobrescribió R2 ni se publicó una revisión nueva. Su renovación necesita revisión y autorización explícitas del propietario. Tampoco se considera aprobada la nueva interfaz por la aceptación anterior de D04. QA en Crux, segunda aceptación, dispositivos reales y lector de pantalla siguen pendientes.
