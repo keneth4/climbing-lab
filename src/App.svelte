@@ -92,6 +92,53 @@
   let journalEntryOpen = $state(false),
     journalNotice = $state('');
   let routePreparing = $state(false);
+  let editorDirty = $state(false),
+    editorBusy = $state(false);
+  let discardDialog: HTMLDialogElement;
+  let pendingExit: (() => void) | undefined;
+  let exitOrigin: HTMLElement | undefined;
+  let discardedPreparation = '';
+  let historyIndex = Number(history.state?.navIndex || 0);
+  let restoringHistory = false,
+    allowHistoryExit = false;
+  let deferredHistoryExit: (() => void) | undefined;
+  function guardEditorExit(action: () => void) {
+    if (tab !== 'EditarRuta') {
+      action();
+      return;
+    }
+    if (editorBusy) {
+      message = 'Espera a que termine el guardado antes de salir.';
+      return;
+    }
+    if (!editorDirty) {
+      action();
+      return;
+    }
+    if (pendingExit) return;
+    exitOrigin =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : undefined;
+    pendingExit = action;
+    discardDialog.showModal();
+    discardDialog.querySelector<HTMLButtonElement>('button')?.focus();
+  }
+  function cancelEditorExit() {
+    pendingExit = undefined;
+    discardDialog.close();
+    exitOrigin?.focus({ preventScroll: true });
+  }
+  function discardEditorExit() {
+    discardedPreparation = `${userId}:${selectedId}:${selected?.revision || 0}`;
+    delete editorDrafts[discardedPreparation];
+    editorDirty = false;
+    const action = pendingExit;
+    pendingExit = undefined;
+    discardDialog.close();
+    action?.();
+  }
+
   let editorDrafts = $state<Record<string, EditorDraft>>({});
   function clearEditorPreparation(id: string) {
     const prefix = `${userId}:${id}:`;
@@ -168,6 +215,10 @@
       const nextEmail = data.session?.user.email || '';
       const nextUserId = data.session?.user.id || '';
       if (nextUserId !== userId) {
+        editorDirty = false;
+        editorBusy = false;
+        pendingExit = undefined;
+        discardDialog?.close();
         routesTicket++;
         db.routes = db.routes.filter((r) => r.status !== 'borrador');
         viewerWorkspace.reset();
@@ -226,7 +277,12 @@
         loginReturn = '';
         sessionStorage.removeItem('climbing-login-return');
         sessionStorage.removeItem('climbing-login-draft');
-        navigate('Catálogo', target);
+        const returnView =
+          sessionStorage.getItem('climbing-login-view') === 'EditarRuta'
+            ? 'EditarRuta'
+            : 'Catálogo';
+        sessionStorage.removeItem('climbing-login-view');
+        navigate(returnView, target);
       }
       void refreshRoutes();
       if (staff) {
@@ -336,7 +392,8 @@
         end: performance.now(),
       });
       if (id) select(id);
-      else if (!selectedId) selectedId = routes[0]?.id || '';
+      else if (!selectedId && tab !== 'EditarRuta')
+        selectedId = routes[0]?.id || '';
       else if (!routes.some((r) => r.id === selectedId)) {
         const requestedId = selectedId;
         try {
@@ -461,7 +518,11 @@
   const initialUrl = new URL(location.href);
   let tab = $state(viewFromUrl(initialUrl));
   let staff = $state(false);
-  let selectedId = $state(initialUrl.searchParams.get('ruta') || '');
+  let selectedId = $state(
+    initialUrl.searchParams.get(
+      viewFromUrl(initialUrl) === 'EditarRuta' ? 'editar' : 'ruta',
+    ) || '',
+  );
   let detailMode = $state(initialUrl.searchParams.has('ruta'));
   let routeError = $state('');
   let selected = $derived(
@@ -612,6 +673,14 @@
     push = true,
     restoreTour?: TourOrigin,
   ) {
+    guardEditorExit(() => performNavigate(view, id, push, restoreTour));
+  }
+  function performNavigate(
+    view: string,
+    id?: string,
+    push = true,
+    restoreTour?: TourOrigin,
+  ) {
     const previous = new URL(location.href);
     for (const [k, v] of Object.entries({
       buscar: query,
@@ -648,7 +717,12 @@
       tourRevisionSelection = restoreTour.revision;
     }
     if (['Inicio', 'El gimnasio'].includes(view)) tourOrigin = undefined;
+    editorDirty = false;
+    editorBusy = false;
     tab = view;
+    void tick().then(() => {
+      discardedPreparation = '';
+    });
     if (id) selectedId = id;
     detailMode = !!id;
     toolsOpen = true;
@@ -657,8 +731,8 @@
     url.pathname = '/';
     url.search = '';
     if (view !== 'Inicio') url.searchParams.set('vista', view);
-    if (id) url.searchParams.set('ruta', id);
-    if (view === 'Catálogo') {
+    if (id) url.searchParams.set(view === 'EditarRuta' ? 'editar' : 'ruta', id);
+    if (view === 'Catálogo' || view === 'EditarRuta') {
       putTourOrigin(url, tourOrigin);
       invalidTourOrigin = false;
     }
@@ -680,8 +754,9 @@
       retiradas: showRetired ? '1' : '',
     }))
       if (v && view === 'Catálogo') url.searchParams.set(k, v);
-    if (push) history.pushState({ scroll: 0 }, '', url);
-    else history.replaceState({ scroll: 0 }, '', url);
+    if (push)
+      history.pushState({ scroll: 0, navIndex: ++historyIndex }, '', url);
+    else history.replaceState({ scroll: 0, navIndex: historyIndex }, '', url);
     requestAnimationFrame(() => {
       window.scrollTo(0, 0);
       const panel = document.getElementById('tools-panel');
@@ -689,7 +764,9 @@
         panel.scrollTop = 0;
         const heading =
           panel.querySelector<HTMLElement>(
-            id ? 'section[aria-label="Ficha de ruta"] h2' : 'h1, h2',
+            id && view !== 'EditarRuta'
+              ? 'section[aria-label="Ficha de ruta"] h2'
+              : 'h1, h2',
           ) || panel;
         heading.tabIndex = -1;
         heading.focus({ preventScroll: true });
@@ -706,14 +783,60 @@
     url.searchParams.set('tour', id);
     if (stop) url.searchParams.set('parada', stop);
     if (replace) history.replaceState({ ...history.state }, '', url);
-    else history.pushState({ scroll: 0 }, '', url);
+    else history.pushState({ scroll: 0, navIndex: ++historyIndex }, '', url);
   }
   onMount(() => {
     if (initialUrl.searchParams.has('ruta')) measure('qr_open');
+    history.replaceState(
+      { ...history.state, navIndex: historyIndex },
+      '',
+      location.href,
+    );
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (tab === 'EditarRuta' && (editorDirty || editorBusy)) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', beforeUnload);
     const pop = () => {
+      if (restoringHistory) {
+        restoringHistory = false;
+        const action = deferredHistoryExit;
+        deferredHistoryExit = undefined;
+        if (action) guardEditorExit(action);
+        return;
+      }
+      const nextIndex = Number(history.state?.navIndex ?? historyIndex - 1);
+      if (
+        tab === 'EditarRuta' &&
+        (editorDirty || editorBusy) &&
+        !allowHistoryExit
+      ) {
+        const delta = nextIndex - historyIndex;
+        if (delta) {
+          restoringHistory = true;
+          deferredHistoryExit = () => {
+            allowHistoryExit = true;
+            history.go(delta);
+          };
+          history.go(-delta);
+          return;
+        }
+      }
+      allowHistoryExit = false;
+      historyIndex = nextIndex;
+      editorDirty = false;
+      editorBusy = false;
       const url = new URL(location.href);
       tab = viewFromUrl(url);
-      selectedId = url.searchParams.get('ruta') || selectedId;
+      selectedId =
+        tab === 'EditarRuta'
+          ? url.searchParams.get('editar') || ''
+          : url.searchParams.get('ruta') || selectedId;
+      void tick().then(() => {
+        discardedPreparation = '';
+      });
       detailMode = url.searchParams.has('ruta');
       query = url.searchParams.get('buscar') || '';
       grade = url.searchParams.get('grado') || '';
@@ -741,7 +864,10 @@
       });
     };
     window.addEventListener('popstate', pop);
-    return () => window.removeEventListener('popstate', pop);
+    return () => {
+      window.removeEventListener('popstate', pop);
+      window.removeEventListener('beforeunload', beforeUnload);
+    };
   });
   const selectionKey = $derived(`${selectedId}:${selected?.revision || 0}`);
   $effect(() => {
@@ -764,7 +890,14 @@
         sourceOwner: userId,
       }),
     );
-    loginReturn = detailMode && tab === 'Catálogo' ? selectedId : '';
+    loginReturn =
+      tab === 'EditarRuta' || (detailMode && tab === 'Catálogo')
+        ? selectedId
+        : '';
+    sessionStorage.setItem(
+      'climbing-login-view',
+      tab === 'EditarRuta' ? 'EditarRuta' : 'Catálogo',
+    );
     sessionStorage.setItem('climbing-login-return', loginReturn);
     const originUrl = new URL('/', location.origin);
     putTourOrigin(originUrl, tourOrigin);
@@ -1008,6 +1141,26 @@
     />{/if}</svelte:head
 >
 
+<dialog
+  bind:this={discardDialog}
+  aria-labelledby="discard-heading"
+  oncancel={(e) => {
+    e.preventDefault();
+    cancelEditorExit();
+  }}
+>
+  <h2 id="discard-heading">Se descartarán los cambios locales de esta ruta</h2>
+  <p>
+    Volverás a la versión guardada en el servidor. No se creará una revisión
+    nueva.
+  </p>
+  <div class="actions">
+    <button onclick={cancelEditorExit}>Seguir editando</button><button
+      onclick={discardEditorExit}>Descartar cambios y salir</button
+    >
+  </div>
+</dialog>
+
 <div bind:this={chrome}>
   <SiteHeader
     {tab}
@@ -1019,7 +1172,10 @@
     {navigate}
     {login}
     logout={() => {
-      supabase.auth.signOut();
+      guardEditorExit(() => {
+        editorDirty = false;
+        supabase.auth.signOut();
+      });
     }}
   />
   <div class="notice">
@@ -1123,7 +1279,68 @@
     aria-label="Contenido del gimnasio"
     tabindex="-1"
   >
-    {#if tab === 'Recorrido'}{#if invalidTourRevision}<p role="alert">
+    {#if tab === 'EditarRuta'}
+      <section aria-label="Edición de ruta">
+        <button onclick={() => navigate('Catálogo', selectedId || undefined)}
+          >Volver a la ficha</button
+        >
+        <h1 tabindex="-1">
+          Editar ruta{selected && staff && sessionReady
+            ? ` · ${selected.name}`
+            : ''}
+        </h1>
+        {#if !/^[a-zA-Z0-9_-]{1,100}$/.test(selectedId)}<p role="alert">
+            Identificador de ruta no válido.
+          </p>
+        {:else if accessState === 'checking'}<p role="status">
+            Verificando permisos para editar…
+          </p>
+        {:else if !staff || !sessionReady}<p role="alert">
+            Necesitas una sesión staff vigente para editar esta ruta.
+          </p>
+          <button onclick={login}>Iniciar sesión</button>
+        {:else if routeError || catalogError}<p role="alert">
+            {routeError || catalogError}
+          </p>
+          <button onclick={() => refreshRoutes()}>Reintentar</button>
+        {:else if selected}
+          <p>
+            {selected.status === 'borrador'
+              ? 'Borrador guardado en servidor'
+              : selected.status === 'retirada'
+                ? 'Ruta retirada'
+                : 'Ruta publicada'}. La preparación es temporal; recargar puede
+            perderla.
+          </p>
+          {#key `${userId}:${selected.id}:${selected.revision}`}
+            <RouteEditor
+              route={selected}
+              owner={userId}
+              sourceRoutes={db.routes}
+              draft={editorPreparation(selected.id, selected.revision)}
+              onDraft={(owner, id, revision, values) => {
+                const key = `${owner}:${id}:${revision}`;
+                if (owner === userId && key !== discardedPreparation)
+                  editorDrafts[key] = values;
+              }}
+              onPreparing={(active) => (routePreparing = active)}
+              onState={(state) => {
+                editorDirty = state.dirty;
+                editorBusy = state.busy;
+              }}
+              onReload={() => refreshRoutes()}
+              onSaved={(id) => {
+                editorDirty = false;
+                editorBusy = false;
+                clearEditorPreparation(id);
+                refreshRoutes(id);
+              }}
+            />
+          {/key}
+        {:else if catalogLoading}<p role="status">Cargando ruta…</p>
+        {:else}<p role="alert">Ruta no encontrada o no disponible.</p>{/if}
+      </section>
+    {:else if tab === 'Recorrido'}{#if invalidTourRevision}<p role="alert">
           La revisión del recorrido indicada no es válida.
         </p>
         <button
@@ -1323,24 +1540,10 @@
                     url: routeUrl(selected.id),
                   }}
                 />{/if}
-              {#if staff}{#key selected.id + ':' + selected.revision}<details>
-                    <summary>Editar ruta</summary><RouteEditor
-                      route={selected}
-                      draft={editorPreparation(selected.id, selected.revision)}
-                      owner={userId}
-                      sourceRoutes={db.routes}
-                      onDraft={(owner, id, revision, values) => {
-                        if (owner === userId)
-                          editorDrafts[`${owner}:${id}:${revision}`] = values;
-                      }}
-                      onPreparing={(active) => (routePreparing = active)}
-                      onReload={() => refreshRoutes(selected?.id)}
-                      onSaved={(id) => {
-                        clearEditorPreparation(id);
-                        refreshRoutes(id);
-                      }}
-                    />
-                  </details>{/key}{/if}
+              {#if staff && sessionReady}<button
+                  onclick={() => navigate('EditarRuta', selected.id)}
+                  >Editar ruta</button
+                >{/if}
               {#if selected.beta?.trim()}<details bind:open={betaOpen}>
                   <summary>Ver beta</summary>
                   <p>{selected.beta}</p>
@@ -1392,8 +1595,7 @@
               >
                 <h3>Registrar actividad</h3>
                 <p>
-                  {selected.name} · Revisión {selected.revision}. Los intentos
-                  corresponden a esta actividad.
+                  {selected.name}. Los intentos corresponden a esta actividad.
                 </p>
                 {#if draft.approvedRevision !== selected.revision}<p
                     role="alert"
@@ -1512,7 +1714,7 @@
                   }}
                 >
                   <h3>Reportar un error</h3>
-                  <p>{selected.name} · Revisión {selected.revision}</p>
+                  <p>{selected.name}</p>
                   <label
                     >Categoría<select
                       bind:value={draft.category}
@@ -1717,13 +1919,13 @@
       </p>
       <div class="route-list">
         {#each db.routes.filter((r) => r.status !== 'borrador') as r}<button
-            onclick={() => select(r.id)}
+            onclick={() => navigate('EditarRuta', r.id)}
             >{r.name} · {r.grade} · {r.status}</button
           >{/each}
       </div>
       <h2>Borradores de rutas</h2>
       {#each db.routes.filter((r) => r.status === 'borrador') as r}<button
-          onclick={() => select(r.id)}
+          onclick={() => navigate('EditarRuta', r.id)}
           >{r.name || 'Sin nombre'} · Borrador</button
         >{/each}
       <h2>Reportes</h2>
@@ -1766,3 +1968,41 @@
     {navigate}
     locked={viewerWorkspace.locked}
   />{/if}
+
+<style>
+  dialog {
+    max-width: min(34rem, calc(100vw - 2rem));
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 1.5rem;
+  }
+  dialog::backdrop {
+    background: #0008;
+  }
+  .route-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .route-facts div {
+    padding: 0.65rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    min-width: 80px;
+    max-width: 100%;
+  }
+  .route-facts dt {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .route-facts dd {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 0.2rem 0 0;
+    overflow-wrap: anywhere;
+  }
+</style>

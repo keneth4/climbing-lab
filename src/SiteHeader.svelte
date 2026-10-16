@@ -22,7 +22,13 @@
     logout: () => void;
   } = $props();
   const accountViews = ['Bitácora', 'Proyectos', 'Reportes', 'Cuenta'];
-  const staffViews = ['Staff', 'Capturas', 'Recepción', 'Recorridos'];
+  const staffViews = [
+    'Staff',
+    'Capturas',
+    'Recepción',
+    'Recorridos',
+    'EditarRuta',
+  ];
 </script>
 
 <a class="skip-link" href="#tools-panel">Saltar al contenido</a>

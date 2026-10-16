@@ -31,6 +31,7 @@
     onSaved,
     onReload,
     onPreparing,
+    onState,
     draft,
     onDraft,
     owner,
@@ -51,6 +52,7 @@
     onSaved: (id: string) => void;
     onReload?: () => void;
     onPreparing?: (active: boolean) => void;
+    onState?: (state: { dirty: boolean; busy: boolean }) => void;
   } = $props();
   const initial = untrack(() => route);
   const restored = untrack(() => draft);
@@ -239,7 +241,7 @@
       .catch((e) => (message = e.message));
   });
   onDestroy(() => {
-    if (!savedDraft)
+    if (!savedDraft && (changed.length || toolBusy))
       onDraft?.(draftOwner, initial?.id || 'new', initial?.revision || 0, {
         name,
         grade,
@@ -259,7 +261,7 @@
     onPreparing?.(false);
     if (imagePreview) URL.revokeObjectURL(imagePreview);
   });
-  let savedDraft = false;
+  let savedDraft = $state(false);
   let holds3D = $state<Hold3D[]>(
     (restored?.holds3D || initial?.holds3D || []).map((h) => ({
       ...h,
@@ -378,6 +380,12 @@
     changeReason: '',
   }));
   const changed = $derived(differences(values(), baseline));
+  $effect(() => {
+    onState?.({
+      dirty: !savedDraft && (changed.length > 0 || toolBusy),
+      busy: busy || imageBusy,
+    });
+  });
   const states = $derived.by(() => {
     const result = stepStates(
       { ...values(), captureId: initial?.captureId || currentCapture?.id },

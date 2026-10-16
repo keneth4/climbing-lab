@@ -72,6 +72,7 @@ export function pageTitle(view: string, route?: string): string {
   const friendly: Record<string, string> = {
     Bitácora: 'Mi actividad',
     Cuenta: 'Cuenta y privacidad',
+    EditarRuta: 'Editar ruta',
   };
   view = friendly[view] || view;
   return `${view === 'Catálogo' ? route || 'Rutas' : view === 'Staff' ? 'Panel del staff' : view === 'Bitácora' ? 'Mi actividad' : view === 'Cuenta' ? 'Cuenta y privacidad' : view} · ${site.brand.name} — ${site.brand.subtitle.toLowerCase()}`;
