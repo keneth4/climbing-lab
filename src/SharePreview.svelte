@@ -79,7 +79,7 @@
           c.font = '24px system-ui';
           c.fillText('VISTA PREVIA · impresión pública pendiente', 60, 320);
           wrap(c, url, 60, 1120, 960, 32);
-          c.fillText(`Revisión ${revision} · Escanea para consultar`, 60, 1300);
+          c.fillText('Escanea para consultar', 60, 1300);
         } else {
           if (!r.imageId && !illustrationUrl(r))
             throw new Error(

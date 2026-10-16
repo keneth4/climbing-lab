@@ -1243,14 +1243,27 @@
                 >Volver al catálogo</button
               >{/if}
             {#if routeError}<p role="alert">{routeError}</p>{:else if selected}
-              <h2 tabindex="-1">
-                {selected.name} <small>{selected.grade}</small>
-              </h2>
-              <p>
-                {selected.sector} · {selected.status === 'retirada'
-                  ? 'Retirada'
-                  : 'Activa'}
-              </p>
+              <h2 tabindex="-1">{selected.name}</h2>
+              <dl class="route-facts">
+                <div>
+                  <dt>Grado</dt>
+                  <dd>{selected.grade}</dd>
+                </div>
+                <div>
+                  <dt>Sector</dt>
+                  <dd>{selected.sector}</dd>
+                </div>
+                {#if (historicalSection || sections.find((s) => s.id === selected?.sectionId))?.name}<div
+                  >
+                    <dt>Zona</dt>
+                    <dd>
+                      {(
+                        historicalSection ||
+                        sections.find((s) => s.id === selected?.sectionId)
+                      )?.name}
+                    </dd>
+                  </div>{/if}
+              </dl>
               {#if selected.status === 'retirada'}<p role="status">
                   Ruta retirada. El enlace y su historial se conservan. Consulta
                   otras rutas en el catálogo.
@@ -1277,12 +1290,6 @@
                   onclick={saveProject}>Guardar proyecto</button
                 >
               </div>
-              <details>
-                <summary>Información de ruta</summary>
-                <p>
-                  Revisión {selected.revision} · Identificador {selected.id}
-                </p>
-              </details>
               <RoutePresentation route={selected} />
               {#if selected.captureId}<button
                   id="explore-3d"
@@ -1334,10 +1341,10 @@
                       }}
                     />
                   </details>{/key}{/if}
-              <details bind:open={betaOpen}>
-                <summary>Ver beta</summary>
-                <p>{selected.beta || 'El staff aún no ha añadido una beta.'}</p>
-              </details>
+              {#if selected.beta?.trim()}<details bind:open={betaOpen}>
+                  <summary>Ver beta</summary>
+                  <p>{selected.beta}</p>
+                </details>{/if}
               <details>
                 <summary>Compartir</summary
                 >{#if ['localhost', '127.0.0.1'].includes(location.hostname)}<p>
