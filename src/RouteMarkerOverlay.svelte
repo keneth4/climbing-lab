@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { markerColor, type MarkerLayout, type Rect } from './marker-layout';
+  import {
+    markerColor,
+    markerName,
+    markerPath,
+    type MarkerLayout,
+    type Rect,
+  } from './marker-layout';
   let {
     markers,
     viewport,
@@ -15,9 +21,16 @@
     clipBottom?: number;
     selectionLabel?: string;
   } = $props();
+  function mountInSceneLayer(node: HTMLElement) {
+    // Annotations use viewport coordinates, not the inspector's clipping or
+    // transformed containing block. Svelte still owns updates and cleanup.
+    document.body.appendChild(node);
+    return { destroy: () => node.remove() };
+  }
 </script>
 
 <div
+  use:mountInSceneLayer
   class="route-marker-overlay"
   aria-label="Marcadores sobre el muro"
   style:zoom={1 / (viewport.zoom || 1)}
@@ -57,28 +70,39 @@
         <button
           type="button"
           {disabled}
-          aria-label={`${selectionLabel} ${m.label} · ${m.role}`}
+          aria-label={`${selectionLabel} · ${markerName(m)}`}
           aria-pressed={!!m.active}
           style:left={`${m.labelPoint.x}px`}
           style:top={`${m.labelPoint.y}px`}
           onclick={() => onSelect?.(m.id)}
-          ><span class:active={m.active} style:background={markerColor(m.role)}
-            >{m.label}</span
+          ><svg class="glyph" viewBox="-24 -24 48 48" aria-hidden="true"
+            ><path
+              d={markerPath(m)}
+              fill={markerColor(m.role)}
+              stroke={m.active ? '#ffdf55' : '#fff'}
+              stroke-width="2"
+            />{#if m.tour || m.role !== 'intermedio'}<text x="0" y="0"
+                >{m.label}</text
+              >{/if}</svg
           ></button
         >
       {:else}
         <span
           class="readonly-label"
           role="img"
-          aria-label={m.role === 'candidate'
-            ? 'Punto en preparación'
-            : `Agarre ${m.label} · ${m.role}`}
+          aria-label={markerName(m)}
           style:left={`${m.labelPoint.x}px`}
           style:top={`${m.labelPoint.y}px`}
-          ><span
-            class:active={m.active}
-            class:provisional={m.role === 'candidate'}
-            style:background={markerColor(m.role)}>{m.label}</span
+          ><svg class="glyph" viewBox="-24 -24 48 48" aria-hidden="true"
+            ><path
+              d={markerPath(m)}
+              fill={markerColor(m.role)}
+              stroke={m.active ? '#ffdf55' : '#fff'}
+              stroke-width="2"
+              stroke-dasharray={m.role === 'candidate' ? '3 2' : undefined}
+            />{#if m.tour || m.role !== 'intermedio'}<text x="0" y="0"
+                >{m.label}</text
+              >{/if}</svg
           ></span
         >
       {/if}
@@ -88,6 +112,9 @@
 
 <style>
   .route-marker-overlay {
+    /* Scene annotations stay visible when their inspector is collapsed.
+       Runtime visibility still owns mounting/unmounting this overlay. */
+    visibility: visible;
     position: fixed;
     z-index: 8;
     pointer-events: none;
@@ -97,6 +124,18 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
+  }
+  .glyph {
+    position: static;
+    width: 48px;
+    height: 48px;
+    overflow: visible;
+  }
+  text {
+    fill: white;
+    font: bold 13px system-ui;
+    text-anchor: middle;
+    dominant-baseline: central;
   }
   line {
     stroke: #152534;
@@ -135,25 +174,5 @@
     outline: 2px solid #ffdf55;
     outline-offset: -2px;
     border-radius: 8px;
-  }
-  span span,
-  button span {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 24px;
-    border: 2px solid white;
-    border-radius: 7px;
-    color: white;
-    font: bold 13px system-ui;
-    box-sizing: border-box;
-    box-shadow: 0 1px 3px #0008;
-  }
-  span.active {
-    outline: 2px solid #ffdf55;
-    outline-offset: 2px;
-  }
-  span.provisional {
-    border-style: dashed;
   }
 </style>

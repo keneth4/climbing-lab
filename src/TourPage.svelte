@@ -3,19 +3,22 @@
   import { api } from './auth';
   import TourPoster from './TourPoster.svelte';
   import SplatViewer from './SplatViewer.svelte';
+  import type { TourOrigin } from './tour-origin';
   import type { TourView, TourCamera } from '../shared/tours';
   let {
     tourId,
     stopId,
+    revision,
     onSelect,
     onRoute,
     onZone,
   }: {
     tourId: string;
     stopId: string;
+    revision?: number;
     onSelect: (id: string, stop: string, replace?: boolean) => void;
-    onRoute: (id: string) => void;
-    onZone: (id: string) => void;
+    onRoute: (id: string, origin: TourOrigin) => void;
+    onZone: (id: string, origin: TourOrigin) => void;
   } = $props();
   let tour = $state<TourView | null>(null),
     loading = $state(true),
@@ -44,24 +47,30 @@
     tour?.content.stops.findIndex((s) => s.id === current?.id) ?? -1,
   );
   async function load(id: string, force = false) {
-    if (!force && tour && loadedId === id) return;
+    const key = `${id}:${revision || ''}`;
+    if (!force && tour && loadedId === key) return;
     const ticket = ++request;
     loading = true;
     error = '';
-    if (loadedId !== id) {
+    if (loadedId !== key) {
       scene = false;
       tour = null;
     }
     try {
       const result = await api(
-        '/tours' + (id ? '/' + encodeURIComponent(id) : ''),
+        '/tours' +
+          (id
+            ? '/' +
+              encodeURIComponent(id) +
+              (revision ? `/revisions/${revision}` : '')
+            : ''),
       );
       if (ticket !== request) return;
       if (JSON.stringify(tour) !== JSON.stringify(result.tour))
         tour = result.tour;
-      loadedId = id;
+      loadedId = key;
       if (tour && !id) {
-        loadedId = tour.id;
+        loadedId = `${tour.id}:${revision || ''}`;
         onSelect(
           tour.id,
           stopId ||
@@ -109,6 +118,9 @@
     >{/if}
   {#if tour}
     <p>{tour.content.description}</p>
+    {#if revision}<p>
+        Consultando revisión {tour.revision} del recorrido.
+      </p>{/if}
     {#if tour.status === 'retired'}<p role="status">
         Recorrido retirado. Su enlace e imágenes se conservan; la entrada 3D
         está desactivada.
@@ -166,14 +178,32 @@
             >
           </div>{/if}
       {/if}
-      {#if current.section}<button onclick={() => onZone(current!.section!.id)}
-          >Ver rutas de esta zona</button
+      {#if current.section}<button
+          onclick={() =>
+            onZone(current!.section!.id, {
+              tour: tour!.id,
+              stop: current!.id,
+              revision: tour!.revision,
+            })}>Ver rutas de esta zona</button
         >{/if}
       {#if current.linkedRouteId}<button
-          onclick={() => onRoute(current!.linkedRouteId!)}
-          >Ver ruta de la parada</button
+          onclick={() =>
+            onRoute(current!.linkedRouteId!, {
+              tour: tour!.id,
+              stop: current!.id,
+              revision: tour!.revision,
+            })}>Ver ruta de la parada</button
         >{/if}
     {/if}
+    <label class="compact-stop-picker"
+      >Elegir parada<select
+        value={current?.id || ''}
+        onchange={(e) => select(e.currentTarget.value)}
+        >{#each tour.content.stops as stop, i}<option value={stop.id}
+            >{i + 1} de {tour.content.stops.length} · {stop.title}</option
+          >{/each}</select
+      ></label
+    >
     <nav aria-label="Paradas del recorrido">
       <ol>
         {#each tour.content.stops as stop, i}<li>
@@ -225,7 +255,26 @@
     display: block;
   }
   ol {
-    padding-left: 1.5rem;
+    list-style: none;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+  }
+  li button {
+    width: 100%;
+    text-align: left;
+  }
+  .compact-stop-picker {
+    display: none;
+  }
+  @media (max-width: 600px) {
+    nav[aria-label='Paradas del recorrido'] {
+      display: none;
+    }
+    .compact-stop-picker {
+      display: block;
+    }
   }
   li {
     margin: 0.5rem 0;

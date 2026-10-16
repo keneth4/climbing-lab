@@ -45,3 +45,29 @@ export function journalEntry(e: any): Entry {
     holds: e.route_snapshot ? JSON.parse(e.route_snapshot).holds || [] : [],
   };
 }
+
+export type JournalQuery = {
+  query: string;
+  label: string;
+  offset: number;
+  from: string;
+  to: string;
+  result: string;
+  recordState: string;
+};
+export function recentJournalQuery(now = new Date()): JournalQuery {
+  const q = new URLSearchParams({
+    from: new Date(now.getTime() - 168 * 3600000).toISOString(),
+    until: now.toISOString(),
+    state: 'active',
+  });
+  return {
+    query: '&' + q,
+    label: 'Últimos 7 días (168 horas)',
+    offset: 0,
+    from: '',
+    to: '',
+    result: '',
+    recordState: 'active',
+  };
+}

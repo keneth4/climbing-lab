@@ -1,14 +1,20 @@
 # Roadmap — estado vigente
 
-**Actualización: 15 de octubre de 2026.** Base de esta entrega: main con PR #6 integrado (`5a334b3`).
+**Actualización: 15 de octubre de 2026.** Base de esta entrega: main con PR #7 integrado (`96c11e7`).
 
 - **L0 local:** D04 y UX-P0/P1A/P1B/P2B implementados; recorrido Main Gym aceptado manualmente por el propietario. Conservar Crux, D04 y el runtime persistente.
-- **Entrega vigente: Ola 0, preparación sin despliegue.** [Plan](planes/2026-10-ola-0-preparacion-staging.md), [recuperación y checklist](recuperacion-local.md). Configuración verificable, rate limiting de escrituras, ensayo conjunto D1/R2 y QR de previsualización implementados localmente. QA: 36 dominio, 59 API, 8 readiness, 6 guardas, 114 e2e y 6 smoke reales aprobados; tipos/formato/build aprobados.
+- **Ola 0 integrada en main, sin despliegue.** [Plan](planes/2026-10-ola-0-preparacion-staging.md), [recuperación y checklist](recuperacion-local.md). Configuración verificable, rate limiting de escrituras, ensayo conjunto D1/R2 y QR de previsualización implementados localmente. QA: 36 dominio, 59 API, 8 readiness, 6 guardas, 114 e2e y 6 smoke reales aprobados; tipos/formato/build aprobados.
 - **L1/L2 pendientes:** recursos cloud, callbacks, origen HTTPS, pruebas remotas y restauración conjunta remota. Ningún ensayo local acredita esas puertas. Impresión pública del QR deshabilitada.
 - **L3 pendiente:** teléfonos, QR físico, lector de pantalla, escaladores/staff y segunda captura. Sin declaración de rendimiento físico.
-- **Después:** Ola 1 público/progreso/navegación; Ola 2 staff y recuperación de preparación; Ola 3 recepción y mitigaciones monetarias; Ola 4 composición/extensiones después de sus puertas. No ampliar comercio ni marcas ahora.
+- **Entrega vigente:** Ola 1 público/progreso/navegación (sección siguiente). **Después:** Ola 2 staff y recuperación de preparación; Ola 3 recepción y mitigaciones monetarias; Ola 4 composición/extensiones después de sus puertas. No ampliar comercio ni marcas ahora.
 
 La auditoría fuente es `docs/auditoria-flujo-integral-ux-2026-10` @ `d0cefd5`, documento `docs/ux/2026-10-auditoria-flujo-integral.md` (G01/G02/B06/G05). Su rama documental no se fusiona como efecto de esta entrega.
+
+## Ola 1 — correcciones tras revisión manual
+
+Implementación local en `codex/ux-publico-y-progreso`, PR #8 abierto. [Plan y QA](planes/2026-10-ola-1-publico-y-progreso.md): navegación pública/progreso ya implementados; la revisión manual del propietario identificó O1-H01–H05. Se corrigieron marcadores, jerarquía de ficha y pantalla independiente de edición con descarte explícito. La segunda aceptación humana sigue pendiente; no fusionar todavía. El PNG histórico de D04 no se sobrescribió y requiere autorización para renovarlo en una revisión nueva.
+
+Las pruebas de la primera entrega (39 frontend, 59 API, 124 e2e, 6 smoke públicos) son evidencia histórica. Corrección actual: 40 frontend/dominio, 59 API y 136 e2e aprobados; tipos/formato/build aprobados. La evidencia se registra por separado en el plan. El navegador interno rechazó el acceso al demo por su política de URL; QA Crux y repetición del smoke real pendientes, sin usar otro navegador como atajo. B03/B04 siguen parciales. Después: Ola 2, incluidos borradores independientes en servidor para continuar entre dispositivos. L1–L3 permanecen pendientes.
 
 ## Historial documental
 

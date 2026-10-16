@@ -1,13 +1,35 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { api } from './auth';
   import type { Entry } from './domain';
-  import { localBoundary, journalCsv, journalEntry } from './journal';
-  let { onEntries }: { onEntries: (entries: Entry[]) => void } = $props();
-  let from = $state(''),
-    to = $state(''),
-    result = $state(''),
-    recordState = $state('active');
+  import {
+    localBoundary,
+    journalCsv,
+    journalEntry,
+    recentJournalQuery,
+    type JournalQuery,
+  } from './journal';
+  let {
+    onEntries,
+    initialState,
+    onState = () => {},
+  }: {
+    onEntries: (entries: Entry[]) => void;
+    initialState?: JournalQuery;
+    onState?: (state: JournalQuery) => void;
+  } = $props();
+  const initial = untrack(() => initialState) || recentJournalQuery();
+  let from = $state(initial.from),
+    to = $state(initial.to),
+    result = $state(initial.result),
+    recordState = $state(initial.recordState);
+  let intervalLabel = $state(initial.label),
+    dailyError = $state('');
+  let requested = {
+    next: initial.offset,
+    query: initial.query,
+    label: initial.label,
+  };
   let summary = $state<
     | { records: number; attempts: number; ascents: number; routes: number }
     | undefined
@@ -21,17 +43,15 @@
     entries = $state<Entry[]>([]),
     days = $state<any[]>([]),
     timezone = $state('');
-  let applied = $state(''),
+  let applied = $state(initial.query),
     request = 0,
     disposed = false;
-  async function load(next = 0, query = applied) {
+  async function load(next = 0, query = applied, label = intervalLabel) {
     const ticket = ++request;
     busy = true;
     error = '';
-    summary = undefined;
-    days = [];
-    entries = [];
-    onEntries([]);
+    requested = { next, query, label };
+    dailyError = '';
     try {
       const data = await api(`/entries?limit=50&offset=${next}${query}`);
       if (disposed || ticket !== request) return;
@@ -40,11 +60,20 @@
       offset = next;
       hasMore = !!data.pagination?.hasMore;
       applied = query;
+      intervalLabel = label;
+      days = [];
+      onState({ query, label, offset: next, from, to, result, recordState });
       onEntries(entries);
-      const daily = await api(`/entries?group=day${query}`);
-      if (!disposed && ticket === request) {
-        days = daily.days || [];
-        timezone = daily.timezone || '';
+      try {
+        const daily = await api(`/entries?group=day${query}`);
+        if (!disposed && ticket === request) {
+          days = daily.days || [];
+          timezone = daily.timezone || '';
+        }
+      } catch (e) {
+        if (!disposed && ticket === request)
+          dailyError =
+            'La lista está disponible; no se pudo actualizar el resumen diario.';
       }
     } catch (e) {
       if (!disposed && ticket === request) error = (e as Error).message;
@@ -61,16 +90,21 @@
       if (to) q.set('until', localBoundary(to, true));
       if (result) q.set('result', result);
       q.set('state', recordState);
-      load(0, q.size ? '&' + q.toString() : '');
+      load(
+        0,
+        q.size ? '&' + q.toString() : '',
+        `Intervalo personalizado: ${from || 'sin inicio'} — ${to || 'sin final'}${result ? ' · ' + result : ''}${recordState === 'deleted' ? ' · retirados' : ''}`,
+      );
     } catch (e) {
       error = (e as Error).message;
     }
   }
   onMount(() => {
-    load();
+    load(initial.offset, initial.query, initial.label);
     return () => {
       disposed = true;
       request++;
+      onEntries([]);
     };
   });
   function downloadCsv(content: string, filename: string) {
@@ -116,41 +150,71 @@
   Actividad personal de este gimnasio. Los ascensos son declarados por ti; estos
   registros no son visitas ni cobros.
 </p>
-<form
-  onsubmit={(e) => {
-    e.preventDefault();
-    apply();
-  }}
->
-  <div class="filters">
-    <label>Desde<input type="date" bind:value={from} /></label><label
-      >Hasta<input type="date" bind:value={to} /></label
-    ><label
-      >Resultado de bitácora<select bind:value={result}
-        ><option value="">Todos</option><option value="ascenso">Ascensos</option
-        ><option value="intento">Intentos</option></select
-      ></label
-    >
-  </div>
-  <label
-    >Estado de registros<select bind:value={recordState}
-      ><option value="active">Vigentes</option><option value="deleted"
-        >Retirados</option
-      ></select
-    ></label
-  >
-  <button disabled={busy || exporting}>Aplicar filtros</button><button
-    type="button"
-    disabled={busy || exporting}
+<div class="actions">
+  <button
+    disabled={busy}
     onclick={() => {
-      recordState = 'active';
+      const recent = recentJournalQuery();
       from = '';
       to = '';
       result = '';
-      load(0, '');
-    }}>Limpiar filtros</button
+      recordState = 'active';
+      load(0, recent.query, recent.label);
+    }}>Últimos 7 días</button
+  ><button
+    disabled={busy}
+    onclick={() => {
+      from = '';
+      to = '';
+      result = '';
+      recordState = 'active';
+      load(0, '', 'Todo el historial');
+    }}>Todo el historial</button
   >
-</form>
+</div>
+<p aria-live="polite">
+  Mostrando: {intervalLabel}. Fechas de filtros según la zona local del
+  dispositivo.
+</p>
+<details>
+  <summary>Filtros de actividad</summary>
+  <form
+    onsubmit={(e) => {
+      e.preventDefault();
+      apply();
+    }}
+  >
+    <div class="filters">
+      <label>Desde<input type="date" bind:value={from} /></label><label
+        >Hasta<input type="date" bind:value={to} /></label
+      ><label
+        >Resultado de bitácora<select bind:value={result}
+          ><option value="">Todos</option><option value="ascenso"
+            >Ascensos</option
+          ><option value="intento">Intentos</option></select
+        ></label
+      >
+    </div>
+    <label
+      >Estado de registros<select bind:value={recordState}
+        ><option value="active">Vigentes</option><option value="deleted"
+          >Retirados</option
+        ></select
+      ></label
+    >
+    <button disabled={busy || exporting}>Aplicar filtros</button><button
+      type="button"
+      disabled={busy || exporting}
+      onclick={() => {
+        recordState = 'active';
+        from = '';
+        to = '';
+        result = '';
+        load(0, '', 'Todo el historial');
+      }}>Limpiar filtros</button
+    >
+  </form>
+</details>
 {#if summary}<dl class="summary">
     <div>
       <dt>Registros</dt>
@@ -189,11 +253,18 @@
         </p>
       </article>{/each}
   </details>{/if}
-{#if busy}<p role="status">Cargando bitácora…</p>{/if}{#if error}<p
+{#if busy}<p role="status">Actualizando actividad…</p>{/if}{#if error}<p
     role="alert"
   >
     {error}
-  </p>{/if}
+  </p>
+  <button onclick={() => load(requested.next, requested.query, requested.label)}
+    >Reintentar actividad</button
+  >{/if}
+{#if dailyError}<p role="status">{dailyError}</p>
+  <button disabled={busy} onclick={() => load()}
+    >Reintentar resumen diario</button
+  >{/if}
 <div class="actions">
   <button
     type="button"
@@ -203,21 +274,27 @@
     type="button"
     disabled={busy || !hasMore}
     onclick={() => load(offset + 50)}>Página siguiente</button
-  ><button type="button" disabled={busy || !entries.length} onclick={csv}
-    >Exportar esta página (CSV)</button
-  ><button
-    type="button"
-    disabled={busy || exporting || !summary?.records}
-    onclick={exportAll}
-    >{exporting
-      ? 'Preparando exportación…'
-      : 'Exportar intervalo completo (CSV)'}</button
   >
 </div>
-<p>
-  La exportación completa usa los filtros aplicados, hasta 2000 registros. Si
-  cambias los campos, aplica los filtros primero.
-</p>
+<details>
+  <summary>Exportar actividad</summary>
+  <div class="actions">
+    <button type="button" disabled={busy || !entries.length} onclick={csv}
+      >Exportar esta página (CSV)</button
+    ><button
+      type="button"
+      disabled={busy || exporting || !summary?.records}
+      onclick={exportAll}
+      >{exporting
+        ? 'Preparando exportación…'
+        : 'Exportar intervalo completo (CSV)'}</button
+    >
+  </div>
+  <p>
+    La exportación completa usa los filtros aplicados, hasta 2000 registros. Si
+    cambias los campos, aplica los filtros primero.
+  </p>
+</details>
 {#if exportNotice}<p role="status">{exportNotice}</p>{/if}
 {#if !busy && !error && !entries.length}<p>
     No hay registros con estos filtros. Puedes registrar actividad desde el
@@ -233,8 +310,8 @@
   }
   .summary {
     padding: 16px;
-    background: white;
-    border: 1px solid #d9dfe5;
+    background: var(--surface);
+    border: 1px solid var(--border);
   }
   .summary div {
     min-width: 0;

@@ -130,6 +130,16 @@ test('route drafts, reports and optional beta never transfer to another route; b
   await setup(page);
   await page.goto('/?ruta=a');
   const form = page.getByRole('form', { name: 'Registrar actividad' });
+  if (
+    !(await page
+      .locator('#activity-form')
+      .getByLabel('Notas', { exact: true })
+      .isVisible())
+  )
+    await page
+      .locator('#activity-form')
+      .getByText('Añadir detalles', { exact: true })
+      .click();
   await form.getByLabel('Notas', { exact: true }).fill('Nota solo A');
   await form.getByLabel('Intentos', { exact: true }).fill('3');
   await page.getByText('Ver beta', { exact: true }).click();
@@ -171,9 +181,7 @@ test('QR opens the public detail without 3D, filters normalize accents, navigati
     r.fulfill({ status: 404, body: 'Missing asset' }),
   );
   await page.goto('/?ruta=a');
-  await expect(
-    page.getByRole('heading', { name: 'Travesía V2' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Travesía' })).toBeVisible();
   await expect(page.getByLabel('Visor de Gaussian Splatting')).toHaveCount(0);
   expect(sceneRequests).toBe(0);
   await expect(
@@ -227,6 +235,16 @@ test('failed activity keeps the draft and request identity; rapid taps create on
   });
   await page.goto('/?ruta=a');
   const form = page.getByRole('form', { name: 'Registrar actividad' });
+  if (
+    !(await page
+      .locator('#activity-form')
+      .getByLabel('Notas', { exact: true })
+      .isVisible())
+  )
+    await page
+      .locator('#activity-form')
+      .getByText('Añadir detalles', { exact: true })
+      .click();
   await form.getByLabel('Notas', { exact: true }).fill('Conservar borrador');
   await expect(
     form.getByRole('button', { name: 'Guardar actividad' }),
@@ -303,6 +321,16 @@ test('a new route revision preserves the draft and requires an explicit review b
   });
   await page.goto('/?ruta=a');
   const form = page.getByRole('form', { name: 'Registrar actividad' });
+  if (
+    !(await page
+      .locator('#activity-form')
+      .getByLabel('Notas', { exact: true })
+      .isVisible())
+  )
+    await page
+      .locator('#activity-form')
+      .getByText('Añadir detalles', { exact: true })
+      .click();
   await form
     .getByLabel('Notas', { exact: true })
     .fill('Conservar en revisión nueva');

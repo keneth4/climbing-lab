@@ -15,7 +15,7 @@
     <button disabled={locked} onclick={() => navigate('El gimnasio')}
       >Información y preguntas frecuentes</button
     ><button disabled={locked} onclick={() => navigate('Productos')}
-      >Productos</button
+      >Productos disponibles</button
     >
   </div>
 </footer>

@@ -40,10 +40,7 @@ export function renderCard(
     y += size + 9;
   };
   add(`${info.title} · ${info.grade}`, 30, true);
-  add(
-    `${info.gym || site.brand.attribution}${info.revision ? ` · Revisión ${info.revision}` : ''}`,
-    23,
-  );
+  add(info.gym || site.brand.attribution, 23);
   if (info.personal) {
     const p = info.personal;
     add(

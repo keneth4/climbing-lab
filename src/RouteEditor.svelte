@@ -31,6 +31,7 @@
     onSaved,
     onReload,
     onPreparing,
+    onState,
     draft,
     onDraft,
     owner,
@@ -51,6 +52,7 @@
     onSaved: (id: string) => void;
     onReload?: () => void;
     onPreparing?: (active: boolean) => void;
+    onState?: (state: { dirty: boolean; busy: boolean }) => void;
   } = $props();
   const initial = untrack(() => route);
   const restored = untrack(() => draft);
@@ -117,6 +119,19 @@
     const panel = editorRoot.closest('#tools-panel'),
       nav = editorRoot.querySelector('nav');
     const observer = new ResizeObserver(() => {
+      if (panel instanceof HTMLElement) {
+        const navHeight = nav?.offsetHeight || 0;
+        const saveHeight =
+          editorRoot.querySelector<HTMLElement>('.editor-save-bar')
+            ?.offsetHeight || 0;
+        // Do not let two sticky bars consume the entire compact inspector.
+        if (panel.clientHeight < navHeight + saveHeight + 120)
+          panel.dataset.editorTight = 'true';
+        else delete panel.dataset.editorTight;
+        panel.style.setProperty('--editor-save-height', `${saveHeight}px`);
+        panel.style.scrollPaddingTop = `${(nav && getComputedStyle(nav).position === 'sticky' ? navHeight : 0) + 12}px`;
+        panel.style.scrollPaddingBottom = `${saveHeight + 12}px`;
+      }
       const node = document.activeElement;
       if (
         node instanceof HTMLElement &&
@@ -127,7 +142,15 @@
     });
     if (panel) observer.observe(panel);
     if (nav) observer.observe(nav);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (panel instanceof HTMLElement) {
+        panel.style.removeProperty('scroll-padding-top');
+        panel.style.removeProperty('scroll-padding-bottom');
+        panel.style.removeProperty('--editor-save-height');
+        delete panel.dataset.editorTight;
+      }
+    };
   });
   function cancelTool() {
     const origin = document.activeElement;
@@ -239,7 +262,7 @@
       .catch((e) => (message = e.message));
   });
   onDestroy(() => {
-    if (!savedDraft)
+    if (!savedDraft && (changed.length || toolBusy))
       onDraft?.(draftOwner, initial?.id || 'new', initial?.revision || 0, {
         name,
         grade,
@@ -259,7 +282,7 @@
     onPreparing?.(false);
     if (imagePreview) URL.revokeObjectURL(imagePreview);
   });
-  let savedDraft = false;
+  let savedDraft = $state(false);
   let holds3D = $state<Hold3D[]>(
     (restored?.holds3D || initial?.holds3D || []).map((h) => ({
       ...h,
@@ -378,6 +401,12 @@
     changeReason: '',
   }));
   const changed = $derived(differences(values(), baseline));
+  $effect(() => {
+    onState?.({
+      dirty: !savedDraft && (changed.length > 0 || toolBusy),
+      busy: busy || imageBusy,
+    });
+  });
   const states = $derived.by(() => {
     const result = stepStates(
       { ...values(), captureId: initial?.captureId || currentCapture?.id },
@@ -1321,6 +1350,9 @@
     display: block;
     background: var(--surface);
   }
+  :global(.tools-panel[data-editor-tight]) nav {
+    position: static;
+  }
   .compact-step-nav {
     display: none;
   }
@@ -1374,7 +1406,7 @@
   }
   .transaction-actions {
     position: sticky;
-    bottom: 70px;
+    bottom: var(--editor-save-height, 70px);
     display: flex;
     flex-wrap: wrap;
     gap: 4px;

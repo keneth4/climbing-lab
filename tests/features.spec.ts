@@ -222,9 +222,9 @@ test('private projects can be explicitly completed and daily activity stays sepa
       };
   });
   await page.goto('/?vista=Catálogo');
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
   await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
-  await page.getByText('Mis proyectos de escalada', { exact: true }).click();
+  await page.getByRole('button', { name: 'Proyectos', exact: true }).click();
   await page.getByLabel('Ruta del proyecto').selectOption('route-f');
   await page
     .getByLabel('Notas del proyecto', { exact: true })
@@ -239,6 +239,7 @@ test('private projects can be explicitly completed and daily activity stays sepa
   await expect(
     page.getByText('completado · Ruta activa · Revisión 1'),
   ).toBeVisible();
+  await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await page
     .getByText('Actividad por día del gimnasio', { exact: true })
     .click();
@@ -275,14 +276,14 @@ test('3D PNG and sweep video export preserve camera and support cancellation', a
     .getByRole('button', { name: 'Grabar barrido de 6 segundos' })
     .click();
   await expect(
-    page.getByRole('button', { name: 'Mi cuenta', exact: true }),
+    page.getByRole('button', { name: 'Mi escalada', exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole('button', { name: 'Cancelar video' }),
   ).toBeFocused();
   await page.getByRole('button', { name: 'Cancelar video' }).press('Escape');
   await expect(
-    page.getByRole('button', { name: 'Mi cuenta', exact: true }),
+    page.getByRole('button', { name: 'Mi escalada', exact: true }),
   ).toBeEnabled();
   expect(await canvas.getAttribute('data-camera-view')).toBe(before);
   const video = page.waitForEvent('download', { timeout: 20000 });
@@ -291,7 +292,7 @@ test('3D PNG and sweep video export preserve camera and support cancellation', a
     .click();
   expect((await video).suggestedFilename()).toMatch(/ruta-barrido\.(webm|mp4)/);
   await expect(
-    page.getByRole('button', { name: 'Mi cuenta', exact: true }),
+    page.getByRole('button', { name: 'Mi escalada', exact: true }),
   ).toBeEnabled();
   expect(await canvas.getAttribute('data-camera-view')).toBe(before);
   expect(errors).toEqual([]);
@@ -517,7 +518,9 @@ test('admin reception confirms membership, QR visit and manual sale while public
   await page.screenshot({
     path: `/tmp/operations-${test.info().project.name}.png`,
   });
-  await page.getByRole('button', { name: 'Productos', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Productos disponibles', exact: true })
+    .click();
   await expect(
     page.getByRole('heading', { name: 'Magnesia', exact: true }),
   ).toBeVisible();
@@ -580,7 +583,7 @@ test('unsupported video retains image export and historical cards reject missing
   await expect(
     page.getByRole('button', { name: 'Descargar tarjeta 3D (PNG)' }),
   ).toBeEnabled();
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
   await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await page
     .getByRole('button', { name: 'Preparar tarjeta histórica 3D' })
@@ -652,7 +655,7 @@ test('historical 3D cards use the stored capture and camera with personal data o
       };
   });
   await page.goto('/?vista=Catálogo');
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
   await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
   await page
     .getByRole('button', { name: 'Preparar tarjeta histórica 3D' })

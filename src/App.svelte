@@ -2,9 +2,17 @@
   import SiteHeader from './SiteHeader.svelte';
   import SitePublic from './SitePublic.svelte';
   import TourPage from './TourPage.svelte';
+  import TourOriginTrail from './TourOriginTrail.svelte';
+  import {
+    readTourOrigin,
+    putTourOrigin,
+    tourRevision,
+    type TourOrigin,
+  } from './tour-origin';
   import TourManager from './TourManager.svelte';
   import SiteFooter from './SiteFooter.svelte';
   import RouteCatalog from './RouteCatalog.svelte';
+  import { filterCatalog } from './catalog';
   import { site, viewFromUrl, pageTitle } from './site';
   import QRCode from 'qrcode';
   import RoutePresentation from './RoutePresentation.svelte';
@@ -13,9 +21,6 @@
   import MyReports from './MyReports.svelte';
   import DemoImport from './DemoImport.svelte';
   import {
-    normalize,
-    gradeScale,
-    gradeRank,
     newDraft,
     privateFields,
     sharedPersonal,
@@ -23,7 +28,7 @@
     type ActivityDraft,
     type EditorDraft,
   } from './pilot';
-  import { onMount, setContext, untrack } from 'svelte';
+  import { onMount, setContext, untrack, tick } from 'svelte';
   import SplatRuntime from './SplatRuntime.svelte';
   import { VIEWER_CONTEXT, ViewerWorkspace } from './viewer-context.svelte';
   const viewerWorkspace = new ViewerWorkspace();
@@ -47,6 +52,8 @@
   import HistoricalExport from './HistoricalExport.svelte';
   import ProjectsPanel from './ProjectsPanel.svelte';
   import JournalControls from './JournalControls.svelte';
+  import { activityUtc, type JournalQuery } from './journal';
+  let journalQuery = $state<JournalQuery | undefined>();
   import AuthPanel from './AuthPanel.svelte';
   import RouteEditor from './RouteEditor.svelte';
   import CaptureManager from './CaptureManager.svelte';
@@ -85,6 +92,62 @@
   let journalEntryOpen = $state(false),
     journalNotice = $state('');
   let routePreparing = $state(false);
+  let editorDirty = $state(false),
+    editorBusy = $state(false);
+  let discardDialog: HTMLDialogElement;
+  let pendingExit: (() => void) | undefined;
+  let exitOrigin: HTMLElement | undefined;
+  let discardedPreparation = '';
+  let historyIndex = Number(history.state?.navIndex || 0);
+  let restoringHistory = false,
+    allowHistoryExit = false;
+  let deferredHistoryExit: (() => void) | undefined;
+  function guardEditorExit(action: () => void) {
+    if (tab !== 'EditarRuta') {
+      action();
+      return;
+    }
+    if (editorBusy) {
+      message = 'Espera a que termine el guardado antes de salir.';
+      return;
+    }
+    if (!editorDirty) {
+      action();
+      return;
+    }
+    if (pendingExit) return;
+    exitOrigin =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : undefined;
+    pendingExit = action;
+    discardDialog.showModal();
+    discardDialog.querySelector<HTMLButtonElement>('button')?.focus();
+  }
+  function cancelEditorExit() {
+    pendingExit = undefined;
+    discardDialog.close();
+    exitOrigin?.focus({ preventScroll: true });
+  }
+  function discardEditorExit() {
+    discardedPreparation = `${userId}:${selectedId}:${selected?.revision || 0}`;
+    // Older bases of this same working preparation must not reappear via
+    // editorPreparation's concurrent-revision fallback after an explicit discard.
+    const prefix = `${userId}:${selectedId}:`;
+    const revision = selected?.revision || 0;
+    for (const key of Object.keys(editorDrafts))
+      if (
+        key.startsWith(prefix) &&
+        Number(key.slice(prefix.length)) <= revision
+      )
+        delete editorDrafts[key];
+    editorDirty = false;
+    const action = pendingExit;
+    pendingExit = undefined;
+    discardDialog.close();
+    action?.();
+  }
+
   let editorDrafts = $state<Record<string, EditorDraft>>({});
   function clearEditorPreparation(id: string) {
     const prefix = `${userId}:${id}:`;
@@ -161,6 +224,10 @@
       const nextEmail = data.session?.user.email || '';
       const nextUserId = data.session?.user.id || '';
       if (nextUserId !== userId) {
+        editorDirty = false;
+        editorBusy = false;
+        pendingExit = undefined;
+        discardDialog?.close();
         routesTicket++;
         db.routes = db.routes.filter((r) => r.status !== 'borrador');
         viewerWorkspace.reset();
@@ -175,6 +242,7 @@
         shareOpen = false;
         shareEntry = undefined;
         drafts = {};
+        journalQuery = undefined;
         editorDrafts = {};
         newRouteSection = '';
         activityNotice = '';
@@ -218,23 +286,14 @@
         loginReturn = '';
         sessionStorage.removeItem('climbing-login-return');
         sessionStorage.removeItem('climbing-login-draft');
-        navigate('Catálogo', target);
+        const returnView =
+          sessionStorage.getItem('climbing-login-view') === 'EditarRuta'
+            ? 'EditarRuta'
+            : 'Catálogo';
+        sessionStorage.removeItem('climbing-login-view');
+        navigate(returnView, target);
       }
       void refreshRoutes();
-      const dataEntries = await api('/entries');
-      if (ticket !== generation) return;
-      db.entries = dataEntries.entries.map((e: any) => ({
-        id: e.id,
-        routeId: e.route_id,
-        revision: e.revision,
-        routeName: e.route_name || e.route_id,
-        grade: e.grade || '',
-        date: e.created_at,
-        attempts: e.attempts,
-        result: e.result,
-        notes: e.notes,
-        holds: e.route_snapshot ? JSON.parse(e.route_snapshot).holds || [] : [],
-      }));
       if (staff) {
         const reports = await api('/staff/reports');
         if (ticket !== generation) return;
@@ -270,6 +329,7 @@
   let catalogLoading = $state(true),
     catalogError = $state('');
   async function refreshRoutes(id?: string) {
+    const catalogStarted = performance.now();
     catalogLoading = true;
     catalogError = '';
     const ticket = ++routesTicket,
@@ -324,9 +384,25 @@
       );
       if (ticket !== routesTicket || owner !== userId || (authorized && !staff))
         return;
+      const renderStarted = performance.now();
       db.routes = routes;
+      void tick().then(() => {
+        if (ticket === routesTicket) {
+          performance.clearMeasures('catalog:render');
+          performance.measure('catalog:render', {
+            start: renderStarted,
+            end: performance.now(),
+          });
+        }
+      });
+      performance.clearMeasures('catalog:download');
+      performance.measure('catalog:download', {
+        start: catalogStarted,
+        end: performance.now(),
+      });
       if (id) select(id);
-      else if (!selectedId) selectedId = routes[0]?.id || '';
+      else if (!selectedId && tab !== 'EditarRuta')
+        selectedId = routes[0]?.id || '';
       else if (!routes.some((r) => r.id === selectedId)) {
         const requestedId = selectedId;
         try {
@@ -451,7 +527,11 @@
   const initialUrl = new URL(location.href);
   let tab = $state(viewFromUrl(initialUrl));
   let staff = $state(false);
-  let selectedId = $state(initialUrl.searchParams.get('ruta') || '');
+  let selectedId = $state(
+    initialUrl.searchParams.get(
+      viewFromUrl(initialUrl) === 'EditarRuta' ? 'editar' : 'ruta',
+    ) || '',
+  );
   let detailMode = $state(initialUrl.searchParams.has('ruta'));
   let routeError = $state('');
   let selected = $derived(
@@ -465,35 +545,64 @@
   let zoneFilter = $state(initialUrl.searchParams.get('zona') || '');
   let tourSelection = $state(initialUrl.searchParams.get('tour') || '');
   let stopSelection = $state(initialUrl.searchParams.get('parada') || '');
+  let tourRevisionSelection = $state(
+    tourRevision(initialUrl.searchParams.get('revision')),
+  );
+  let invalidTourRevision = $state(
+    initialUrl.searchParams.has('revision') &&
+      !tourRevision(initialUrl.searchParams.get('revision')),
+  );
+  function initialOrigin() {
+    try {
+      return (
+        readTourOrigin(initialUrl) ||
+        (sessionStorage.getItem('climbing-login-return')
+          ? readTourOrigin(
+              new URL(
+                sessionStorage.getItem('climbing-login-origin') || '/',
+                location.origin,
+              ),
+            )
+          : undefined)
+      );
+    } catch {
+      return undefined;
+    }
+  }
+  let tourOrigin = $state<TourOrigin | undefined>(initialOrigin());
+  let invalidTourOrigin = $state(
+    initialUrl.searchParams.has('tourOrigen') && !readTourOrigin(initialUrl),
+  );
+  function returnToTour(origin: TourOrigin) {
+    navigate('Recorrido', undefined, true, origin);
+  }
+
   let scaleFilter = $state(initialUrl.searchParams.get('escala') || '');
   let minGrade = $state(initialUrl.searchParams.get('desde') || '');
   let maxGrade = $state(initialUrl.searchParams.get('hasta') || '');
   let order = $state(initialUrl.searchParams.get('orden') || 'recientes');
   let showRetired = $state(initialUrl.searchParams.get('retiradas') === '1');
-  let filtered = $derived(
-    db.routes
-      .filter(
-        (r) =>
-          (r.status === 'activa' || (showRetired && r.status === 'retirada')) &&
-          (!grade || r.grade === grade) &&
-          (!sectorFilter || r.sector === sectorFilter) &&
-          (!zoneFilter || r.sectionId === zoneFilter) &&
-          (!scaleFilter ||
-            (r.gradeScale || gradeScale(r.grade)) === scaleFilter) &&
-          (!minGrade ||
-            (gradeRank(r.grade, scaleFilter) ?? -Infinity) >=
-              (gradeRank(minGrade, scaleFilter) ?? Infinity)) &&
-          (!maxGrade ||
-            (gradeRank(r.grade, scaleFilter) ?? Infinity) <=
-              (gradeRank(maxGrade, scaleFilter) ?? -Infinity)) &&
-          normalize(`${r.name} ${r.sector}`).includes(normalize(query)),
-      )
-      .sort((a, b) =>
-        order === 'nombre'
-          ? a.name.localeCompare(b.name)
-          : (b.updatedAt || '').localeCompare(a.updatedAt || ''),
-      ),
-  );
+  let filtered = $derived.by(() => {
+    const started = performance.now();
+    const result = filterCatalog(db.routes, {
+      query,
+      grade,
+      sector: sectorFilter,
+      zone: zoneFilter,
+      scale: scaleFilter,
+      min: minGrade,
+      max: maxGrade,
+      order,
+      retired: showRetired,
+    });
+    performance.clearMeasures('catalog:filter');
+    performance.measure('catalog:filter', {
+      start: started,
+      end: performance.now(),
+    });
+    return result;
+  });
+
   $effect(() => {
     const filters = {
       buscar: query,
@@ -515,10 +624,11 @@
     history.replaceState(history.state, '', url);
   });
   let drafts = $state<Record<string, ActivityDraft>>({});
+  let emptyActivityDraft = $state(newDraft(0));
   let draft = $derived.by(
     () =>
       drafts[`${userId}:${selectedId}:${selected?.revision || 0}`] ||
-      newDraft(selected?.revision || 0),
+      emptyActivityDraft,
   );
   $effect(() => {
     if (!selected) return;
@@ -566,7 +676,20 @@
   let loginReturn = $state(
     sessionStorage.getItem('climbing-login-return') || '',
   );
-  function navigate(view: string, id?: string, push = true) {
+  function navigate(
+    view: string,
+    id?: string,
+    push = true,
+    restoreTour?: TourOrigin,
+  ) {
+    guardEditorExit(() => performNavigate(view, id, push, restoreTour));
+  }
+  function performNavigate(
+    view: string,
+    id?: string,
+    push = true,
+    restoreTour?: TourOrigin,
+  ) {
     const previous = new URL(location.href);
     for (const [k, v] of Object.entries({
       buscar: query,
@@ -591,11 +714,24 @@
       '',
       previous,
     );
-    if (view === 'Recorrido' && tab !== 'Recorrido') {
+    if (view === 'Recorrido' && tab !== 'Recorrido' && !restoreTour) {
+      tourRevisionSelection = undefined;
+      invalidTourRevision = false;
       tourSelection = '';
       stopSelection = '';
     }
+    if (restoreTour) {
+      tourSelection = restoreTour.tour;
+      stopSelection = restoreTour.stop;
+      tourRevisionSelection = restoreTour.revision;
+    }
+    if (['Inicio', 'El gimnasio'].includes(view)) tourOrigin = undefined;
+    editorDirty = false;
+    editorBusy = false;
     tab = view;
+    void tick().then(() => {
+      discardedPreparation = '';
+    });
     if (id) selectedId = id;
     detailMode = !!id;
     toolsOpen = true;
@@ -604,8 +740,14 @@
     url.pathname = '/';
     url.search = '';
     if (view !== 'Inicio') url.searchParams.set('vista', view);
-    if (id) url.searchParams.set('ruta', id);
+    if (id) url.searchParams.set(view === 'EditarRuta' ? 'editar' : 'ruta', id);
+    if (view === 'Catálogo' || view === 'EditarRuta') {
+      putTourOrigin(url, tourOrigin);
+      invalidTourOrigin = false;
+    }
     if (view === 'Recorrido') {
+      if (tourRevisionSelection)
+        url.searchParams.set('revision', String(tourRevisionSelection));
       if (tourSelection) url.searchParams.set('tour', tourSelection);
       if (stopSelection) url.searchParams.set('parada', stopSelection);
     }
@@ -621,8 +763,9 @@
       retiradas: showRetired ? '1' : '',
     }))
       if (v && view === 'Catálogo') url.searchParams.set(k, v);
-    if (push) history.pushState({ scroll: 0 }, '', url);
-    else history.replaceState({ scroll: 0 }, '', url);
+    if (push)
+      history.pushState({ scroll: 0, navIndex: ++historyIndex }, '', url);
+    else history.replaceState({ scroll: 0, navIndex: historyIndex }, '', url);
     requestAnimationFrame(() => {
       window.scrollTo(0, 0);
       const panel = document.getElementById('tools-panel');
@@ -630,7 +773,9 @@
         panel.scrollTop = 0;
         const heading =
           panel.querySelector<HTMLElement>(
-            id ? 'section[aria-label="Ficha de ruta"] h2' : 'h1, h2',
+            id && view !== 'EditarRuta'
+              ? 'section[aria-label="Ficha de ruta"] h2'
+              : 'h1, h2',
           ) || panel;
         heading.tabIndex = -1;
         heading.focus({ preventScroll: true });
@@ -647,14 +792,60 @@
     url.searchParams.set('tour', id);
     if (stop) url.searchParams.set('parada', stop);
     if (replace) history.replaceState({ ...history.state }, '', url);
-    else history.pushState({ scroll: 0 }, '', url);
+    else history.pushState({ scroll: 0, navIndex: ++historyIndex }, '', url);
   }
   onMount(() => {
     if (initialUrl.searchParams.has('ruta')) measure('qr_open');
+    history.replaceState(
+      { ...history.state, navIndex: historyIndex },
+      '',
+      location.href,
+    );
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (tab === 'EditarRuta' && (editorDirty || editorBusy)) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', beforeUnload);
     const pop = () => {
+      if (restoringHistory) {
+        restoringHistory = false;
+        const action = deferredHistoryExit;
+        deferredHistoryExit = undefined;
+        if (action) guardEditorExit(action);
+        return;
+      }
+      const nextIndex = Number(history.state?.navIndex ?? historyIndex - 1);
+      if (
+        tab === 'EditarRuta' &&
+        (editorDirty || editorBusy) &&
+        !allowHistoryExit
+      ) {
+        const delta = nextIndex - historyIndex;
+        if (delta) {
+          restoringHistory = true;
+          deferredHistoryExit = () => {
+            allowHistoryExit = true;
+            history.go(delta);
+          };
+          history.go(-delta);
+          return;
+        }
+      }
+      allowHistoryExit = false;
+      historyIndex = nextIndex;
+      editorDirty = false;
+      editorBusy = false;
       const url = new URL(location.href);
       tab = viewFromUrl(url);
-      selectedId = url.searchParams.get('ruta') || selectedId;
+      selectedId =
+        tab === 'EditarRuta'
+          ? url.searchParams.get('editar') || ''
+          : url.searchParams.get('ruta') || selectedId;
+      void tick().then(() => {
+        discardedPreparation = '';
+      });
       detailMode = url.searchParams.has('ruta');
       query = url.searchParams.get('buscar') || '';
       grade = url.searchParams.get('grado') || '';
@@ -662,6 +853,11 @@
       zoneFilter = url.searchParams.get('zona') || '';
       tourSelection = url.searchParams.get('tour') || '';
       stopSelection = url.searchParams.get('parada') || '';
+      tourRevisionSelection = tourRevision(url.searchParams.get('revision'));
+      invalidTourRevision =
+        url.searchParams.has('revision') && !tourRevisionSelection;
+      tourOrigin = readTourOrigin(url);
+      invalidTourOrigin = url.searchParams.has('tourOrigen') && !tourOrigin;
       scaleFilter = url.searchParams.get('escala') || '';
       minGrade = url.searchParams.get('desde') || '';
       maxGrade = url.searchParams.get('hasta') || '';
@@ -677,7 +873,10 @@
       });
     };
     window.addEventListener('popstate', pop);
-    return () => window.removeEventListener('popstate', pop);
+    return () => {
+      window.removeEventListener('popstate', pop);
+      window.removeEventListener('beforeunload', beforeUnload);
+    };
   });
   const selectionKey = $derived(`${selectedId}:${selected?.revision || 0}`);
   $effect(() => {
@@ -700,8 +899,18 @@
         sourceOwner: userId,
       }),
     );
-    loginReturn = detailMode && tab === 'Catálogo' ? selectedId : '';
+    loginReturn =
+      tab === 'EditarRuta' || (detailMode && tab === 'Catálogo')
+        ? selectedId
+        : '';
+    sessionStorage.setItem(
+      'climbing-login-view',
+      tab === 'EditarRuta' ? 'EditarRuta' : 'Catálogo',
+    );
     sessionStorage.setItem('climbing-login-return', loginReturn);
+    const originUrl = new URL('/', location.origin);
+    putTourOrigin(originUrl, tourOrigin);
+    sessionStorage.setItem('climbing-login-origin', originUrl.href);
     navigate('Cuenta');
   }
   function clearFilters() {
@@ -743,10 +952,19 @@
       d = draft,
       owner = userId,
       ticket = requestOwner;
+    let occurredAt: string | undefined;
+    try {
+      if (d.activityTime) occurredAt = activityUtc(d.activityTime);
+    } catch (e) {
+      activityError = true;
+      activityNotice = (e as Error).message;
+      return;
+    }
     const content = JSON.stringify({
       attempts: d.attempts,
       result: d.result,
       notes: d.notes,
+      activityTime: d.activityTime,
     });
     recordingActivity = true;
     activityError = false;
@@ -762,6 +980,7 @@
           result: d.result,
           notes: d.notes,
           requestId: d.activityKey,
+          ...(occurredAt ? { occurredAt } : {}),
         },
         undefined,
         owner,
@@ -779,11 +998,14 @@
           attempts: d.attempts,
           result: d.result,
           notes: d.notes,
+          activityTime: d.activityTime,
         }) === content
       ) {
         d.notes = '';
       }
       if (selectedId === route.id) activityNotice = 'Actividad guardada.';
+      if (journalQuery?.label === 'Últimos 7 días (168 horas)')
+        journalQuery = undefined;
       measure('activity_saved', performance.now() - activityStarted);
       await refreshSession();
     } catch (e) {
@@ -915,9 +1137,38 @@
     shareOpen = true;
   }
   $effect(() => {
-    document.title = pageTitle(tab, detailMode ? selected?.name : undefined);
+    document.title =
+      (tab === 'Inicio' && site.editorial.seo?.title) ||
+      pageTitle(tab, detailMode ? selected?.name : undefined);
   });
 </script>
+
+<svelte:head
+  >{#if tab === 'Inicio' || tab === 'El gimnasio'}<meta
+      name="description"
+      content={site.editorial.seo?.description || site.content.description}
+    />{/if}</svelte:head
+>
+
+<dialog
+  bind:this={discardDialog}
+  aria-labelledby="discard-heading"
+  oncancel={(e) => {
+    e.preventDefault();
+    cancelEditorExit();
+  }}
+>
+  <h2 id="discard-heading">Se descartarán los cambios locales de esta ruta</h2>
+  <p>
+    Volverás a la versión guardada en el servidor. No se creará una revisión
+    nueva.
+  </p>
+  <div class="actions">
+    <button onclick={cancelEditorExit}>Seguir editando</button><button
+      onclick={discardEditorExit}>Descartar cambios y salir</button
+    >
+  </div>
+</dialog>
 
 <div bind:this={chrome}>
   <SiteHeader
@@ -930,7 +1181,10 @@
     {navigate}
     {login}
     logout={() => {
-      supabase.auth.signOut();
+      guardEditorExit(() => {
+        editorDirty = false;
+        supabase.auth.signOut();
+      });
     }}
   />
   <div class="notice">
@@ -1034,17 +1288,92 @@
     aria-label="Contenido del gimnasio"
     tabindex="-1"
   >
-    {#if tab === 'Recorrido'}<TourPage
-        tourId={tourSelection}
-        stopId={stopSelection}
-        onSelect={selectTour}
-        onRoute={(id) => navigate('Catálogo', id)}
-        onZone={(id) => {
-          zoneFilter = id;
-          navigate('Catálogo');
-        }}
-      />
-    {:else if tab === 'Recorridos' && userId}{#key userId}<TourManager
+    {#if tab === 'EditarRuta'}
+      <section aria-label="Edición de ruta">
+        <button onclick={() => navigate('Catálogo', selectedId || undefined)}
+          >Volver a la ficha</button
+        >
+        <h1 tabindex="-1">
+          Editar ruta{selected && staff && sessionReady
+            ? ` · ${selected.name}`
+            : ''}
+        </h1>
+        {#if !/^[a-zA-Z0-9_-]{1,100}$/.test(selectedId)}<p role="alert">
+            Identificador de ruta no válido.
+          </p>
+        {:else if accessState === 'checking'}<p role="status">
+            Verificando permisos para editar…
+          </p>
+        {:else if !staff || !sessionReady}<p role="alert">
+            Necesitas una sesión staff vigente para editar esta ruta.
+          </p>
+          <button onclick={login}>Iniciar sesión</button>
+        {:else if routeError || catalogError}<p role="alert">
+            {routeError || catalogError}
+          </p>
+          <button onclick={() => refreshRoutes()}>Reintentar</button>
+        {:else if selected}
+          <p>
+            {selected.status === 'borrador'
+              ? 'Borrador guardado en servidor'
+              : selected.status === 'retirada'
+                ? 'Ruta retirada'
+                : 'Ruta publicada'}. La preparación es temporal; recargar puede
+            perderla.
+          </p>
+          {#key `${userId}:${selected.id}:${selected.revision}`}
+            <RouteEditor
+              route={selected}
+              owner={userId}
+              sourceRoutes={db.routes}
+              draft={editorPreparation(selected.id, selected.revision)}
+              onDraft={(owner, id, revision, values) => {
+                const key = `${owner}:${id}:${revision}`;
+                if (owner === userId && key !== discardedPreparation)
+                  editorDrafts[key] = values;
+              }}
+              onPreparing={(active) => (routePreparing = active)}
+              onState={(state) => {
+                editorDirty = state.dirty;
+                editorBusy = state.busy;
+              }}
+              onReload={() => refreshRoutes()}
+              onSaved={(id) => {
+                editorDirty = false;
+                editorBusy = false;
+                clearEditorPreparation(id);
+                refreshRoutes(id);
+              }}
+            />
+          {/key}
+        {:else if catalogLoading}<p role="status">Cargando ruta…</p>
+        {:else}<p role="alert">Ruta no encontrada o no disponible.</p>{/if}
+      </section>
+    {:else if tab === 'Recorrido'}{#if invalidTourRevision}<p role="alert">
+          La revisión del recorrido indicada no es válida.
+        </p>
+        <button
+          onclick={() => {
+            invalidTourRevision = false;
+            tourRevisionSelection = undefined;
+            navigate('Recorrido');
+          }}>Ver recorrido vigente</button
+        >{:else}<TourPage
+          tourId={tourSelection}
+          stopId={stopSelection}
+          revision={tourRevisionSelection}
+          onSelect={selectTour}
+          onRoute={(id, origin) => {
+            tourOrigin = origin;
+            navigate('Catálogo', id);
+          }}
+          onZone={(id, origin) => {
+            tourOrigin = origin;
+            zoneFilter = id;
+            navigate('Catálogo');
+          }}
+        />
+      {/if}{:else if tab === 'Recorridos' && userId}{#key userId}<TourManager
           admin={adminRole}
           available={staff && sessionReady}
           owner={userId}
@@ -1054,9 +1383,12 @@
         view={tab}
         {navigate}
       />
-    {:else if tab === 'Proyectos'}{#if userEmail && sessionReady}{#key userEmail}<ProjectsPanel
+    {:else if tab === 'Proyectos'}<h1 tabindex="-1">Mis proyectos</h1>
+      {#if userEmail && sessionReady}{#key userEmail}<ProjectsPanel
             routes={db.routes.filter((r) => r.status !== 'borrador')}
           />{/key}{:else}<p>Inicia sesión para consultar tus proyectos.</p>{/if}
+    {:else if tab === 'Reportes'}{#if userId && sessionReady}{#key userId}<MyReports
+          />{/key}{:else}<p>Inicia sesión para consultar tus reportes.</p>{/if}
     {:else if tab === 'Productos'}<StorePanel
       />{:else if tab === 'Recepción' && staff && sessionReady}<OperationsPanel
         admin={adminRole}
@@ -1070,17 +1402,20 @@
         >
           Sesión iniciada: {userEmail}
         </p>
-        <label
-          >Identificador de cuenta (UUID)<input
-            readonly
-            value={userId}
-            aria-describedby="account-id-help"
-          /></label
-        >
-        <p id="account-id-help">
-          Usa este identificador para autorizar tu cuenta en el demo local. No
-          es una contraseña ni concede permisos por sí solo.
-        </p>
+        {#if import.meta.env.DEV && import.meta.env.MODE === 'demo' && adminRole && ['127.0.0.1', 'localhost'].includes(location.hostname)}<details
+          >
+            <summary>Diagnóstico del demo</summary><label
+              >Identificador de cuenta (UUID)<input
+                readonly
+                value={userId}
+                aria-describedby="account-id-help"
+              /></label
+            >
+            <p id="account-id-help">
+              Usa este identificador para autorizar tu cuenta en el demo local.
+              No es una contraseña ni concede permisos por sí solo.
+            </p>
+          </details>{/if}
         <button onclick={() => navigate('Bitácora')}>Ver mi actividad</button
         >{:else}<AuthPanel
           onPasswordUpdated={() => (accountNotice = 'Contraseña actualizada.')}
@@ -1097,10 +1432,20 @@
           await refreshRoutes();
         }}
       />{:else if tab === 'Catálogo'}
+      {#if invalidTourOrigin}<p role="alert">
+          El origen del recorrido indicado no es válido.
+        </p>
+        <a href="/?vista=Recorrido">Ver recorrido vigente</a>{/if}
+      {#if tourOrigin}<TourOriginTrail
+          origin={tourOrigin}
+          onReturn={returnToTour}
+        />{/if}
       <div class="layout" class:route-detail={detailMode}>
         {#if !detailMode}<RouteCatalog
             routes={db.routes.filter((r) => r.status !== 'borrador')}
             {filtered}
+            zoneName={sections.find((s) => s.id === zoneFilter)?.name}
+            retryZone={refreshTwin}
             bind:query
             bind:grade
             bind:sectorFilter
@@ -1124,12 +1469,27 @@
                 >Volver al catálogo</button
               >{/if}
             {#if routeError}<p role="alert">{routeError}</p>{:else if selected}
-              <h2 tabindex="-1">
-                {selected.name} <small>{selected.grade}</small>
-              </h2>
-              <p>
-                {selected.sector} · Revisión {selected.revision} · {selected.status}
-              </p>
+              <h2 tabindex="-1">{selected.name}</h2>
+              <dl class="route-facts">
+                <div>
+                  <dt>Grado</dt>
+                  <dd>{selected.grade}</dd>
+                </div>
+                <div>
+                  <dt>Sector</dt>
+                  <dd>{selected.sector}</dd>
+                </div>
+                {#if (historicalSection || sections.find((s) => s.id === selected?.sectionId))?.name}<div
+                  >
+                    <dt>Zona</dt>
+                    <dd>
+                      {(
+                        historicalSection ||
+                        sections.find((s) => s.id === selected?.sectionId)
+                      )?.name}
+                    </dd>
+                  </div>{/if}
+              </dl>
               {#if selected.status === 'retirada'}<p role="status">
                   Ruta retirada. El enlace y su historial se conservan. Consulta
                   otras rutas en el catálogo.
@@ -1142,6 +1502,11 @@
                     document
                       .getElementById('activity-form')
                       ?.scrollIntoView({ block: 'start' });
+                    document
+                      .querySelector<HTMLInputElement>(
+                        '#activity-form input[type=number]',
+                      )
+                      ?.focus({ preventScroll: true });
                   }}>Registrar actividad</button
                 ><button
                   disabled={!userEmail ||
@@ -1184,28 +1549,14 @@
                     url: routeUrl(selected.id),
                   }}
                 />{/if}
-              {#if staff}{#key selected.id + ':' + selected.revision}<details>
-                    <summary>Editar ruta</summary><RouteEditor
-                      route={selected}
-                      draft={editorPreparation(selected.id, selected.revision)}
-                      owner={userId}
-                      sourceRoutes={db.routes}
-                      onDraft={(owner, id, revision, values) => {
-                        if (owner === userId)
-                          editorDrafts[`${owner}:${id}:${revision}`] = values;
-                      }}
-                      onPreparing={(active) => (routePreparing = active)}
-                      onReload={() => refreshRoutes(selected?.id)}
-                      onSaved={(id) => {
-                        clearEditorPreparation(id);
-                        refreshRoutes(id);
-                      }}
-                    />
-                  </details>{/key}{/if}
-              <details bind:open={betaOpen}>
-                <summary>Ver beta</summary>
-                <p>{selected.beta || 'El staff aún no ha añadido una beta.'}</p>
-              </details>
+              {#if staff && sessionReady}<button
+                  onclick={() => navigate('EditarRuta', selected.id)}
+                  >Editar ruta</button
+                >{/if}
+              {#if selected.beta?.trim()}<details bind:open={betaOpen}>
+                  <summary>Ver beta</summary>
+                  <p>{selected.beta}</p>
+                </details>{/if}
               <details>
                 <summary>Compartir</summary
                 >{#if ['localhost', '127.0.0.1'].includes(location.hostname)}<p>
@@ -1253,8 +1604,7 @@
               >
                 <h3>Registrar actividad</h3>
                 <p>
-                  {selected.name} · Revisión {selected.revision}. Los intentos
-                  corresponden a esta actividad.
+                  {selected.name}. Los intentos corresponden a esta actividad.
                 </p>
                 {#if draft.approvedRevision !== selected.revision}<p
                     role="alert"
@@ -1294,17 +1644,35 @@
                     ></select
                   ></label
                 >
-                <label
-                  >Notas<textarea
-                    aria-describedby={activityNotice
-                      ? 'activity-result'
-                      : undefined}
-                    bind:value={draft.notes}
-                    maxlength="2000"
-                    disabled={recordingActivity}
-                    oninput={() => (draft.activityKey = crypto.randomUUID())}
-                  ></textarea></label
+                <details
+                  open={draft.detailsOpen ??
+                    (!!draft.notes || !!draft.activityTime)}
+                  ontoggle={(e) => (draft.detailsOpen = e.currentTarget.open)}
                 >
+                  <summary>Añadir detalles</summary>
+                  <label
+                    >Notas<textarea
+                      aria-describedby={activityNotice
+                        ? 'activity-result'
+                        : undefined}
+                      bind:value={draft.notes}
+                      maxlength="2000"
+                      disabled={recordingActivity}
+                      oninput={() => (draft.activityKey = crypto.randomUUID())}
+                    ></textarea></label
+                  >
+                  <label
+                    >Fecha y hora opcional (hora local del dispositivo)<input
+                      type="datetime-local"
+                      value={draft.activityTime || ''}
+                      disabled={recordingActivity}
+                      onchange={(e) => {
+                        draft.activityTime = e.currentTarget.value;
+                        draft.activityKey = crypto.randomUUID();
+                      }}
+                    /></label
+                  >
+                </details>
                 <button
                   class="primary"
                   disabled={selected.status !== 'activa' ||
@@ -1355,7 +1723,7 @@
                   }}
                 >
                   <h3>Reportar un error</h3>
-                  <p>{selected.name} · Revisión {selected.revision}</p>
+                  <p>{selected.name}</p>
                   <label
                     >Categoría<select
                       bind:value={draft.category}
@@ -1409,14 +1777,13 @@
               </p>{/if}
           </section>{/if}
       </div>
-    {:else if tab === 'Bitácora'}<h1>Mi bitácora</h1>
+    {:else if tab === 'Bitácora'}<h1 tabindex="-1">Mi actividad</h1>
       {#if mediaEntry && userEmail && sessionReady}{#key mediaEntry.id}<HistoricalExport
             entry={mediaEntry}
             gym={site.brand.attribution}
             personal={sharedPersonal(mediaEntry, shareFields, name)}
             onClose={() => (mediaEntry = undefined)}
           />{/key}{/if}
-      {#if userEmail && sessionReady}<ProjectsPanel routes={db.routes} />{/if}
       <button
         disabled={!userEmail || !sessionReady}
         onclick={() => {
@@ -1433,6 +1800,8 @@
             onCancel={() => (journalEntryOpen = false)}
             onSaved={async () => {
               const edited = !!editingEntry;
+              if (journalQuery?.label === 'Últimos 7 días (168 horas)')
+                journalQuery = undefined;
               await refreshSession();
               journalEntryOpen = false;
               editingEntry = undefined;
@@ -1451,6 +1820,8 @@
           }}
         />{/if}
       {#if userEmail && sessionReady}{#key userEmail}<JournalControls
+            initialState={journalQuery}
+            onState={(state) => (journalQuery = state)}
             onEntries={(entries) => (db.entries = entries)}
           />{/key}
 
@@ -1479,7 +1850,6 @@
             {name}
             gym={site.brand.attribution}
           />{/if}
-        {#key userId}<MyReports />{/key}
         <DemoImport
           routes={db.routes}
           owner={userEmail}
@@ -1558,13 +1928,13 @@
       </p>
       <div class="route-list">
         {#each db.routes.filter((r) => r.status !== 'borrador') as r}<button
-            onclick={() => select(r.id)}
+            onclick={() => navigate('EditarRuta', r.id)}
             >{r.name} · {r.grade} · {r.status}</button
           >{/each}
       </div>
       <h2>Borradores de rutas</h2>
       {#each db.routes.filter((r) => r.status === 'borrador') as r}<button
-          onclick={() => select(r.id)}
+          onclick={() => navigate('EditarRuta', r.id)}
           >{r.name || 'Sin nombre'} · Borrador</button
         >{/each}
       <h2>Reportes</h2>
@@ -1607,3 +1977,41 @@
     {navigate}
     locked={viewerWorkspace.locked}
   />{/if}
+
+<style>
+  dialog {
+    max-width: min(34rem, calc(100vw - 2rem));
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 1.5rem;
+  }
+  dialog::backdrop {
+    background: #0008;
+  }
+  .route-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .route-facts div {
+    padding: 0.65rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    min-width: 80px;
+    max-width: 100%;
+  }
+  .route-facts dt {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .route-facts dd {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 0.2rem 0 0;
+    overflow-wrap: anywhere;
+  }
+</style>

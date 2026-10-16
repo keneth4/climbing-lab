@@ -139,7 +139,7 @@ test('public home, compact catalog, FAQ and account work at all planned widths a
         page.getByText('Este gimnasio es ficticio.', { exact: false }),
       ).toBeVisible();
       await page
-        .getByRole('button', { name: 'Mi cuenta', exact: true })
+        .getByRole('button', { name: 'Mi escalada', exact: true })
         .click();
       await expect(
         page.getByRole('navigation', { name: 'Cuenta', exact: true }),
@@ -268,6 +268,16 @@ test('login from a route restores its draft and saving stays attributed to that 
     return r.fulfill({ json: { entries: [] } });
   });
   await page.goto('/?ruta=site-a');
+  if (
+    !(await page
+      .locator('#activity-form')
+      .getByLabel('Notas', { exact: true })
+      .isVisible())
+  )
+    await page
+      .locator('#activity-form')
+      .getByText('Añadir detalles', { exact: true })
+      .click();
   await page
     .getByRole('form', { name: 'Registrar actividad' })
     .getByLabel('Notas', { exact: true })

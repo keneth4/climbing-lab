@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
 import {
+  markerLabel,
+  markerName,
+  markerPath,
   layoutMarkers,
   overlaps,
   cssToPng,
@@ -82,4 +85,22 @@ it('maps CSS origin, offset and PNG scale independently of DPR and rejects nonfi
       180,
     ),
   ).toEqual([]);
+});
+
+it('uses role symbols without implying sequence and keeps tours numbered', () => {
+  expect([0, 8].map((i) => markerLabel('inicio', i))).toEqual(['I', 'I']);
+  expect(markerLabel('final', 8)).toBe('F');
+  expect(markerLabel('intermedio', 3)).toBe('•');
+  expect(markerLabel('intermedio', 3, true)).toBe('4');
+  const start = {
+    id: 's',
+    x: 100,
+    y: 100,
+    label: 'I',
+    role: 'inicio' as const,
+  };
+  const end = { ...start, role: 'final' as const, label: 'F' };
+  expect(markerPath(start)).not.toBe(markerPath(end));
+  expect(markerName(start)).toBe('Inicio (I)');
+  expect(markerName({ ...start, tour: true, label: '2' })).toBe('Parada 2');
 });

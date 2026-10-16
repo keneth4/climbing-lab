@@ -58,6 +58,8 @@ export function publicationProblems(route: Partial<Route>): string[] {
   return problems;
 }
 export type ActivityDraft = {
+  activityTime?: string;
+  detailsOpen?: boolean;
   attempts: number;
   result: Entry['result'];
   notes: string;

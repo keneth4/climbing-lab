@@ -4,7 +4,13 @@
     imageId,
     title,
     privateOwner = '',
-  }: { imageId: string; title: string; privateOwner?: string } = $props();
+    decorative = false,
+  }: {
+    imageId: string;
+    title: string;
+    privateOwner?: string;
+    decorative?: boolean;
+  } = $props();
   let src = $state(''),
     error = $state(false);
   $effect(() => {
@@ -48,7 +54,7 @@
   </p>
 {:else if src}<img
     {src}
-    alt={`Vista de ${title || 'la parada'}`}
+    alt={decorative ? '' : `Vista de ${title || 'la parada'}`}
     onerror={() => (error = true)}
   />{/if}
 

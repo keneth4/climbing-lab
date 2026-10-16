@@ -6,6 +6,7 @@ export type ProjectedMarker = XY & {
   label: string;
   role: 'inicio' | 'intermedio' | 'final' | 'candidate';
   active?: boolean;
+  tour?: boolean;
 };
 export type MarkerLayout = ProjectedMarker & { labelPoint?: XY };
 export const HIT_SIZE = 48;
@@ -97,6 +98,40 @@ export function layoutMarkers(
   // Preserve editorial order for keyboard navigation, regardless of placement priority.
   return visible.map((m) => ({ ...m, labelPoint: placed.get(m.id) }));
 }
+/** Public roles never imply a climbing sequence; tour stops remain numbered. */
+export function markerLabel(
+  role: ProjectedMarker['role'],
+  index = 0,
+  tour = false,
+) {
+  if (tour) return String(index + 1);
+  return role === 'inicio'
+    ? 'I'
+    : role === 'final'
+      ? 'F'
+      : role === 'candidate'
+        ? '?'
+        : '•';
+}
+export function markerName(m: ProjectedMarker) {
+  return m.tour
+    ? `Parada ${m.label}`
+    : m.role === 'inicio'
+      ? 'Inicio (I)'
+      : m.role === 'final'
+        ? 'Final (F)'
+        : m.role === 'candidate'
+          ? 'Punto en preparación'
+          : 'Agarre intermedio';
+}
+/** Identical paths used in SVG and PNG, in CSS pixels about the label center. */
+export function markerPath(m: ProjectedMarker) {
+  if (m.tour || m.role === 'candidate' || m.role === 'inicio')
+    return 'M-7,-11 H7 Q13,-11 13,-5 V5 Q13,11 7,11 H-7 Q-13,11 -13,5 V-5 Q-13,-11 -7,-11 Z';
+  return m.role === 'final'
+    ? 'M0,-16 L16,0 L0,16 L-16,0 Z'
+    : 'M5,0 A5,5 0 1,1 -5,0 A5,5 0 1,1 5,0 Z';
+}
 export function markerColor(role: ProjectedMarker['role']) {
   return role === 'inicio'
     ? '#12603b'
@@ -125,17 +160,20 @@ export function drawMarkerLayout(
       c.strokeStyle = '#152534';
       c.stroke();
       c.fillStyle = markerColor(m.role);
-      c.beginPath();
-      c.roundRect(p.x - 13, p.y - 11, 26, 22, 6);
-      c.fill();
+      c.translate(p.x, p.y);
+      const shape = new Path2D(markerPath(m));
+      c.fill(shape);
       c.lineWidth = 2;
       c.strokeStyle = m.active ? '#ffdf55' : '#fff';
-      c.stroke();
-      c.fillStyle = '#fff';
-      c.font = 'bold 13px system-ui';
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.fillText(m.label, p.x, p.y);
+      c.stroke(shape);
+      if (m.tour || m.role !== 'intermedio') {
+        c.fillStyle = '#fff';
+        c.font = 'bold 13px system-ui';
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText(m.label, 0, 0);
+      }
+      c.translate(-p.x, -p.y);
     }
     c.beginPath();
     c.arc(m.x, m.y, 3, 0, Math.PI * 2);

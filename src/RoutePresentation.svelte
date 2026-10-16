@@ -46,7 +46,7 @@
       src={photo}
       alt={route.illustrationId && !route.imageId
         ? `${illustrationLabel}: ${route.name}`
-        : `Imagen anotada de ${route.name}, revisión ${route.revision}. Inicio I y final F.`}
+        : `Imagen anotada de ${route.name}. Inicio I y final F.`}
       onerror={() => (failed = true)}
     />
   {:else}
@@ -63,22 +63,49 @@
     {#if route.illustrationId && !route.imageId}<p>
         {illustrationLabel}. Sin captura 3D verificada.
       </p>{/if}
-    {route.sector} · Revisión {route.revision} · Inicio I · Final F
+    {#if route.markersVerified}<p class="marker-legend">
+        I Inicio · F Final · • Intermedio
+      </p>{/if}
   </figcaption>
 </figure>
-<details>
-  <summary>Agarres y reglas sin beta</summary>
-  <p>
-    {route.rules ||
-      'No hay restricciones de pies publicadas. Consulta al staff si tienes dudas.'}
-  </p>
-  <ol>
-    {#each route.holds3D?.length ? route.holds3D : route.holds as h, i}<li>
-        Agarre {i + 1}: {h.role === 'inicio'
-          ? 'Inicio (I)'
-          : h.role === 'final'
-            ? 'Final (F)'
-            : 'Intermedio'}
-      </li>{/each}
-  </ol>
-</details>
+<section aria-label="Información de ruta">
+  <h3>Información de ruta</h3>
+  <dl>
+    <dt>Grado</dt>
+    <dd>{route.grade}</dd>
+    <dt>Sector</dt>
+    <dd>{route.sector}</dd>
+    <dt>Inicio (I)</dt>
+    <dd>
+      {route.markersVerified
+        ? (route.holds3D || route.holds).filter((h) => h.role === 'inicio')
+            .length
+        : 'Por verificar'}
+    </dd>
+    <dt>Final (F)</dt>
+    <dd>
+      {route.markersVerified
+        ? (route.holds3D || route.holds).filter((h) => h.role === 'final')
+            .length
+        : 'Por verificar'}
+    </dd>
+  </dl>
+  {#if route.rules?.trim()}<h3>Reglas</h3>
+    <p>{route.rules}</p>{/if}
+</section>
+
+<style>
+  dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.4rem 1rem;
+  }
+  dt,
+  .marker-legend {
+    font-weight: 700;
+  }
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+</style>

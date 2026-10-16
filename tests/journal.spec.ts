@@ -204,8 +204,11 @@ test('private journal filters, paginates and exports historical records, then cl
   await expect(
     page.getByRole('button', { name: 'Cerrar sesión' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Mi cuenta', exact: true }).click();
+  await page.getByRole('button', { name: 'Mi escalada', exact: true }).click();
   await page.getByRole('button', { name: 'Mi actividad', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Todo el historial', exact: true })
+    .click();
   await expect(
     page.locator('.summary').getByText('55', { exact: true }),
   ).toHaveCount(2);
@@ -219,6 +222,7 @@ test('private journal filters, paginates and exports historical records, then cl
   await expect(
     page.getByRole('button', { name: 'Página siguiente' }),
   ).toBeDisabled();
+  await page.getByText('Exportar actividad', { exact: true }).click();
   const csvDownload = page.waitForEvent('download');
   await page
     .getByRole('button', { name: 'Exportar esta página (CSV)' })
@@ -240,6 +244,7 @@ test('private journal filters, paginates and exports historical records, then cl
   await page.screenshot({
     path: `/tmp/journal-export-${test.info().project.name}.png`,
   });
+  await page.getByText('Filtros de actividad', { exact: true }).click();
   await page.getByLabel('Resultado de bitácora').selectOption('ascenso');
   await page.getByLabel('Desde', { exact: true }).fill('2026-10-11');
   await page.getByLabel('Hasta', { exact: true }).fill('2026-10-11');
@@ -294,6 +299,10 @@ test('private journal filters, paginates and exports historical records, then cl
   await expect(
     page.getByText('Registro añadido a tu bitácora.', { exact: true }),
   ).toBeVisible();
+  // The backdated record is outside the previously applied date filter.
+  await page
+    .getByRole('button', { name: 'Todo el historial', exact: true })
+    .click();
   await expect(
     page.getByText('Registro nuevo probado', { exact: true }),
   ).toBeVisible();
@@ -349,6 +358,8 @@ test('private journal filters, paginates and exports historical records, then cl
       exact: true,
     }),
   ).toBeVisible();
+  if (!(await page.getByLabel('Estado de registros').isVisible()))
+    await page.getByText('Filtros de actividad', { exact: true }).click();
   await page.getByLabel('Estado de registros').selectOption('deleted');
   await page.getByRole('button', { name: 'Aplicar filtros' }).click();
   await expect(

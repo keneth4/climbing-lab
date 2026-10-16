@@ -59,8 +59,8 @@
   }
 </script>
 
-<details>
-  <summary>Mis proyectos de escalada</summary>
+<section aria-label="Mis proyectos de escalada">
+  <h2>Mis proyectos de escalada</h2>
   <p>
     Proyectos privados. Un ascenso no cambia automáticamente el estado del
     proyecto.
@@ -126,5 +126,9 @@
           ).notes}
         </li>{/each}
     </ol>{/if}
+  {#if !projects.length && !error}<p>
+      Aún no tienes proyectos. Guardar un proyecto no registra un ascenso.
+    </p>
+    <a href="/?vista=Catálogo">Explorar rutas</a>{/if}
   {#if error}<p role="alert">{error}</p>{/if}
-</details>
+</section>
